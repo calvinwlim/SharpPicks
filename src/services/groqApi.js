@@ -21,17 +21,18 @@ const GROQ_MODEL = 'llama-3.3-70b-versatile';
  * @param {Array}    params.odds          - Parsed Odds API data (or null)
  * @param {string}   params.rosterContext - ESPN confirmed rosters (or '')
  * @param {string}   params.injuryContext - ESPN injury feed (or '')
+ * @param {string}   params.propsContext  - Real player prop lines from Odds API (or '')
  * @param {string}   params.notes         - User-supplied intel
  * @param {string}   params.apiKey        - Groq API key
  */
-export async function analyzeSlate({ sport, date, games, odds, rosterContext, injuryContext, notes, apiKey }) {
+export async function analyzeSlate({ sport, date, games, odds, rosterContext, injuryContext, propsContext, notes, apiKey }) {
   if (!apiKey || !apiKey.trim()) {
     throw new Error(
       'Groq API key is required. Get a free key at console.groq.com, then add it in Settings.'
     );
   }
 
-  const userMsg = buildUserMessage({ sport, date, games, odds, rosterContext, injuryContext, notes });
+  const userMsg = buildUserMessage({ sport, date, games, odds, rosterContext, injuryContext, propsContext, notes });
 
   let res;
   try {
@@ -87,18 +88,24 @@ export async function analyzeSlate({ sport, date, games, odds, rosterContext, in
   return parsed;
 }
 
-function buildUserMessage({ sport, date, games, odds, rosterContext, injuryContext, notes }) {
+function buildUserMessage({ sport, date, games, odds, rosterContext, injuryContext, propsContext, notes }) {
   const parts = [];
 
   parts.push(`Analyze the ${sport} slate for ${fmtDate(date)} (${date}).`);
   parts.push('');
   parts.push(formatSlateForContext(games));
 
-  if (odds && odds.length) {
+  // Game-level lines (spread / total / ML)
+  if (odds) {
     parts.push(formatOddsForContext(odds));
   }
 
-  // Rosters go first — they are the ground truth for player props
+  // Player prop lines — highest priority: use these exact numbers in picks
+  if (propsContext) {
+    parts.push(propsContext);
+  }
+
+  // Rosters — ground truth for who is actually on each team today
   if (rosterContext) {
     parts.push(rosterContext);
   }
@@ -114,9 +121,11 @@ function buildUserMessage({ sport, date, games, odds, rosterContext, injuryConte
 
   parts.push('');
   parts.push(
-    'Using the slate, confirmed rosters, and data above, plus your training knowledge of ' +
-    'historical H2H patterns and team tendencies, identify 4–6 sharp +EV betting picks. ' +
-    'Remember: ONLY suggest player props for athletes listed in CONFIRMED ROSTERS above.'
+    'Using the slate, confirmed rosters, live lines, and data above, identify 4–6 sharp +EV picks. ' +
+    (propsContext
+      ? 'Player prop lines have been provided above — use those exact lines and odds in your picks. '
+      : 'No player prop lines were fetched — clearly note when a prop line is estimated. ') +
+    'ONLY suggest player props for athletes listed in CONFIRMED ROSTERS / CONFIRMED FIGHTERS above.'
   );
 
   return parts.join('\n');

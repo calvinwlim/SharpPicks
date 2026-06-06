@@ -18,6 +18,9 @@ const INJURY_KEYWORDS = [
  * @returns {Promise<string>}  Formatted injury context block, or '' if none found
  */
 export async function fetchInjuryContext(sport, games) {
+  // UFC fighters don't have team-level ESPN news pages
+  if (sport === 'UFC') return '';
+
   const sl = ESPN_SPORT_LEAGUES[sport];
   if (!sl || !games.length) return '';
 

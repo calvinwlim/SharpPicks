@@ -5,15 +5,15 @@ import EmptyState from './components/EmptyState.jsx';
 import LoadingState from './components/LoadingState.jsx';
 import ResultsPanel from './components/ResultsPanel.jsx';
 import { fetchGameSlate } from './services/espnApi.js';
-import { fetchOdds } from './services/oddsApi.js';
+import { fetchOdds, fetchPlayerProps } from './services/oddsApi.js';
 import { fetchInjuryContext } from './services/injuryApi.js';
 import { fetchRosterContext } from './services/rosterApi.js';
 import { analyzeSlate } from './services/groqApi.js';
 import { getTomorrow, fmtDate } from './utils/dateUtils.js';
 import { ENV_GROQ_KEY, ENV_ODDS_KEY } from './config/index.js';
-import { ANALYSIS_MESSAGES } from './constants/index.js';
+import { ANALYSIS_MESSAGES, PROP_MARKETS } from './constants/index.js';
 
-// Phases: 'idle' | 'fetching' | 'odds' | 'injuries' | 'analyzing' | 'done' | 'error'
+// Phases: 'idle' | 'fetching' | 'odds' | 'props' | 'injuries' | 'analyzing' | 'done' | 'error'
 
 export default function App() {
   // ── Sport / Date ──────────────────────────────────────────────────────────
@@ -21,8 +21,9 @@ export default function App() {
   const [date,  setDate]  = useState(getTomorrow());
 
   // ── UI controls ──────────────────────────────────────────────────────────
-  const [filter, setFilter] = useState('All');
-  const [notes,  setNotes]  = useState('');
+  const [filter,       setFilter]       = useState('All');
+  const [notes,        setNotes]        = useState('');
+  const [includeProps, setIncludeProps] = useState(false);
 
   // ── API keys ──────────────────────────────────────────────────────────────
   const [groqKey,   setGroqKey]   = useState(ENV_GROQ_KEY);
@@ -30,21 +31,28 @@ export default function App() {
   const [oddsUsage, setOddsUsage] = useState(null);
 
   // ── Async state ──────────────────────────────────────────────────────────
-  const [phase,      setPhase]      = useState('idle');
-  const [loadingMsg, setLoadingMsg] = useState('');
-  const [games,      setGames]      = useState(null);
-  const [result,     setResult]     = useState(null);
-  const [error,      setError]      = useState(null);
+  const [phase,          setPhase]          = useState('idle');
+  const [loadingMsg,     setLoadingMsg]     = useState('');
+  const [games,          setGames]          = useState(null);
+  const [result,         setResult]         = useState(null);
+  const [oddsTimestamp,  setOddsTimestamp]  = useState(null);
+  const [propsTimestamp, setPropsTimestamp] = useState(null);
+  const [error,          setError]          = useState(null);
 
   const reset = () => {
     setGames(null);
     setResult(null);
+    setOddsTimestamp(null);
+    setPropsTimestamp(null);
     setError(null);
     setPhase('idle');
   };
 
   const handleSportChange = (s) => { setSport(s); reset(); };
   const handleDateChange  = (d) => { setDate(d);  reset(); };
+
+  // Whether this sport supports player prop lines from The Odds API
+  const sportSupportsProps = !!PROP_MARKETS[sport];
 
   // ── Main analysis flow ────────────────────────────────────────────────────
   const analyze = async () => {
@@ -64,30 +72,43 @@ export default function App() {
         );
       }
 
-      // Step 2: Live odds (optional)
-      let oddsData = null;
+      // Step 2: Game-level odds (spread / total / ML)
+      let oddsData    = null;
+      let propsResult = null;
+
       if (oddsKey && oddsKey.trim()) {
         setPhase('odds');
-        setLoadingMsg('Fetching live odds from The Odds API...');
+        setLoadingMsg('Fetching live game lines...');
         oddsData = await fetchOdds(sport, oddsKey.trim());
-        if (oddsData) setOddsUsage(oddsData.length + ' games with odds');
+        if (oddsData) {
+          setOddsTimestamp(oddsData.fetchedAt);
+          setOddsUsage(oddsData.games.length + ' games');
+        }
+
+        // Step 3: Player prop lines (optional, uses more API quota)
+        if (includeProps && sportSupportsProps) {
+          setPhase('props');
+          setLoadingMsg('Fetching player prop lines...');
+          propsResult = await fetchPlayerProps(sport, date, oddsKey.trim());
+          if (propsResult) setPropsTimestamp(propsResult.fetchedAt);
+        }
       }
 
-      // Step 3: ESPN rosters + injury/news feed (free, non-fatal, run in parallel)
+      // Step 4: Rosters + injury feed (parallel, non-fatal)
       setPhase('injuries');
       setLoadingMsg('Fetching rosters and injury reports...');
-      let rosterContext  = '';
-      let injuryContext  = '';
+      let rosterContext = '';
+      let injuryContext = '';
       try {
         [rosterContext, injuryContext] = await Promise.all([
           fetchRosterContext(sport, fetchedGames),
           fetchInjuryContext(sport, fetchedGames),
         ]);
       } catch {
-        // Non-fatal — continue without enrichment data
+        // Non-fatal
       }
 
-      // Step 4: Groq analysis
+      // Step 5: Groq analysis
       setPhase('analyzing');
       let msgIdx = 0;
       setLoadingMsg(ANALYSIS_MESSAGES[0]);
@@ -100,12 +121,13 @@ export default function App() {
         const analysis = await analyzeSlate({
           sport,
           date,
-          games:  fetchedGames,
-          odds:   oddsData,
+          games:         fetchedGames,
+          odds:          oddsData,
+          propsContext:  propsResult ? propsResult.context : '',
           rosterContext,
           injuryContext,
           notes,
-          apiKey: groqKey,
+          apiKey:        groqKey,
         });
         setResult(analysis);
         setPhase('done');
@@ -119,7 +141,7 @@ export default function App() {
     }
   };
 
-  const isLoading = ['fetching', 'odds', 'injuries', 'analyzing'].includes(phase);
+  const isLoading = ['fetching', 'odds', 'props', 'injuries', 'analyzing'].includes(phase);
 
   return (
     <div className="app">
@@ -131,12 +153,15 @@ export default function App() {
 
       <div className="app-body">
         <Sidebar
-          date={date}            onDateChange={handleDateChange}
-          filter={filter}        onFilterChange={setFilter}
-          notes={notes}          onNotesChange={setNotes}
-          groqKey={groqKey}      onGroqKeyChange={setGroqKey}
-          oddsKey={oddsKey}      onOddsKeyChange={setOddsKey}
+          date={date}              onDateChange={handleDateChange}
+          filter={filter}          onFilterChange={setFilter}
+          notes={notes}            onNotesChange={setNotes}
+          groqKey={groqKey}        onGroqKeyChange={setGroqKey}
+          oddsKey={oddsKey}        onOddsKeyChange={setOddsKey}
           oddsUsage={oddsUsage}
+          includeProps={includeProps}
+          onIncludePropsChange={setIncludeProps}
+          sportSupportsProps={sportSupportsProps}
           onAnalyze={analyze}
           loading={isLoading}
           sport={sport}
@@ -163,6 +188,8 @@ export default function App() {
               filter={filter}
               sport={sport}
               date={date}
+              oddsTimestamp={oddsTimestamp}
+              propsTimestamp={propsTimestamp}
               onRegenerate={analyze}
             />
           )}

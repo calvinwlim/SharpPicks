@@ -2,22 +2,24 @@ import { SPORT_ICONS } from '../constants/index.js';
 
 const PHASES = [
   { key: 'fetching',  label: 'ESPN Slate' },
-  { key: 'odds',      label: 'Odds' },
-  { key: 'injuries',  label: 'Injuries' },
-  { key: 'analyzing', label: 'Analysis' },
+  { key: 'odds',      label: 'Game Lines' },
+  { key: 'props',     label: 'Prop Lines' },
+  { key: 'injuries',  label: 'Rosters' },
+  { key: 'analyzing', label: 'AI Analysis' },
 ];
 
 const PHASE_LABELS = {
   fetching:  'Fetching ESPN game slate...',
-  odds:      'Loading live odds...',
-  injuries:  'Scanning injury reports...',
+  odds:      'Fetching live game lines...',
+  props:     'Fetching player prop lines...',
+  injuries:  'Fetching rosters & injury reports...',
   analyzing: 'AI is analyzing...',
 };
 
 export default function LoadingState({ message, phase, sport }) {
-  const phaseLabel = PHASE_LABELS[phase] || 'Working...';
-  const phaseOrder = PHASES.map((p) => p.key);
-  const currentIdx = phaseOrder.indexOf(phase);
+  const phaseLabel  = PHASE_LABELS[phase] || 'Working...';
+  const phaseOrder  = PHASES.map((p) => p.key);
+  const currentIdx  = phaseOrder.indexOf(phase);
 
   return (
     <div style={{
@@ -60,27 +62,31 @@ export default function LoadingState({ message, phase, sport }) {
         {message}
       </div>
 
-      {/* Phase progress */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {/* Phase progress — skip 'props' step if it's not active and wasn't active */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
         {PHASES.map(({ key, label }, i) => {
           const done   = currentIdx > i;
           const active = currentIdx === i;
+          // Dim the props step if it was skipped (we jumped from odds→injuries)
+          const skipped = key === 'props' && currentIdx > i && phase !== 'props';
+          if (skipped) return null;
+
           return (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{
-                width: 8, height: 8, borderRadius: '50%',
+                width: 7, height: 7, borderRadius: '50%',
                 background: done || active ? 'var(--green)' : 'rgba(255,255,255,0.1)',
                 boxShadow: active ? '0 0 8px var(--green)' : 'none',
               }} />
               <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10.5, textTransform: 'uppercase',
+                fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase',
                 letterSpacing: '0.5px',
                 color: done || active ? 'var(--green)' : 'var(--muted)',
               }}>
                 {label}
               </span>
               {i < PHASES.length - 1 && (
-                <span style={{ color: 'var(--muted)', fontSize: 10 }}>→</span>
+                <span style={{ color: 'var(--muted)', fontSize: 9, marginLeft: 2 }}>→</span>
               )}
             </div>
           );

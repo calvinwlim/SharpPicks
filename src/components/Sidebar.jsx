@@ -8,6 +8,8 @@ export default function Sidebar({
   groqKey, onGroqKeyChange,
   oddsKey, onOddsKeyChange,
   oddsUsage,
+  includeProps, onIncludePropsChange,
+  sportSupportsProps,
   onAnalyze,
   loading,
   sport,
@@ -73,7 +75,7 @@ export default function Sidebar({
           style={{ width: '100%', padding: '11px 13px', fontSize: 13, color: 'var(--text-2)' }}
         />
         <div style={{ marginTop: 7, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
-          Paste injury news or current odds here to improve accuracy.
+          Paste live injury news or specific lines here for highest accuracy.
         </div>
       </div>
 
@@ -111,7 +113,7 @@ export default function Sidebar({
                   style={{ color: 'var(--green)', textDecoration: 'none' }}>
                   console.groq.com
                 </a>
-                {' '}→ API Keys → Create key.
+                {' '}→ API Keys.
               </div>
             </div>
 
@@ -128,11 +130,32 @@ export default function Sidebar({
                 style={{ width: '100%', padding: '9px 11px', fontSize: 12.5, fontFamily: 'var(--font-mono)' }}
               />
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>
-                Adds consensus lines from 20+ books. Free: 500 req/month.
-                {oddsUsage && (
-                  <span style={{ color: 'var(--green)', marginLeft: 4 }}>({oddsUsage})</span>
-                )}
+                Enables live game lines from 20+ books.
+                Free: 500 req/month.
+                {oddsUsage && <span style={{ color: 'var(--green)', marginLeft: 4 }}>({oddsUsage})</span>}
               </div>
+
+              {/* Player props toggle — only show when odds key is present and sport supports it */}
+              {oddsKey && oddsKey.trim() && sportSupportsProps && (
+                <label style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 10, cursor: 'pointer',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={includeProps}
+                    onChange={(e) => onIncludePropsChange(e.target.checked)}
+                    style={{ marginTop: 2, accentColor: 'var(--green)', width: 14, height: 14, flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600, lineHeight: 1.3 }}>
+                      Fetch live player prop lines
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3, lineHeight: 1.5 }}>
+                      Fetches real DraftKings / FanDuel prop lines so picks use exact current numbers. Uses ~3 extra API requests per game.
+                    </div>
+                  </div>
+                </label>
+              )}
             </div>
 
           </div>
@@ -152,7 +175,7 @@ export default function Sidebar({
           100% Free
         </div>
         <div style={{ fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.65 }}>
-          Game data from ESPN · Injury news from ESPN · AI analysis via Groq (Llama 3.3 70B) · All free, no credit card needed.
+          ESPN slate + rosters + injuries · Groq AI (Llama 3.3 70B) · Optional: live lines & props via The Odds API
         </div>
       </div>
 

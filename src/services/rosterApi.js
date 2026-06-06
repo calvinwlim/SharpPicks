@@ -16,6 +16,9 @@ const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
  * @returns {Promise<string>}  Formatted roster block, or '' on failure
  */
 export async function fetchRosterContext(sport, games) {
+  // UFC fighters are already listed in the game slate — no team roster needed
+  if (sport === 'UFC') return buildUFCFighterContext(games);
+
   const sl = ESPN_SPORT_LEAGUES[sport];
   if (!sl || !games.length) return '';
 
@@ -81,4 +84,23 @@ async function fetchTeamRoster(sport, league, teamId, teamName) {
   } catch {
     return null;
   }
+}
+
+/**
+ * For UFC, fighter info is already in the game slate.
+ * Build a compact confirmation block so the LLM knows exactly who is fighting.
+ */
+function buildUFCFighterContext(fights) {
+  if (!fights || !fights.length) return '';
+  const lines = fights.map((f) => {
+    const f1 = f.homeTeam;
+    const f2 = f.awayTeam;
+    const wc = f.weightClass ? ` — ${f.weightClass}` : '';
+    return `  ${f1.name} (${f1.record}) vs ${f2.name} (${f2.record})${wc}`;
+  });
+  return (
+    '\nCONFIRMED FIGHTERS (ESPN):\n' +
+    'Only suggest picks involving the fighters listed below.\n\n' +
+    lines.join('\n')
+  );
 }
