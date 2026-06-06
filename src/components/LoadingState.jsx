@@ -1,6 +1,6 @@
 import { SPORT_ICONS } from '../constants/index.js';
 
-const PHASES = [
+const TEAM_PHASES = [
   { key: 'fetching',  label: 'ESPN Slate' },
   { key: 'odds',      label: 'Game Lines' },
   { key: 'props',     label: 'Prop Lines' },
@@ -8,31 +8,39 @@ const PHASES = [
   { key: 'analyzing', label: 'AI Analysis' },
 ];
 
+const MMA_PHASES = [
+  { key: 'fetching',  label: 'Fight Card' },
+  { key: 'fighters',  label: 'Fighter Profiles' },
+  { key: 'odds',      label: 'Fight Odds' },
+  { key: 'injuries',  label: 'Fight News' },
+  { key: 'analyzing', label: 'AI Analysis' },
+];
+
 const PHASE_LABELS = {
-  fetching:  'Fetching ESPN game slate...',
-  odds:      'Fetching live game lines...',
+  fetching:  'Fetching ESPN data...',
+  fighters:  'Fetching fighter profiles...',
+  odds:      'Fetching live odds...',
   props:     'Fetching player prop lines...',
-  injuries:  'Fetching rosters & injury reports...',
+  injuries:  'Fetching rosters & injury news...',
   analyzing: 'AI is analyzing...',
 };
 
-export default function LoadingState({ message, phase, sport }) {
-  const phaseLabel  = PHASE_LABELS[phase] || 'Working...';
-  const phaseOrder  = PHASES.map((p) => p.key);
-  const currentIdx  = phaseOrder.indexOf(phase);
+export default function LoadingState({ message, phase, sport, isMMA }) {
+  const phaseList  = isMMA ? MMA_PHASES : TEAM_PHASES;
+  const phaseOrder = phaseList.map((p) => p.key);
+  const currentIdx = phaseOrder.indexOf(phase);
+  const phaseLabel = PHASE_LABELS[phase] || 'Working...';
 
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', height: '100%', gap: 22, padding: 24,
     }}>
-      {/* Spinner */}
       <div style={{ position: 'relative' }}>
         <div style={{
           width: 60, height: 60,
           border: '3px solid rgba(255,255,255,0.06)',
-          borderTopColor: 'var(--green)',
-          borderRadius: '50%',
+          borderTopColor: 'var(--green)', borderRadius: '50%',
           animationName: 'spin', animationDuration: '0.75s',
           animationTimingFunction: 'linear', animationIterationCount: 'infinite',
         }} />
@@ -44,7 +52,6 @@ export default function LoadingState({ message, phase, sport }) {
         </div>
       </div>
 
-      {/* Phase label */}
       <div style={{
         fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
         letterSpacing: '2px', textTransform: 'uppercase',
@@ -53,7 +60,6 @@ export default function LoadingState({ message, phase, sport }) {
         {phaseLabel}
       </div>
 
-      {/* Rotating message */}
       <div style={{
         fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--green)',
         animationName: 'blink', animationDuration: '2s',
@@ -62,14 +68,12 @@ export default function LoadingState({ message, phase, sport }) {
         {message}
       </div>
 
-      {/* Phase progress — skip 'props' step if it's not active and wasn't active */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-        {PHASES.map(({ key, label }, i) => {
+        {phaseList.map(({ key, label }, i) => {
           const done   = currentIdx > i;
           const active = currentIdx === i;
-          // Dim the props step if it was skipped (we jumped from odds→injuries)
-          const skipped = key === 'props' && currentIdx > i && phase !== 'props';
-          if (skipped) return null;
+          // Hide props step if we jumped past it (it was skipped)
+          if (key === 'props' && currentIdx > i) return null;
 
           return (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -82,10 +86,8 @@ export default function LoadingState({ message, phase, sport }) {
                 fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase',
                 letterSpacing: '0.5px',
                 color: done || active ? 'var(--green)' : 'var(--muted)',
-              }}>
-                {label}
-              </span>
-              {i < PHASES.length - 1 && (
+              }}>{label}</span>
+              {i < phaseList.length - 1 && (
                 <span style={{ color: 'var(--muted)', fontSize: 9, marginLeft: 2 }}>→</span>
               )}
             </div>

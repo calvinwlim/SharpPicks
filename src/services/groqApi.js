@@ -1,38 +1,32 @@
-import { SYSTEM_PROMPT } from '../prompts/systemPrompt.js';
+import { SYSTEM_PROMPT }     from '../prompts/systemPrompt.js';
+import { MMA_SYSTEM_PROMPT } from '../prompts/mmaPrompt.js';
 import { extractAndRepairJSON } from '../utils/jsonUtils.js';
 import { formatSlateForContext } from './espnApi.js';
-import { formatOddsForContext } from './oddsApi.js';
+import { formatOddsForContext }  from './oddsApi.js';
 import { fmtDate } from '../utils/dateUtils.js';
 
 const GROQ_API   = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 /**
- * Sends the confirmed game slate, live odds, and injury context to Groq (free tier)
- * for sharp pick analysis using Llama 3.3 70B.
- *
- * Free tier limits: 30 req/min, 6000 tokens/min, 14400 req/day.
- * Get a free key at: https://console.groq.com
- *
- * @param {Object} params
- * @param {string}   params.sport
- * @param {string}   params.date          - ISO "YYYY-MM-DD"
- * @param {Array}    params.games         - Parsed ESPN games
- * @param {Array}    params.odds          - Parsed Odds API data (or null)
- * @param {string}   params.rosterContext - ESPN confirmed rosters (or '')
- * @param {string}   params.injuryContext - ESPN injury feed (or '')
- * @param {string}   params.propsContext  - Real player prop lines from Odds API (or '')
- * @param {string}   params.notes         - User-supplied intel
- * @param {string}   params.apiKey        - Groq API key
+ * Sends the confirmed slate + all enrichment data to Groq (free tier) for analysis.
+ * Routes to the MMA-specific prompt and validation when sport === 'UFC'.
  */
-export async function analyzeSlate({ sport, date, games, odds, rosterContext, injuryContext, propsContext, notes, apiKey }) {
+export async function analyzeSlate({
+  sport, date, games, odds,
+  rosterContext, injuryContext, propsContext,
+  fighterContext,   // UFC only — ESPN fighter profiles
+  notes, apiKey,
+}) {
   if (!apiKey || !apiKey.trim()) {
-    throw new Error(
-      'Groq API key is required. Get a free key at console.groq.com, then add it in Settings.'
-    );
+    throw new Error('Groq API key is required. Get a free key at console.groq.com, then add it in Settings.');
   }
 
-  const userMsg = buildUserMessage({ sport, date, games, odds, rosterContext, injuryContext, propsContext, notes });
+  const isMMA      = sport === 'UFC';
+  const systemPmt  = isMMA ? MMA_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  const userMsg    = isMMA
+    ? buildMMAMessage({ sport, date, games, odds, fighterContext, injuryContext, notes })
+    : buildUserMessage({ sport, date, games, odds, rosterContext, injuryContext, propsContext, notes });
 
   let res;
   try {
@@ -45,10 +39,10 @@ export async function analyzeSlate({ sport, date, games, odds, rosterContext, in
       body: JSON.stringify({
         model:       GROQ_MODEL,
         max_tokens:  4096,
-        temperature: 0.25,
+        temperature: 0.2,   // lower temp = more factual / less hallucination
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user',   content: userMsg },
+          { role: 'system', content: systemPmt },
+          { role: 'user',   content: userMsg   },
         ],
       }),
     });
@@ -78,15 +72,68 @@ export async function analyzeSlate({ sport, date, games, odds, rosterContext, in
     throw new Error(`Could not parse Groq response: ${err.message}`);
   }
 
+  if (isMMA) {
+    // Validate MMA structure
+    if (!parsed.fights || !parsed.fights.length) {
+      throw new Error('No fight analysis returned. The UFC card may not be scheduled yet for this date.');
+    }
+    // Normalize fight IDs
+    parsed.fights = parsed.fights.map((f, i) => ({
+      ...f,
+      id: String(f.id != null ? f.id : i + 1),
+    }));
+    return parsed;
+  }
+
+  // Team sports validation
   if (!parsed.picks || !parsed.picks.length) {
     throw new Error('No picks found for this slate. The sport may be out of season or no games were scheduled.');
   }
-
   parsed.picks    = parsed.picks.map((p, i) => ({ ...p, id: String(p.id != null ? p.id : i + 1) }));
   parsed.best_bet = String(parsed.best_bet != null ? parsed.best_bet : '1');
-
   return parsed;
 }
+
+// ─── MMA message builder ──────────────────────────────────────────────────────
+
+function buildMMAMessage({ sport, date, games, odds, fighterContext, injuryContext, notes }) {
+  const parts = [];
+
+  parts.push(`Analyze the UFC fight card for ${fmtDate(date)} (${date}).`);
+  parts.push('');
+  parts.push(formatSlateForContext(games));
+
+  if (odds) {
+    parts.push(formatOddsForContext(odds));
+  }
+
+  // Fighter profiles — physical ground truth
+  if (fighterContext) {
+    parts.push(fighterContext);
+  }
+
+  if (injuryContext) {
+    parts.push(injuryContext);
+  }
+
+  if (notes && notes.trim()) {
+    parts.push('\nADDITIONAL INTEL FROM USER (training camp news, odds movements, injury reports):');
+    parts.push(notes.trim());
+  }
+
+  parts.push('');
+  parts.push(
+    'For each fight: classify both fighters\' styles, analyze the stylistic matchup and historical patterns, ' +
+    'apply any training camp modifiers with appropriate skepticism, calculate moneyline edge (implied vs true probability), ' +
+    'and identify the highest-value props. ' +
+    'List fights in order of moneyline confidence (highest edge first). ' +
+    'Only use fighters listed in CONFIRMED FIGHTERS above.'
+  );
+
+  return parts.join('\n');
+}
+
+// ─── Team sports message builder ─────────────────────────────────────────────
 
 function buildUserMessage({ sport, date, games, odds, rosterContext, injuryContext, propsContext, notes }) {
   const parts = [];
@@ -95,17 +142,14 @@ function buildUserMessage({ sport, date, games, odds, rosterContext, injuryConte
   parts.push('');
   parts.push(formatSlateForContext(games));
 
-  // Game-level lines (spread / total / ML)
   if (odds) {
     parts.push(formatOddsForContext(odds));
   }
 
-  // Player prop lines — highest priority: use these exact numbers in picks
   if (propsContext) {
     parts.push(propsContext);
   }
 
-  // Rosters — ground truth for who is actually on each team today
   if (rosterContext) {
     parts.push(rosterContext);
   }
@@ -123,9 +167,9 @@ function buildUserMessage({ sport, date, games, odds, rosterContext, injuryConte
   parts.push(
     'Using the slate, confirmed rosters, live lines, and data above, identify 4–6 sharp +EV picks. ' +
     (propsContext
-      ? 'Player prop lines have been provided above — use those exact lines and odds in your picks. '
-      : 'No player prop lines were fetched — clearly note when a prop line is estimated. ') +
-    'ONLY suggest player props for athletes listed in CONFIRMED ROSTERS / CONFIRMED FIGHTERS above.'
+      ? 'Player prop lines have been provided — use those exact lines and odds. '
+      : 'No prop lines fetched — note when a line is estimated. ') +
+    'ONLY suggest props for athletes listed in CONFIRMED ROSTERS above.'
   );
 
   return parts.join('\n');
