@@ -205,6 +205,30 @@ function PropPick({ prop }) {
   );
 }
 
+// ─── Career arc chip ──────────────────────────────────────────────────────────
+
+const ARC_COLORS = {
+  'RISING FINISHER':    { c: '#00e87f', bg: 'rgba(0,232,127,0.1)' },
+  'PEAK PRIME':         { c: '#4a9eff', bg: 'rgba(74,158,255,0.1)' },
+  'PROVEN GATEKEEPER':  { c: '#f0b020', bg: 'rgba(240,176,32,0.1)' },
+  'FADING VETERAN':     { c: '#ff6b35', bg: 'rgba(255,107,53,0.1)' },
+  'COMEBACK TRAIL':     { c: '#a78bfa', bg: 'rgba(167,139,250,0.1)' },
+  'LAST STAND':         { c: '#ff4757', bg: 'rgba(255,71,87,0.1)' },
+};
+
+function CareerArcChip({ arc }) {
+  if (!arc) return null;
+  const colors = ARC_COLORS[arc] || { c: '#6a8aa5', bg: 'rgba(106,138,165,0.1)' };
+  return (
+    <span style={{
+      fontFamily: 'var(--font-display)', fontSize: 9.5, fontWeight: 800,
+      letterSpacing: '0.8px', textTransform: 'uppercase',
+      color: colors.c, background: colors.bg,
+      padding: '3px 8px', borderRadius: 4, display: 'inline-block', marginBottom: 5,
+    }}>{arc}</span>
+  );
+}
+
 // ─── Fighter column ───────────────────────────────────────────────────────────
 
 function FighterColumn({ fighter, isEdgeWinner }) {
@@ -226,9 +250,22 @@ function FighterColumn({ fighter, isEdgeWinner }) {
           }}>EDGE</span>
         )}
       </div>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-3)', marginBottom: 6 }}>
-        {fighter.record_breakdown || fighter.record || ''} · {fighter.style || ''}
+      {/* Career arc + record */}
+      <CareerArcChip arc={fighter.career_arc} />
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)', marginBottom: 5 }}>
+        {fighter.record_breakdown || ''} · {fighter.style || ''}
       </div>
+
+      {/* Camp / team */}
+      {fighter.camp_team && (
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: 10.5, color: '#4a9eff',
+          background: 'rgba(74,158,255,0.06)', padding: '3px 8px', borderRadius: 4,
+          display: 'inline-block', marginBottom: 7,
+        }}>
+          🏋 {fighter.camp_team}
+        </div>
+      )}
 
       {/* Style tags */}
       {fighter.style_tags && fighter.style_tags.length > 0 && (
@@ -251,7 +288,7 @@ function FighterColumn({ fighter, isEdgeWinner }) {
 
       {/* Weaknesses */}
       {fighter.weaknesses && fighter.weaknesses.length > 0 && (
-        <div>
+        <div style={{ marginBottom: 6 }}>
           {fighter.weaknesses.slice(0, 2).map((w, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 3 }}>
               <span style={{ color: 'var(--red)', fontSize: 8, flexShrink: 0, marginTop: 4 }}>▼</span>
@@ -264,7 +301,7 @@ function FighterColumn({ fighter, isEdgeWinner }) {
       {/* Historical vs style */}
       {fighter.vs_style_record && (
         <div style={{
-          marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 10.5,
+          fontFamily: 'var(--font-mono)', fontSize: 10.5,
           color: 'var(--text-3)', lineHeight: 1.5,
           background: 'rgba(255,255,255,0.03)', padding: '6px 9px', borderRadius: 6,
         }}>
@@ -343,6 +380,24 @@ export default function MMAFightCard({ fight, bestBet, animDelay = 0 }) {
           isEdgeWinner={!f1IsEdge && !!edgeWinner}
         />
       </div>
+
+      {/* Stakes assessment */}
+      {fight.stakes_assessment && (
+        <div style={{
+          padding: '9px 18px', borderBottom: '1px solid var(--border)',
+          display: 'flex', gap: 8, alignItems: 'flex-start',
+          background: 'rgba(74,158,255,0.03)',
+        }}>
+          <span style={{ fontSize: 13, flexShrink: 0 }}>🎯</span>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-3)', lineHeight: 1.6 }}>
+            <span style={{
+              fontFamily: 'var(--font-display)', fontSize: 9.5, fontWeight: 700,
+              letterSpacing: '1.5px', textTransform: 'uppercase', color: '#4a9eff', marginRight: 8,
+            }}>STAKES</span>
+            {fight.stakes_assessment}
+          </span>
+        </div>
+      )}
 
       {/* Stylistic edge + path to victory */}
       {(fight.stylistic_edge_detail || fight.path_to_victory) && (

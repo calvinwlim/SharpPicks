@@ -38,8 +38,8 @@ export async function analyzeSlate({
       },
       body: JSON.stringify({
         model:       GROQ_MODEL,
-        max_tokens:  4096,
-        temperature: 0.2,   // lower temp = more factual / less hallucination
+        max_tokens:  isMMA ? 6000 : 4096,  // MMA needs more room for per-fight depth
+        temperature: 0.2,                   // lower temp = more factual / less hallucination
         messages: [
           { role: 'system', content: systemPmt },
           { role: 'user',   content: userMsg   },
