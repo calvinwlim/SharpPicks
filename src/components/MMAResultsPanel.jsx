@@ -69,7 +69,7 @@ function ParlayCard({ parlay }) {
   );
 }
 
-export default function MMAResultsPanel({ result, games, oddsTimestamp, onRegenerate }) {
+export default function MMAResultsPanel({ result, games, oddsTimestamp, onRegenerate, onRevisualize }) {
   if (!result || !result.fights) return null;
 
   const fights = result.fights || [];
@@ -117,7 +117,12 @@ export default function MMAResultsPanel({ result, games, oddsTimestamp, onRegene
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color: 'var(--muted)', marginTop: 3 }}>{l}</div>
             </div>
           ))}
-          <button className="btn-ghost" onClick={onRegenerate}>↺ Regen</button>
+          {onRevisualize && (
+            <button className="btn-ghost" onClick={onRevisualize} style={{ borderColor: 'rgba(88,166,255,0.3)', color: 'var(--blue)' }}>
+              ← Data View
+            </button>
+          )}
+          <button className="btn-ghost" onClick={onRegenerate}>↺ Regen Picks</button>
         </div>
       </div>
 

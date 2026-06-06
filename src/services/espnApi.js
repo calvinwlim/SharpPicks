@@ -128,15 +128,23 @@ function parseMMAFight(comp, cardName, cardDate, cardVenue) {
     const fighter2   = parseFighter(fighters[1]);
     if (!fighter1 || !fighter2) return null;
 
-    // Weight class from competition type or headlines
-    const weightClass = (comp.type && comp.type.text)
-      || ((comp.headlines || []).find((h) => h.description && h.description.includes('lbs')) || {}).description
-      || '';
+    // Weight class — try every known ESPN field
+    const weightClass =
+      (comp.type && (comp.type.text || comp.type.description || comp.type.abbreviation)) ||
+      (comp.category && (comp.category.text || comp.category.description)) ||
+      (comp.notes && comp.notes[0] && comp.notes[0].headline) ||
+      ((comp.headlines || []).find((h) => {
+        const t = (h.description || h.shortLinkText || '').toLowerCase();
+        return t.includes('weight') || t.includes('lbs') || t.includes('pound');
+      }) || {}).description ||
+      '';
 
-    const isTitleFight = (comp.headlines || []).some((h) => {
-      const t = ((h.shortLinkText || '') + (h.description || '')).toLowerCase();
-      return t.includes('title') || t.includes('championship') || t.includes('belt');
-    });
+    const isTitleFight =
+      (comp.type && comp.type.text && comp.type.text.toLowerCase().includes('title')) ||
+      (comp.headlines || []).some((h) => {
+        const t = ((h.shortLinkText || '') + (h.description || '')).toLowerCase();
+        return t.includes('title') || t.includes('championship') || t.includes('belt');
+      }) || false;
 
     const espnOdds = comp.odds && comp.odds[0] ? comp.odds[0] : null;
 
@@ -183,17 +191,30 @@ function parseMMAFight(comp, cardName, cardDate, cardVenue) {
 function parseFighter(competitor) {
   if (!competitor) return null;
   const athlete = competitor.athlete || {};
-  const name    = athlete.displayName || athlete.fullName || 'TBD';
-  // Abbreviation = last name, max 8 chars
+
+  const name = athlete.displayName || athlete.fullName
+    || competitor.displayName || competitor.fullName || 'TBD';
+
+  // Try every known location for the fighter's record
+  const record =
+    (competitor.records && competitor.records[0] && competitor.records[0].summary) ||
+    athlete.displayRecord || athlete.record ||
+    '';
+
+  // Try every known location for the ESPN athlete ID (needed for profile fetches)
+  const id = athlete.id || competitor.athleteId || competitor.id || null;
+
   const lastName = name.split(' ').pop().slice(0, 8).toUpperCase();
+
   return {
-    id:           athlete.id    || null,
+    id,
     name,
     abbreviation: lastName,
-    record:       athlete.record || '',
-    color:        '',
-    score:        competitor.score || null,
-    country:      (athlete.flag && athlete.flag.alt) || '',
+    record,
+    color:   '',
+    score:   competitor.score || null,
+    country: (athlete.flag && athlete.flag.alt) ||
+             (athlete.birthPlace && athlete.birthPlace.country) || '',
   };
 }
 
