@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sharp Slate ⚾</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="container">
+
+  <header class="app-header">
+    <div class="brand">
+      <h1>Sharp Slate</h1>
+      <span class="tagline">MLB strikeout props, graded straight</span>
+    </div>
+    <div class="controls">
+      <input type="date" id="date-input" />
+      <button id="load-btn">Visualize</button>
+      <div class="pills">
+        <span class="pill" id="pill-odds">Odds</span>
+        <span class="pill" id="pill-props">Props</span>
+        <span class="pill" id="pill-ai">AI</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="disclaimer">
+    Sharp Slate estimates strikeout-prop probabilities from free MLB data and,
+    when a real betting line is supplied, compares them to the vig-removed
+    market price. A projection alone is <strong>not</strong> an edge — EV is a
+    long-run average, not a guarantee. Gambling carries real financial risk.
+    21+ where legal. If it stops being fun, call 1-800-GAMBLER.
+  </div>
+
+  <section class="top-board" id="top-board-section" style="display:none;">
+    <h2 class="section-title">Top Board</h2>
+    <div class="top-board-list" id="top-board-list"></div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Slate</h2>
+    <div id="slate-container">
+      <div class="empty">Pick a date and hit Visualize.</div>
+    </div>
+  </section>
+
+  <footer>
+    Built to find spots where the numbers disagree with the price — not to
+    promise winners. Bet responsibly.
+  </footer>
+</div>
+
+<!-- ---- templates ---------------------------------------------------- -->
+
+<template id="tpl-game-card">
+  <div class="game-card" data-game-pk="">
+    <div class="game-meta">
+      <span class="venue"></span>
+      <span class="time"></span>
+    </div>
+    <div class="matchup">
+      <div class="team away">
+        <div class="abbr"></div>
+        <div class="pitcher"></div>
+      </div>
+      <div class="at">@</div>
+      <div class="team home">
+        <div class="abbr"></div>
+        <div class="pitcher"></div>
+      </div>
+    </div>
+    <button class="analyze-btn">Analyze</button>
+    <div class="analysis"></div>
+  </div>
+</template>
+
+<template id="tpl-game-model">
+  <div class="game-model">
+    <div class="wp away-wp">
+      <div class="label"></div>
+      <div class="bar"><span></span></div>
+    </div>
+    <div class="wp home-wp">
+      <div class="label"></div>
+      <div class="bar"><span></span></div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-pick-card">
+  <div class="pick-card">
+    <div class="pick-header">
+      <div class="pick-title"></div>
+      <div class="tier"></div>
+    </div>
+    <div class="chip-wrap"><canvas></canvas></div>
+    <div class="splits"></div>
+    <div class="narrative"></div>
+    <div class="edge-box" style="display:none;"></div>
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="/app.js"></script>
+</body>
+</html>

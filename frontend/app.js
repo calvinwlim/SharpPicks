@@ -1,0 +1,309 @@
+// Sharp Slate frontend — fetches the API, renders game cards, picks, and the
+// Top Board. No framework, no build step, no browser storage.
+
+const dateInput = document.getElementById("date-input");
+const loadBtn = document.getElementById("load-btn");
+const slateContainer = document.getElementById("slate-container");
+const topBoardSection = document.getElementById("top-board-section");
+const topBoardList = document.getElementById("top-board-list");
+
+const pillOdds = document.getElementById("pill-odds");
+const pillProps = document.getElementById("pill-props");
+const pillAi = document.getElementById("pill-ai");
+
+const charts = new Map(); // gamePk -> [Chart, ...] so we can destroy on re-render
+
+function todayISO() {
+  const d = new Date();
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d - tz).toISOString().slice(0, 10);
+}
+
+function setFlags(flags) {
+  pillOdds.classList.toggle("on", !!flags.hasOdds);
+  pillProps.classList.toggle("on", !!flags.playerProps);
+  pillAi.classList.toggle("on", !!flags.hasAI);
+}
+
+function fmtTime(iso) {
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+// ---- slate ----------------------------------------------------------------
+
+async function loadSlate(date) {
+  slateContainer.innerHTML = '<div class="loading">Loading slate…</div>';
+  topBoardSection.style.display = "none";
+  topBoardList.innerHTML = "";
+  charts.forEach((list) => list.forEach((c) => c.destroy()));
+  charts.clear();
+
+  let data;
+  try {
+    const res = await fetch(`/api/slate?date=${encodeURIComponent(date)}`);
+    data = await res.json();
+    setFlags(data.flags || {});
+  } catch (e) {
+    slateContainer.innerHTML = '<div class="error">Failed to load slate.</div>';
+    return;
+  }
+
+  if (!data.count) {
+    slateContainer.innerHTML = '<div class="empty">No games on this date.</div>';
+    return;
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "slate-grid";
+
+  for (const game of data.games) {
+    grid.appendChild(renderGameCard(game, date));
+  }
+
+  slateContainer.innerHTML = "";
+  slateContainer.appendChild(grid);
+}
+
+function renderGameCard(game, date) {
+  const tpl = document.getElementById("tpl-game-card");
+  const node = tpl.content.cloneNode(true);
+  const card = node.querySelector(".game-card");
+  card.dataset.gamePk = game.gamePk;
+
+  card.querySelector(".venue").textContent = game.venue || "";
+  card.querySelector(".time").textContent =
+    `${fmtTime(game.gameDate)} · ${game.dayNight === "night" ? "Night" : "Day"}`;
+
+  fillTeam(card.querySelector(".team.away"), game.away);
+  fillTeam(card.querySelector(".team.home"), game.home);
+
+  const analysisEl = card.querySelector(".analysis");
+  const btn = card.querySelector(".analyze-btn");
+  btn.addEventListener("click", () => {
+    if (analysisEl.classList.contains("open")) {
+      analysisEl.classList.remove("open");
+      btn.textContent = "Analyze";
+      return;
+    }
+    btn.textContent = "Hide";
+    analysisEl.classList.add("open");
+    if (!analysisEl.dataset.loaded) {
+      loadAnalysis(game, date, analysisEl, btn);
+    }
+  });
+
+  return node;
+}
+
+function fillTeam(el, team) {
+  el.querySelector(".abbr").textContent = team.abbr || team.name;
+  const pp = team.probablePitcher;
+  el.querySelector(".pitcher").textContent = pp ? pp.name : "TBD";
+}
+
+// ---- analysis ---------------------------------------------------------------
+
+async function loadAnalysis(game, date, container, btn) {
+  container.innerHTML = '<div class="loading">Crunching the numbers…</div>';
+  try {
+    const res = await fetch(`/api/analyze/${game.gamePk}?date=${encodeURIComponent(date)}&ai=0`);
+    if (!res.ok) throw new Error("bad response");
+    const data = await res.json();
+    container.dataset.loaded = "1";
+    renderAnalysis(data, game, container);
+    addToTopBoard(data, game);
+  } catch (e) {
+    container.innerHTML = '<div class="error">Could not load analysis for this game.</div>';
+    btn.textContent = "Analyze";
+    container.classList.remove("open");
+  }
+}
+
+function renderAnalysis(data, game, container) {
+  container.innerHTML = "";
+
+  // game model
+  if (data.gameModel) {
+    const tpl = document.getElementById("tpl-game-model");
+    const node = tpl.content.cloneNode(true);
+    const gm = data.gameModel;
+
+    const awayWp = node.querySelector(".away-wp");
+    awayWp.querySelector(".label").textContent =
+      `${game.away.abbr} ${(gm.awayWinProb * 100).toFixed(0)}% win`;
+    awayWp.querySelector(".bar > span").style.width = `${(gm.awayWinProb * 100).toFixed(0)}%`;
+
+    const homeWp = node.querySelector(".home-wp");
+    homeWp.querySelector(".label").textContent =
+      `${game.home.abbr} ${(gm.homeWinProb * 100).toFixed(0)}% win`;
+    homeWp.querySelector(".bar > span").style.width = `${(gm.homeWinProb * 100).toFixed(0)}%`;
+
+    container.appendChild(node);
+  }
+
+  if (!data.picks || !data.picks.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "No graded picks for this game (not enough recent starts).";
+    container.appendChild(empty);
+    return;
+  }
+
+  const chartList = [];
+  for (const pick of data.picks) {
+    const { node, canvas } = renderPickCard(pick);
+    container.appendChild(node);
+    const chart = drawChip(canvas, pick);
+    if (chart) chartList.push(chart);
+  }
+  charts.set(game.gamePk, chartList);
+}
+
+function renderPickCard(pick) {
+  const tpl = document.getElementById("tpl-pick-card");
+  const node = tpl.content.cloneNode(true);
+
+  node.querySelector(".pick-title").textContent =
+    `${pick.pick} — ${pick.confidence}% confidence`;
+
+  const tier = node.querySelector(".tier");
+  tier.textContent = pick.tier;
+  tier.classList.add(pick.tier);
+
+  const splitsEl = node.querySelector(".splits");
+  for (const s of pick.splits) {
+    const span = document.createElement("span");
+    span.className = "split" + (s.thin ? " split--thin" : "");
+    span.textContent = `${s.label}: ${s.hits}/${s.n} (${(s.rate * 100).toFixed(0)}%)`;
+    splitsEl.appendChild(span);
+  }
+
+  node.querySelector(".narrative").textContent = pick.narrative || "";
+
+  const edgeBox = node.querySelector(".edge-box");
+  if (pick.hasMarket && pick.edge) {
+    const e = pick.edge;
+    edgeBox.style.display = "flex";
+    const evClass = e.evPct > 0 ? "ev-pos" : "ev-neg";
+    edgeBox.innerHTML = `
+      <span>Price: <strong>${e.price > 0 ? "+" : ""}${e.price}</strong></span>
+      <span>Model: ${(e.modelProb * 100).toFixed(1)}%</span>
+      <span>Fair: ${(e.fairProb * 100).toFixed(1)}%</span>
+      <span class="${evClass}">EV: ${e.evPct > 0 ? "+" : ""}${e.evPct.toFixed(1)}%</span>
+      <span>Kelly: ${e.kellyPct.toFixed(1)}% (¼: ${(e.kellyPct / 4).toFixed(1)}%)</span>
+    `;
+  } else {
+    edgeBox.style.display = "flex";
+    edgeBox.innerHTML = `<span>Analysis only — no live line matched. Projection ${pick.projection} K's.</span>`;
+  }
+
+  const canvas = node.querySelector("canvas");
+  return { node, canvas };
+}
+
+// ---- scorecard chip ----------------------------------------------------------
+
+function drawChip(canvas, pick) {
+  if (!pick.spark || !pick.spark.length) return null;
+
+  const labels = pick.spark.map((s) => s.opp + (s.home ? "" : " (a)"));
+  const values = pick.spark.map((s) => s.k);
+  const line = pick.line;
+
+  const colors = values.map((v) => {
+    const overHits = v > line;
+    if (pick.side === "over") return overHits ? "#3ecf8e" : "#3a4566";
+    return overHits ? "#3a4566" : "#3ecf8e";
+  });
+
+  return new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          data: values,
+          backgroundColor: colors,
+          borderRadius: 3,
+          barPercentage: 0.7,
+        },
+        {
+          type: "line",
+          data: labels.map(() => line),
+          borderColor: "#ffcb47",
+          borderDash: [4, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
+      scales: {
+        x: { ticks: { color: "#97a3c4", font: { size: 9 } }, grid: { display: false } },
+        y: { ticks: { color: "#97a3c4", font: { size: 9 } }, grid: { color: "#25304f" }, beginAtZero: true },
+      },
+    },
+  });
+}
+
+// ---- top board ----------------------------------------------------------------
+
+function addToTopBoard(data, game) {
+  if (!data.picks || !data.picks.length) return;
+  topBoardSection.style.display = "block";
+
+  for (const pick of data.picks) {
+    const item = document.createElement("div");
+    item.className = "top-board-item";
+
+    const evPct = pick.hasMarket && pick.edge ? pick.edge.evPct : null;
+    const sortKey = evPct !== null ? evPct : pick.confidence;
+
+    item.dataset.sortKey = sortKey;
+    const evLabel =
+      evPct !== null
+        ? `<span class="${evPct > 0 ? "ev-pos" : "ev-neg"}">${evPct > 0 ? "+" : ""}${evPct.toFixed(1)}% EV</span>`
+        : `<span>${pick.confidence}% conf</span>`;
+
+    item.innerHTML = `
+      <div class="tb-pick">${pick.pick}</div>
+      <div class="tb-meta">
+        <span>${game.away.abbr} @ ${game.home.abbr} · ${pick.tier}</span>
+        ${evLabel}
+      </div>
+    `;
+
+    item.addEventListener("click", () => {
+      const card = document.querySelector(`.game-card[data-game-pk="${game.gamePk}"]`);
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    topBoardList.appendChild(item);
+  }
+
+  // Keep the board sorted by EV (or confidence) descending.
+  const items = Array.from(topBoardList.children);
+  items.sort((a, b) => parseFloat(b.dataset.sortKey) - parseFloat(a.dataset.sortKey));
+  items.forEach((el) => topBoardList.appendChild(el));
+}
+
+// ---- init ------------------------------------------------------------------
+
+dateInput.value = todayISO();
+loadBtn.addEventListener("click", () => loadSlate(dateInput.value));
+
+// Pull flags on load so the pills reflect server config even before a search.
+fetch("/api/health")
+  .then((r) => r.json())
+  .then((d) => setFlags(d.flags || {}))
+  .catch(() => {});
+
+loadSlate(dateInput.value);
