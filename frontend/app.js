@@ -143,6 +143,13 @@ function renderAnalysis(data, game, container) {
     homeWp.querySelector(".bar > span").style.width = `${(gm.homeWinProb * 100).toFixed(0)}%`;
 
     container.appendChild(node);
+
+    if (gm.total) {
+      container.appendChild(renderTotalCard(gm.total));
+    }
+    if (gm.moneyline) {
+      container.appendChild(renderMoneylineCard(gm.moneyline, game));
+    }
   }
 
   if (!data.picks || !data.picks.length) {
@@ -161,6 +168,56 @@ function renderAnalysis(data, game, container) {
     if (chart) chartList.push(chart);
   }
   charts.set(game.gamePk, chartList);
+}
+
+function edgeLine(edge) {
+  const evClass = edge.evPct > 0 ? "ev-pos" : "ev-neg";
+  return `
+    <span>Price: <strong>${edge.price > 0 ? "+" : ""}${edge.price}</strong></span>
+    <span>Model: ${(edge.modelProb * 100).toFixed(1)}%</span>
+    <span>Fair: ${(edge.fairProb * 100).toFixed(1)}%</span>
+    <span class="${evClass}">EV: ${edge.evPct > 0 ? "+" : ""}${edge.evPct.toFixed(1)}%</span>
+    <span>Kelly: ${edge.kellyPct.toFixed(1)}% (¼: ${(edge.kellyPct / 4).toFixed(1)}%)</span>
+  `;
+}
+
+function renderTotalCard(total) {
+  const card = document.createElement("div");
+  card.className = "pick-card";
+  const sideLabel = total.side === "over" ? "Over" : "Under";
+  let edgeHtml;
+  if (total.hasMarket && total.edge) {
+    edgeHtml = `<div class="edge-box">${edgeLine(total.edge)}</div>`;
+  } else {
+    edgeHtml = `<div class="edge-box"><span>Analysis only — projected total ${total.projection} runs.</span></div>`;
+  }
+  card.innerHTML = `
+    <div class="pick-header">
+      <div class="pick-title">Game Total — ${sideLabel} ${total.line}</div>
+    </div>
+    <div class="narrative">Model projects ${total.projection} combined runs (${(total.modelProb * 100).toFixed(0)}% on ${sideLabel.toLowerCase()}).</div>
+    ${edgeHtml}
+  `;
+  return card;
+}
+
+function renderMoneylineCard(moneyline, game) {
+  const card = document.createElement("div");
+  card.className = "pick-card";
+  card.innerHTML = `
+    <div class="pick-header">
+      <div class="pick-title">Moneyline</div>
+    </div>
+    <div class="edge-box">
+      <span><strong>${game.away.abbr}</strong></span>
+      ${edgeLine(moneyline.away)}
+    </div>
+    <div class="edge-box">
+      <span><strong>${game.home.abbr}</strong></span>
+      ${edgeLine(moneyline.home)}
+    </div>
+  `;
+  return card;
 }
 
 function renderPickCard(pick) {
@@ -186,16 +243,8 @@ function renderPickCard(pick) {
 
   const edgeBox = node.querySelector(".edge-box");
   if (pick.hasMarket && pick.edge) {
-    const e = pick.edge;
     edgeBox.style.display = "flex";
-    const evClass = e.evPct > 0 ? "ev-pos" : "ev-neg";
-    edgeBox.innerHTML = `
-      <span>Price: <strong>${e.price > 0 ? "+" : ""}${e.price}</strong></span>
-      <span>Model: ${(e.modelProb * 100).toFixed(1)}%</span>
-      <span>Fair: ${(e.fairProb * 100).toFixed(1)}%</span>
-      <span class="${evClass}">EV: ${e.evPct > 0 ? "+" : ""}${e.evPct.toFixed(1)}%</span>
-      <span>Kelly: ${e.kellyPct.toFixed(1)}% (¼: ${(e.kellyPct / 4).toFixed(1)}%)</span>
-    `;
+    edgeBox.innerHTML = edgeLine(pick.edge);
   } else {
     edgeBox.style.display = "flex";
     edgeBox.innerHTML = `<span>Analysis only — no live line matched. Projection ${pick.projection} K's.</span>`;

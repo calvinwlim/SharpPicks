@@ -78,16 +78,24 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
             c = odds.client()
             events = await odds.get_game_markets(c)
             market_event = odds.match_event(events, home["name"], away["name"])
-            if market_event:
-                total_market = odds.game_total(market_event)
-                if odds.player_props_enabled():
-                    k_props_by_pitcher = await odds.get_pitcher_strikeout_props(c, market_event["id"])
-                    bb_props_by_pitcher = await odds.get_pitcher_walks_props(c, market_event["id"])
         except Exception:
             market_event = None
-            total_market = None
-            k_props_by_pitcher = {}
-            bb_props_by_pitcher = {}
+
+        if market_event:
+            try:
+                total_market = odds.game_total(market_event)
+            except Exception:
+                total_market = None
+
+            if odds.player_props_enabled():
+                try:
+                    k_props_by_pitcher = await odds.get_pitcher_strikeout_props(c, market_event["id"])
+                except Exception:
+                    k_props_by_pitcher = {}
+                try:
+                    bb_props_by_pitcher = await odds.get_pitcher_walks_props(c, market_event["id"])
+                except Exception:
+                    bb_props_by_pitcher = {}
 
     # ---- per-pitcher strikeout picks ---------------------------------------------------
     picks: List[Dict[str, Any]] = []
@@ -155,6 +163,9 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
         _run_prevention_or_default(run_prev, away["id"]),
         home_moneyline=home_ml,
         away_moneyline=away_ml,
+    )
+    game_model["total"] = analysis.analyze_game_total(
+        game_model["homeProjRuns"], game_model["awayProjRuns"], market=total_market
     )
 
     return {

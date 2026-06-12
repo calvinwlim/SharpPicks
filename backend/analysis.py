@@ -217,7 +217,7 @@ def analyze_strikeouts(
     if streak != 0:
         kind = "hit" if streak > 0 else "miss"
         n_streak = abs(streak)
-        plural = "es" if n_streak != 1 else ""
+        plural = "es" if (n_streak != 1 and kind == "miss") else ("s" if n_streak != 1 else "")
         splits.append({
             "label": f"Current streak: {n_streak} {kind}{plural}",
             "hits": n_streak if streak > 0 else 0,
@@ -351,7 +351,7 @@ def analyze_pitcher_count_prop(
     if streak != 0:
         kind = "hit" if streak > 0 else "miss"
         n_streak = abs(streak)
-        plural = "es" if n_streak != 1 else ""
+        plural = "es" if (n_streak != 1 and kind == "miss") else ("s" if n_streak != 1 else "")
         splits.append({
             "label": f"Current streak: {n_streak} {kind}{plural}",
             "hits": n_streak if streak > 0 else 0,

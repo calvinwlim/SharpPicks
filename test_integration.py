@@ -53,6 +53,7 @@ def _gamelog(person_id, season):
     if person_id != 700:
         return []  # away starter has no usable history -> no pick (tests that path)
     ks = [7, 8, 6, 9, 7, 5, 8, 10, 6, 7, 8, 9, 7, 6, 8]
+    bbs = [2, 1, 3, 2, 1, 2, 3, 1, 2, 1, 2, 3, 1, 2, 1]
     rows = []
     for i, k in enumerate(ks):
         opp = 110 if i % 2 == 0 else 444  # alternate BAL / some other team
@@ -63,6 +64,7 @@ def _gamelog(person_id, season):
             "opponentId": opp,
             "opponentName": "Baltimore Orioles" if opp == 110 else "Other Team",
             "strikeOuts": k,
+            "baseOnBalls": bbs[i],
             "inningsPitched": 6.0,
             "battersFaced": 24,
         })
@@ -129,8 +131,11 @@ def main():
 
     print("\n[analyze — analysis only]")
     a = client.get(f"/api/analyze/{GAME['gamePk']}?date={DATE}&ai=0").json()
-    check(len(a["picks"]) == 1, "exactly one graded pick (away SP has no logs)")
-    p = a["picks"][0]
+    check(len(a["picks"]) == 2, "two graded picks for Test Ace (K's + walks; away SP has no logs)")
+    picks_by_type = {pk["propType"]: pk for pk in a["picks"]}
+    check("strikeouts" in picks_by_type and "walks" in picks_by_type, "both prop types present")
+
+    p = picks_by_type["strikeouts"]
     check(p["player"] == "Test Ace", "pick is for Test Ace")
     check(p["side"] in ("over", "under"), f"model picked a side: {p['side']}")
     check(p["pick"].startswith("Test Ace "), f"pick label: {p['pick']}")
@@ -144,16 +149,25 @@ def main():
     check(all({"date", "opp", "k", "home"} <= set(x) for x in p["spark"]), "spark rows shaped for chart")
     check(p["edge"] is None and p["hasMarket"] is False, "no edge without odds")
     check(isinstance(p.get("narrative"), str) and p["narrative"], "template narrative present")
+
+    bb = picks_by_type["walks"]
+    check(bb["pick"].endswith("BB"), f"walks pick label: {bb['pick']}")
+    check(bb["side"] in ("over", "under"), f"walks model picked a side: {bb['side']}")
+    check(isinstance(bb["splits"], list) and len(bb["splits"]) >= 4, "walks splits present")
+
     check(a["gameModel"] is not None, "game model present")
     gm = a["gameModel"]
     check(abs((gm["homeWinProb"] + gm["awayWinProb"]) - 1.0) < 1e-6, "win probs sum to 1")
+    total = gm["total"]
+    check(total["side"] in ("over", "under"), f"total side: {total['side']}")
+    check(total["edge"] is None and total["hasMarket"] is False, "no total edge without odds")
     print("    narrative:", p["narrative"][:140])
 
     print("\n[analyze — with live market]")
     enable_market()
     a2 = client.get(f"/api/analyze/{GAME['gamePk']}?date={DATE}&ai=0").json()
     check(a2["flags"]["hasOdds"] is True, "odds flag on")
-    p2 = a2["picks"][0]
+    p2 = next(pk for pk in a2["picks"] if pk["propType"] == "strikeouts")
     check(p2["hasMarket"] is True and p2["edge"] is not None, "edge present with market")
     e = p2["edge"]
     for k in ("line", "side", "price", "decimal", "modelProb", "marketProb", "fairProb", "evPct", "kellyPct"):
