@@ -13,8 +13,9 @@ from typing import Any, Dict
 
 def template_narrative(pick: Dict[str, Any]) -> str:
     side_word = "the over" if pick["side"] == "over" else "the under"
+    noun = pick.get("statNoun", "strikeouts")
     parts = [
-        f"{pick['player']} projects to {pick['projection']:.1f} strikeouts, "
+        f"{pick['player']} projects to {pick['projection']:.1f} {noun}, "
         f"which favors {side_word} {pick['line']}."
     ]
 

@@ -126,6 +126,13 @@ async function loadAnalysis(game, date, container, btn) {
 function renderAnalysis(data, game, container) {
   container.innerHTML = "";
 
+  if (data.weather) {
+    container.appendChild(renderWeatherBadge(data.weather));
+  }
+  if (data.umpire) {
+    container.appendChild(renderUmpireBadge(data.umpire));
+  }
+
   // game model
   if (data.gameModel) {
     const tpl = document.getElementById("tpl-game-model");
@@ -150,6 +157,12 @@ function renderAnalysis(data, game, container) {
     if (gm.moneyline) {
       container.appendChild(renderMoneylineCard(gm.moneyline, game));
     }
+    if (gm.f5) {
+      container.appendChild(renderF5Card(gm.f5, game));
+    }
+    if (gm.nrfi) {
+      container.appendChild(renderNrfiCard(gm.nrfi));
+    }
   }
 
   if (!data.picks || !data.picks.length) {
@@ -170,15 +183,60 @@ function renderAnalysis(data, game, container) {
   charts.set(game.gamePk, chartList);
 }
 
+const WIND_COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+
+function windDirLabel(deg) {
+  if (deg === null || deg === undefined) return "";
+  return WIND_COMPASS[Math.round(deg / 22.5) % 16];
+}
+
+function renderWeatherBadge(weather) {
+  const div = document.createElement("div");
+  div.className = "splits";
+  let text;
+  if (weather.isDome) {
+    text = "Roof/dome — climate controlled";
+  } else if (weather.available) {
+    text = `${Math.round(weather.tempF)}°F · wind ${Math.round(weather.windMph)} mph ${windDirLabel(weather.windDir)}`;
+  } else {
+    text = "Weather unavailable";
+  }
+  const span = document.createElement("span");
+  span.className = "split";
+  span.textContent = text;
+  div.appendChild(span);
+  return div;
+}
+
+function renderUmpireBadge(umpire) {
+  const div = document.createElement("div");
+  div.className = "splits";
+  const span = document.createElement("span");
+  span.className = "split";
+  if (umpire.kFactor) {
+    span.textContent =
+      `HP ump ${umpire.name}: K ×${umpire.kFactor}, BB ×${umpire.bbFactor}, runs ×${umpire.runFactor}`;
+  } else {
+    span.textContent = `HP ump ${umpire.name} (no recorded tendency — neutral)`;
+  }
+  div.appendChild(span);
+  return div;
+}
+
 function edgeLine(edge) {
-  const evClass = edge.evPct > 0 ? "ev-pos" : "ev-neg";
-  return `
-    <span>Price: <strong>${edge.price > 0 ? "+" : ""}${edge.price}</strong></span>
-    <span>Model: ${(edge.modelProb * 100).toFixed(1)}%</span>
-    <span>Fair: ${(edge.fairProb * 100).toFixed(1)}%</span>
-    <span class="${evClass}">EV: ${edge.evPct > 0 ? "+" : ""}${edge.evPct.toFixed(1)}%</span>
-    <span>Kelly: ${edge.kellyPct.toFixed(1)}% (¼: ${(edge.kellyPct / 4).toFixed(1)}%)</span>
-  `;
+  const pct = (v, d = 1) => (v == null ? "—" : (v * 100).toFixed(d) + "%");
+  const num = (v, d = 1) => (v == null ? "—" : v.toFixed(d));
+  const evClass = (edge.evPct || 0) > 0 ? "ev-pos" : "ev-neg";
+  const parts = [
+    `<span>Price: <strong>${edge.price > 0 ? "+" : ""}${edge.price}</strong></span>`,
+    `<span>Model: ${pct(edge.modelProb)}</span>`,
+    `<span>Fair: ${pct(edge.fairProb)}</span>`,
+    `<span class="${evClass}">EV: ${edge.evPct > 0 ? "+" : ""}${num(edge.evPct)}%</span>`,
+  ];
+  if (edge.kellyPct != null) {
+    parts.push(`<span>Kelly: ${num(edge.kellyPct)}% (¼: ${num(edge.kellyPct / 4)}%)</span>`);
+  }
+  return parts.join("\n");
 }
 
 function renderTotalCard(total) {
@@ -191,11 +249,22 @@ function renderTotalCard(total) {
   } else {
     edgeHtml = `<div class="edge-box"><span>Analysis only — projected total ${total.projection} runs.</span></div>`;
   }
+  const factorNote = (label, factor) =>
+    factor && factor !== 1
+      ? ` ${label} ${factor > 1 ? "up" : "down"} ${Math.abs((factor - 1) * 100).toFixed(1)}%.`
+      : "";
+  const weatherNote = factorNote("Weather", total.weatherFactor);
+  const umpNote = total.umpire ? factorNote(`HP ump ${total.umpire.name}`, total.umpFactor) : "";
+  const bullpenNote = factorNote("Bullpens", total.bullpenFactor);
+  const parkNote = factorNote("Park", total.parkFactor);
+  const windNote = total.wind
+    ? ` Wind ${Math.abs(total.wind.outMph)} mph ${total.wind.blowing} (${total.windFactor > 1 ? "+" : ""}${((total.windFactor - 1) * 100).toFixed(1)}%).`
+    : "";
   card.innerHTML = `
     <div class="pick-header">
       <div class="pick-title">Game Total — ${sideLabel} ${total.line}</div>
     </div>
-    <div class="narrative">Model projects ${total.projection} combined runs (${(total.modelProb * 100).toFixed(0)}% on ${sideLabel.toLowerCase()}).</div>
+    <div class="narrative">Model projects ${total.projection} combined runs (${(total.modelProb * 100).toFixed(0)}% on ${sideLabel.toLowerCase()}).${weatherNote}${parkNote}${windNote}${umpNote}${bullpenNote}</div>
     ${edgeHtml}
   `;
   return card;
@@ -220,6 +289,39 @@ function renderMoneylineCard(moneyline, game) {
   return card;
 }
 
+function renderF5Card(f5, game) {
+  const card = document.createElement("div");
+  card.className = "pick-card";
+  const sideLabel = f5.side === "over" ? "Over" : "Under";
+  const edgeHtml = f5.hasMarket && f5.edge
+    ? `<div class="edge-box">${edgeLine(f5.edge)}</div>`
+    : `<div class="edge-box"><span>Analysis only — projected first-5 total ${f5.projection} runs.</span></div>`;
+  card.innerHTML = `
+    <div class="pick-header">
+      <div class="pick-title">First 5 Innings — ${sideLabel} ${f5.line}</div>
+    </div>
+    <div class="narrative">Starters-only model: ${f5.projection} runs through 5 (${f5.awayRuns} ${game.away.abbr} / ${f5.homeRuns} ${game.home.abbr}). F5 win: ${game.away.abbr} ${(f5.awayWinProb * 100).toFixed(0)}%, ${game.home.abbr} ${(f5.homeWinProb * 100).toFixed(0)}%, tie ${(f5.tieProb * 100).toFixed(0)}%.</div>
+    ${edgeHtml}
+  `;
+  return card;
+}
+
+function renderNrfiCard(nrfi) {
+  const card = document.createElement("div");
+  card.className = "pick-card";
+  const edgeHtml = nrfi.hasMarket && nrfi.edge
+    ? `<div class="edge-box">${edgeLine(nrfi.edge)}</div>`
+    : `<div class="edge-box"><span>Analysis only — no live NRFI line matched.</span></div>`;
+  card.innerHTML = `
+    <div class="pick-header">
+      <div class="pick-title">${nrfi.pick}</div>
+    </div>
+    <div class="narrative">NRFI ${(nrfi.nrfiProb * 100).toFixed(0)}% / YRFI ${(nrfi.yrfiProb * 100).toFixed(0)}%. First-inning scoring chance: away ${(nrfi.pScoreAway * 100).toFixed(0)}%, home ${(nrfi.pScoreHome * 100).toFixed(0)}%.</div>
+    ${edgeHtml}
+  `;
+  return card;
+}
+
 function renderPickCard(pick) {
   const tpl = document.getElementById("tpl-pick-card");
   const node = tpl.content.cloneNode(true);
@@ -238,6 +340,31 @@ function renderPickCard(pick) {
     span.textContent = `${s.label}: ${s.hits}/${s.n} (${(s.rate * 100).toFixed(0)}%)`;
     splitsEl.appendChild(span);
   }
+  function addChip(text) {
+    const span = document.createElement("span");
+    span.className = "split";
+    span.textContent = text;
+    splitsEl.appendChild(span);
+  }
+
+  if (pick.platoon) {
+    const pl = pick.platoon;
+    addChip(
+      `Platoon: vs LHB ${(pl.vsLHB * 100).toFixed(1)}% K, vs RHB ${(pl.vsRHB * 100).toFixed(1)}% K ` +
+      `· opp ~${(pl.oppLHBPct * 100).toFixed(0)}% LHB (×${pl.factor})`
+    );
+  }
+  if (pick.skill) {
+    const sk = pick.skill;
+    const whiff = sk.swStrPct != null ? `, ${(sk.swStrPct * 100).toFixed(1)}% whiff` : "";
+    addChip(`Statcast: ${(sk.kPct * 100).toFixed(1)}% K${whiff} · blends ${sk.resultsProj}→${sk.blended}`);
+  }
+  if (pick.umpire && pick.umpire.factor) {
+    addChip(`HP ump ${pick.umpire.name}: ×${pick.umpire.factor}`);
+  }
+  if (pick.lineupConfirmed) {
+    addChip("Confirmed lineup");
+  }
 
   node.querySelector(".narrative").textContent = pick.narrative || "";
 
@@ -247,7 +374,7 @@ function renderPickCard(pick) {
     edgeBox.innerHTML = edgeLine(pick.edge);
   } else {
     edgeBox.style.display = "flex";
-    edgeBox.innerHTML = `<span>Analysis only — no live line matched. Projection ${pick.projection} K's.</span>`;
+    edgeBox.innerHTML = `<span>Analysis only — no live line matched. Projection ${pick.projection} ${pick.statNoun || ""}.</span>`;
   }
 
   const canvas = node.querySelector("canvas");

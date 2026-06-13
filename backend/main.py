@@ -15,13 +15,23 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from . import ai as ai_module
-from . import analysis, mlb, odds
+from . import analysis, mlb, odds, parks, savant, umpires, weather as weather_module
 
 load_dotenv()
 
 app = FastAPI(title="Sharp Slate")
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+# Batter prop specs: (propType, gamelog stat key, label, noun, Odds API market,
+# how the park HR factor applies to this stat, default Over line when no market).
+BATTER_PROPS = [
+    ("hits", "hits", "Hits", "hits", "batter_hits", lambda hrf: 1.0, 0.5),
+    ("totalBases", "totalBases", "TB", "total bases", "batter_total_bases", lambda hrf: hrf ** 0.5, 1.5),
+    ("homeRuns", "homeRuns", "HR", "home runs", "batter_home_runs", lambda hrf: hrf, 0.5),
+]
+BATTER_PICK_CAP = 8       # most batter props to surface per game (keeps the board readable)
+BATTER_PER_TYPE_CAP = 3   # max analysis-only picks of one prop type (variety on the board)
 
 
 def _flags(ai_requested: bool = False) -> Dict[str, Any]:
@@ -66,6 +76,30 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
 
     home, away = game["home"], game["away"]
 
+    # ---- weather (optional) -------------------------------------------------------------
+    try:
+        weather = await weather_module.get_weather(game["venue"], game["gameDate"])
+    except Exception:
+        weather = dict(weather_module.NEUTRAL)
+
+    # ---- home-plate umpire (optional) ---------------------------------------------------
+    # Assigned a few hours pre-game; unknown/unposted -> neutral factors downstream.
+    try:
+        ump_name = await mlb.get_umpire(game_pk)
+        umpire = umpires.lookup(ump_name)
+    except Exception:
+        umpire = None
+
+    # ---- bullpens (optional) ------------------------------------------------------------
+    try:
+        home_bullpen = await mlb.get_bullpen(home["id"], season)
+    except Exception:
+        home_bullpen = None
+    try:
+        away_bullpen = await mlb.get_bullpen(away["id"], season)
+    except Exception:
+        away_bullpen = None
+
     # ---- live market (optional) -------------------------------------------------------
     # Network egress to The Odds API may be unavailable in some sandboxes; degrade to
     # "analysis only" rather than failing the whole request.
@@ -105,6 +139,7 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
     ]
 
     team_rates_by_season: Dict[int, Dict[str, Any]] = {season: team_rates}
+    starter_ra9: Dict[str, Optional[float]] = {"home": None, "away": None}
 
     for pitcher, opponent, is_home in matchups:
         if not pitcher:
@@ -114,6 +149,8 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
         if not gamelog:
             continue
 
+        starter_ra9["home" if is_home else "away"] = analysis._starter_ra9(gamelog)
+
         seasons_seen = {r["season"] for r in gamelog}
         for s in seasons_seen:
             if s not in team_rates_by_season and s != season:
@@ -121,6 +158,23 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
 
         k_market = k_props_by_pitcher.get(odds.norm(pitcher["name"]))
         bb_market = bb_props_by_pitcher.get(odds.norm(pitcher["name"]))
+
+        try:
+            platoon_splits = await mlb.get_pitcher_platoon_splits(pitcher["id"], season)
+        except Exception:
+            platoon_splits = None
+        try:
+            opp_handedness = await mlb.get_team_handedness(opponent["id"], season)
+        except Exception:
+            opp_handedness = None
+        try:
+            opp_lineup = await mlb.get_lineup(game_pk, opponent["id"])
+        except Exception:
+            opp_lineup = None
+        try:
+            pitcher_skill = await savant.get_pitcher_skill(pitcher["id"], season)
+        except Exception:
+            pitcher_skill = None
 
         k_pick = analysis.analyze_strikeouts(
             pitcher_name=pitcher["name"],
@@ -131,6 +185,11 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
             team_rates_by_season=team_rates_by_season,
             current_season=season,
             market=k_market,
+            platoon_splits=platoon_splits,
+            opp_handedness=opp_handedness,
+            umpire=umpire,
+            opp_lineup=opp_lineup,
+            pitcher_skill=pitcher_skill,
         )
         if k_pick is not None:
             k_pick["narrative"] = await ai_module.generate_narrative(k_pick, use_ai)
@@ -145,6 +204,10 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
             team_rates_by_season=team_rates_by_season,
             current_season=season,
             market=bb_market,
+            platoon_splits=platoon_splits,
+            opp_handedness=opp_handedness,
+            umpire=umpire,
+            opp_lineup=opp_lineup,
         )
         if bb_pick is not None:
             bb_pick["narrative"] = await ai_module.generate_narrative(bb_pick, use_ai)
@@ -165,8 +228,110 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
         away_moneyline=away_ml,
     )
     game_model["total"] = analysis.analyze_game_total(
-        game_model["homeProjRuns"], game_model["awayProjRuns"], market=total_market
+        game_model["homeProjRuns"],
+        game_model["awayProjRuns"],
+        market=total_market,
+        weather=weather,
+        umpire=umpire,
+        home_bullpen=home_bullpen,
+        away_bullpen=away_bullpen,
+        park=parks.get_park(game["venue"]),
     )
+
+    home_rpg = _team_rates_or_default(team_rates, home["id"]).get("runsPerGame", analysis.DEFAULT_RUNS_PER_GAME)
+    away_rpg = _team_rates_or_default(team_rates, away["id"]).get("runsPerGame", analysis.DEFAULT_RUNS_PER_GAME)
+    game_model["f5"] = analysis.analyze_f5(
+        home_rpg, away_rpg, starter_ra9["home"], starter_ra9["away"]
+    )
+    game_model["nrfi"] = analysis.analyze_nrfi(
+        home_rpg, away_rpg, starter_ra9["home"], starter_ra9["away"]
+    )
+
+    # ---- batter props (hits / total bases / HR) ----------------------------------------
+    # Requires a posted lineup (we need to know who's batting). With player-prop
+    # odds available we only grade batters with a matched line; otherwise we grade
+    # the whole lineup as analysis-only. Either way the board is capped so a slate
+    # of 18 hitters x 3 props doesn't bury the pitcher picks.
+    batter_markets: Dict[str, Dict[str, Any]] = {}
+    if market_event and odds.player_props_enabled():
+        for _, _, _, _, mkey, _, _ in BATTER_PROPS:
+            try:
+                batter_markets[mkey] = await odds.get_player_props(odds.client(), market_event["id"], mkey)
+            except Exception:
+                batter_markets[mkey] = {}
+
+    hr_factor = parks.get_park(game["venue"]).get("hrFactor", 1.0)
+    batter_candidates: List[Dict[str, Any]] = []
+    sides = [
+        (True, home, away.get("probablePitcher"), away["id"], starter_ra9["away"]),
+        (False, away, home.get("probablePitcher"), home["id"], starter_ra9["home"]),
+    ]
+    for is_home_bat, team, opp_pitcher, opp_team_id, opp_ra9 in sides:
+        try:
+            batters = await mlb.get_lineup_batters(game_pk, team["id"])
+        except Exception:
+            batters = None
+        if not batters:
+            continue
+
+        opp_factor = analysis.batter_opp_factor(opp_ra9)
+        opp_pitcher_name = opp_pitcher["name"] if opp_pitcher else "TBD"
+
+        for b in batters:
+            specs = []
+            for prop_type, stat_key, stat_label, stat_noun, mkey, park_fn, default_line in BATTER_PROPS:
+                mkt = batter_markets.get(mkey, {}).get(odds.norm(b["name"]))
+                if odds.player_props_enabled() and not mkt:
+                    continue  # with odds available, only grade posted lines
+                specs.append((prop_type, stat_key, stat_label, stat_noun, mkt, park_fn, default_line))
+            if not specs:
+                continue
+
+            try:
+                blog = await mlb.get_batter_gamelog(b["id"], season)
+            except Exception:
+                blog = None
+            if not blog:
+                continue
+
+            for prop_type, stat_key, stat_label, stat_noun, mkt, park_fn, default_line in specs:
+                bp = analysis.analyze_batter_prop(
+                    prop_type=prop_type,
+                    stat_key=stat_key,
+                    stat_label=stat_label,
+                    stat_noun=stat_noun,
+                    batter_name=b["name"],
+                    gamelog=blog,
+                    opp_team_id=opp_team_id,
+                    opp_pitcher_name=opp_pitcher_name,
+                    is_home=is_home_bat,
+                    market=mkt,
+                    opp_factor=opp_factor,
+                    park_factor=park_fn(hr_factor),
+                    default_line=default_line,
+                )
+                if bp is not None:
+                    batter_candidates.append(bp)
+
+    # Matched-market edges first (ranked by EV, no type cap so the best prices win).
+    # Then analysis-only leans, capped per prop type so the board isn't 8 copies of
+    # "Over 0.5 Hits" (hits always out-confidence TB/HR for a common event).
+    market_picks = [p for p in batter_candidates if p.get("hasMarket") and p.get("edge")]
+    analysis_picks = [p for p in batter_candidates if not (p.get("hasMarket") and p.get("edge"))]
+    market_picks.sort(key=lambda p: p["edge"]["evPct"], reverse=True)
+    analysis_picks.sort(key=lambda p: p["confidence"], reverse=True)
+
+    per_type: Dict[str, int] = {}
+    varied: List[Dict[str, Any]] = []
+    for p in analysis_picks:
+        if per_type.get(p["propType"], 0) >= BATTER_PER_TYPE_CAP:
+            continue
+        per_type[p["propType"]] = per_type.get(p["propType"], 0) + 1
+        varied.append(p)
+
+    for bp in (market_picks + varied)[:BATTER_PICK_CAP]:
+        bp["narrative"] = await ai_module.generate_narrative(bp, use_ai)
+        picks.append(bp)
 
     return {
         "gamePk": game_pk,
@@ -174,6 +339,8 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
         "seasons": seasons,
         "picks": picks,
         "gameModel": game_model,
+        "weather": weather,
+        "umpire": umpire,
         "flags": _flags(use_ai),
     }
 
@@ -182,6 +349,8 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
 async def shutdown() -> None:
     await mlb.close()
     await odds.close()
+    await weather_module.close()
+    await savant.close()
 
 
 if FRONTEND_DIR.exists():

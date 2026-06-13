@@ -32,6 +32,21 @@ async def close() -> None:
         _client = None
 
 
+def parse_ip(value: Any) -> float:
+    """Convert MLB's innings-pitched notation to true innings.
+
+    The API reports ``"5.2"`` to mean 5 innings + 2 outs (= 5 + 2/3), not 5.2.
+    Decimal IP feeds run-rate math (RA/9), where the difference is material.
+    """
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    whole = int(f)
+    outs = round((f - whole) * 10)  # the digit after the point is outs (0/1/2)
+    return whole + outs / 3.0
+
+
 # --------------------------------------------------------------------------- schedule
 
 def _team_side(side: Dict[str, Any]) -> Dict[str, Any]:
@@ -166,6 +181,240 @@ async def get_team_run_prevention(season: int) -> Dict[str, Any]:
 
 # --------------------------------------------------------------------------- pitcher game logs
 
+async def get_pitcher_platoon_splits(person_id: int, season: int) -> Dict[str, Any]:
+    """Season-to-date K rate vs LHB / RHB: ``{"vsLHB": {...}, "vsRHB": {...}}``."""
+
+    async def fetch() -> Dict[str, Any]:
+        c = client()
+        r = await c.get(
+            f"/people/{person_id}/stats",
+            params={
+                "stats": "statSplits",
+                "group": "pitching",
+                "season": season,
+                "sportId": SPORT_ID,
+                "sitCodes": "vl,vr",
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        out: Dict[str, Any] = {}
+        code_map = {"vl": "vsLHB", "vr": "vsRHB"}
+        for split in data.get("stats", [{}])[0].get("splits", []):
+            code = split.get("split", {}).get("code")
+            key = code_map.get(code)
+            if not key:
+                continue
+            stat = split.get("stat", {})
+            bf = int(stat.get("battersFaced", 0) or 0)
+            k = int(stat.get("strikeOuts", 0) or 0)
+            out[key] = {"k": k, "bf": bf, "kRate": (k / bf) if bf else 0.0}
+        return out
+
+    return await cache.get_or_set(f"platoon:{person_id}:{season}", 6 * 3600, fetch)
+
+
+async def get_team_handedness(team_id: int, season: int) -> Dict[str, Any]:
+    """Approximate batting-handedness mix of a team's active roster: ``{"lhbPct", "rhbPct"}``."""
+
+    async def fetch() -> Dict[str, Any]:
+        c = client()
+        r = await c.get(
+            f"/teams/{team_id}/roster",
+            params={"rosterType": "active", "season": season, "hydrate": "person(batSide)"},
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        lhb = rhb = total = 0.0
+        for entry in data.get("roster", []):
+            person = entry.get("person", {})
+            side = (person.get("batSide") or {}).get("code")
+            if side == "L":
+                lhb += 1
+            elif side == "R":
+                rhb += 1
+            elif side == "S":  # switch hitter — counts as half left, half right
+                lhb += 0.5
+                rhb += 0.5
+            else:
+                continue
+            total += 1
+
+        if total == 0:
+            return {"lhbPct": 0.5, "rhbPct": 0.5}
+        return {"lhbPct": lhb / total, "rhbPct": rhb / total}
+
+    return await cache.get_or_set(f"handedness:{team_id}:{season}", 6 * 3600, fetch)
+
+
+# --------------------------------------------------------------------------- boxscore (ump + lineups)
+
+async def get_boxscore(game_pk: int) -> Dict[str, Any]:
+    """Raw boxscore for a game (officials + posted lineups + season stats).
+
+    Short TTL because lineups and officials are filled in over the hours before
+    first pitch. Shared by ``get_umpire`` and ``get_lineup`` so we only hit the
+    endpoint once per game.
+    """
+
+    async def fetch() -> Dict[str, Any]:
+        c = client()
+        r = await c.get(f"/game/{game_pk}/boxscore")
+        r.raise_for_status()
+        return r.json()
+
+    return await cache.get_or_set(f"boxscore:{game_pk}", 120, fetch)
+
+
+async def get_umpire(game_pk: int) -> Optional[str]:
+    """Full name of the assigned home-plate umpire, or ``None`` if not yet posted."""
+    box = await get_boxscore(game_pk)
+    for off in box.get("officials", []):
+        if off.get("officialType") == "Home Plate":
+            return off.get("official", {}).get("fullName")
+    return None
+
+
+def _lineup_for_team(box: Dict[str, Any], team_id: int) -> Optional[Dict[str, Any]]:
+    teams = box.get("teams", {})
+    for side in ("home", "away"):
+        sd = teams.get(side, {})
+        if sd.get("team", {}).get("id") != team_id:
+            continue
+        order = sd.get("battingOrder", []) or []
+        players = sd.get("players", {})
+        if len(order) < 9:
+            return {"confirmed": False, "kRate": None, "bbRate": None, "n": len(order)}
+
+        k = bb = pa = 0
+        for pid in order:
+            p = players.get(f"ID{pid}", {})
+            bat = p.get("seasonStats", {}).get("batting", {})
+            k += int(bat.get("strikeOuts", 0) or 0)
+            bb += int(bat.get("baseOnBalls", 0) or 0)
+            pa += int(bat.get("plateAppearances", 0) or 0)
+        if pa <= 0:
+            return {"confirmed": False, "kRate": None, "bbRate": None, "n": len(order)}
+        return {
+            "confirmed": True,
+            "kRate": k / pa,
+            "bbRate": bb / pa,
+            "n": len(order),
+        }
+    return None
+
+
+async def get_lineup(game_pk: int, team_id: int) -> Optional[Dict[str, Any]]:
+    """Confirmed-lineup K%/BB% for a team, or an unconfirmed marker / ``None``.
+
+    Aggregates the posted batting order's season strikeout and walk rates
+    (PA-weighted). ``confirmed`` is ``False`` until all nine spots are set.
+    """
+    box = await get_boxscore(game_pk)
+    return _lineup_for_team(box, team_id)
+
+
+async def get_lineup_batters(game_pk: int, team_id: int) -> Optional[List[Dict[str, Any]]]:
+    """The posted batting order as ``[{"id", "name"}]``, or ``None`` if not set."""
+    box = await get_boxscore(game_pk)
+    teams = box.get("teams", {})
+    for side in ("home", "away"):
+        sd = teams.get(side, {})
+        if sd.get("team", {}).get("id") != team_id:
+            continue
+        order = sd.get("battingOrder", []) or []
+        if len(order) < 9:
+            return None
+        players = sd.get("players", {})
+        out: List[Dict[str, Any]] = []
+        for pid in order:
+            person = players.get(f"ID{pid}", {}).get("person", {})
+            out.append({"id": pid, "name": person.get("fullName", "")})
+        return out
+    return None
+
+
+async def get_batter_gamelog(person_id: int, season: int) -> List[Dict[str, Any]]:
+    """A hitter's game log shaped for ``analysis.analyze_batter_prop``."""
+
+    async def fetch() -> List[Dict[str, Any]]:
+        c = client()
+        r = await c.get(
+            f"/people/{person_id}/stats",
+            params={"stats": "gameLog", "group": "hitting", "season": season, "sportId": SPORT_ID},
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        rows: List[Dict[str, Any]] = []
+        for split in data.get("stats", [{}])[0].get("splits", []):
+            stat = split.get("stat", {})
+            opp = split.get("opponent", {})
+            rows.append(
+                {
+                    "season": season,
+                    "date": split.get("date"),
+                    "isHome": bool(split.get("isHome", False)),
+                    "opponentId": opp.get("id"),
+                    "opponentName": opp.get("name", ""),
+                    "hits": int(stat.get("hits", 0) or 0),
+                    "totalBases": int(stat.get("totalBases", 0) or 0),
+                    "homeRuns": int(stat.get("homeRuns", 0) or 0),
+                    "atBats": int(stat.get("atBats", 0) or 0),
+                    "plateAppearances": int(stat.get("plateAppearances", 0) or 0),
+                    "strikeOuts": int(stat.get("strikeOuts", 0) or 0),
+                }
+            )
+        rows.sort(key=lambda x: x["date"] or "")
+        return rows
+
+    return await cache.get_or_set(f"batterlog:{person_id}:{season}", 3600, fetch)
+
+
+# --------------------------------------------------------------------------- bullpen
+
+async def get_bullpen(team_id: int, season: int) -> Dict[str, Any]:
+    """Bullpen-only ERA for a team, derived from relief-role pitchers.
+
+    A pitcher counts as a reliever when fewer than half of his appearances were
+    starts. ERA = 9 * earned runs / innings pitched over that group.
+    """
+
+    async def fetch() -> Dict[str, Any]:
+        c = client()
+        r = await c.get(
+            "/stats",
+            params={
+                "stats": "season",
+                "group": "pitching",
+                "season": season,
+                "sportId": SPORT_ID,
+                "teamId": team_id,
+                "playerPool": "ALL",
+                "limit": 200,
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        er = ip = 0.0
+        for split in data.get("stats", [{}])[0].get("splits", []):
+            stat = split.get("stat", {})
+            gp = int(stat.get("gamesPlayed", 0) or 0)
+            gs = int(stat.get("gamesStarted", 0) or 0)
+            if gp == 0 or gs / gp >= 0.5:
+                continue  # starter (or no appearances) — skip
+            er += float(stat.get("earnedRuns", 0) or 0)
+            ip += parse_ip(stat.get("inningsPitched", 0))
+
+        era = (9.0 * er / ip) if ip > 0 else None
+        return {"era": era, "ip": round(ip, 1), "fatigued": False}
+
+    return await cache.get_or_set(f"bullpen:{team_id}:{season}", 6 * 3600, fetch)
+
+
 async def get_pitcher_gamelog(person_id: int, season: int) -> List[Dict[str, Any]]:
     async def fetch() -> List[Dict[str, Any]]:
         c = client()
@@ -192,8 +441,10 @@ async def get_pitcher_gamelog(person_id: int, season: int) -> List[Dict[str, Any
                     "opponentName": opp.get("name", ""),
                     "strikeOuts": int(stat.get("strikeOuts", 0) or 0),
                     "baseOnBalls": int(stat.get("baseOnBalls", 0) or 0),
-                    "inningsPitched": float(stat.get("inningsPitched", 0) or 0),
+                    "inningsPitched": parse_ip(stat.get("inningsPitched", 0)),
                     "battersFaced": int(stat.get("battersFaced", 0) or 0),
+                    "earnedRuns": int(stat.get("earnedRuns", 0) or 0),
+                    "runs": int(stat.get("runs", 0) or 0),
                 }
             )
         rows.sort(key=lambda x: x["date"] or "")

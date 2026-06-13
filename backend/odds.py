@@ -119,6 +119,13 @@ async def get_pitcher_walks_props(c: httpx.AsyncClient, event_id: str) -> Dict[s
     return await get_pitcher_props(c, event_id, "pitcher_walks")
 
 
+async def get_player_props(c: httpx.AsyncClient, event_id: str, market_key: str) -> Dict[str, Dict[str, Any]]:
+    """Batter (or any player) prop market keyed by player name. ``get_pitcher_props``
+    is already position-agnostic — this is just the honest name for batter markets
+    like ``batter_hits`` / ``batter_total_bases`` / ``batter_home_runs``."""
+    return await get_pitcher_props(c, event_id, market_key)
+
+
 def game_total(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """``{"line": float, "over": int, "under": int}`` for the game total (O/U runs), or ``None``."""
     for bm in event.get("bookmakers", []):
