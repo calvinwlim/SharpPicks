@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from . import ai as ai_module
-from . import analysis, mlb, odds, parks, savant, umpires, weather as weather_module
+from . import analysis, mlb, nba, nba_analysis, odds, parks, savant, umpires, weather as weather_module
 
 load_dotenv()
 
@@ -49,9 +49,12 @@ async def health() -> Dict[str, Any]:
 
 
 @app.get("/api/slate")
-async def slate(date: str) -> Dict[str, Any]:
+async def slate(date: str, sport: str = "mlb") -> Dict[str, Any]:
+    if sport == "nba":
+        games = await nba.get_schedule(date)
+        return {"date": date, "sport": "nba", "count": len(games), "games": games, "flags": _flags()}
     games = await mlb.get_schedule(date)
-    return {"date": date, "count": len(games), "games": games, "flags": _flags()}
+    return {"date": date, "sport": "mlb", "count": len(games), "games": games, "flags": _flags()}
 
 
 def _team_rates_or_default(team_rates: Dict[str, Any], team_id: int) -> Dict[str, Any]:
@@ -62,8 +65,52 @@ def _run_prevention_or_default(run_prev: Dict[str, Any], team_id: int) -> Dict[s
     return run_prev.get("teams", {}).get(team_id, {"runsAllowedPerGame": analysis.DEFAULT_RUNS_PER_GAME})
 
 
-@app.get("/api/analyze/{game_pk}")
-async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dict[str, Any]:
+def _days(iso: str) -> int:
+    from datetime import date as _date
+    return _date.fromisoformat(iso).toordinal()
+
+
+@app.get("/api/analyze/{game_id}")
+async def analyze(game_id: str, date: str, seasons: int = 4, ai: int = 0, sport: str = "mlb") -> Dict[str, Any]:
+    if sport == "nba":
+        return await _analyze_nba(game_id, date)
+    return await _analyze_mlb(int(game_id), date, seasons, ai)
+
+
+async def _analyze_nba(game_id: str, date: str) -> Dict[str, Any]:
+    games = await nba.get_schedule(date)
+    game = next((g for g in games if g["gameId"] == game_id), None)
+    if game is None:
+        raise HTTPException(status_code=404, detail="game not found for that date")
+
+    season = nba.season_for_date(date)
+    home, away = game["home"], game["away"]
+
+    try:
+        ratings = await nba.get_team_ratings(season)
+    except Exception:
+        ratings = {"teams": {}, "leagueOrtg": nba_analysis.DEFAULT_ORTG, "leaguePace": nba_analysis.DEFAULT_PACE}
+    try:
+        recent = await nba.get_team_ratings(season, last_n=10)
+    except Exception:
+        recent = None
+
+    home_rest = away_rest = None
+    try:
+        hg = await nba.last_game_before(home["id"], season, date)
+        home_rest = (_days(date) - _days(hg)) if hg else None
+        ag = await nba.last_game_before(away["id"], season, date)
+        away_rest = (_days(date) - _days(ag)) if ag else None
+    except Exception:
+        pass
+
+    game_model = nba_analysis.nba_game_model(
+        home, away, ratings, recent=recent, home_rest=home_rest, away_rest=away_rest,
+    )
+    return {"gameId": game_id, "sport": "nba", "game": game, "gameModel": game_model, "flags": _flags()}
+
+
+async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dict[str, Any]:
     games = await mlb.get_schedule(date)
     game = next((g for g in games if g["gamePk"] == game_pk), None)
     if game is None:
@@ -355,6 +402,7 @@ async def shutdown() -> None:
     await odds.close()
     await weather_module.close()
     await savant.close()
+    await nba.close()
 
 
 if FRONTEND_DIR.exists():

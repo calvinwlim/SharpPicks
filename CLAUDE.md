@@ -24,7 +24,8 @@ by the same FastAPI process.
 Tests (synthetic data, no network needed):
 
 ```bash
-python3 test_integration.py   # exercises the API end-to-end
+python3 test_integration.py       # MLB API end-to-end
+python3 test_integration_nba.py   # NBA API end-to-end (?sport=nba)
 ```
 
 Backtesting (live data, measures model accuracy — needs network):
@@ -43,10 +44,12 @@ closing lines).
 
 ```
 backend/                FastAPI app + the model (Python, async)
-  main.py               HTTP endpoints; orchestrates everything per game
+  main.py               HTTP endpoints; ?sport=mlb|nba routing; orchestration
   mlb.py                MLB Stats API client (statsapi.mlb.com, no key)
   odds.py               The Odds API client + betting math (EV, Kelly, de-vig)
-  analysis.py           THE MODEL: projection, splits, confidence, EV, game model
+  analysis.py           THE MLB MODEL: projection, splits, confidence, EV, game model
+  nba.py                NBA client (cdn.nba.com schedule + stats.nba.com ratings, no key)
+  nba_analysis.py       THE NBA MODEL: efficiency+pace -> score/spread/total/winprob + signals
   ai.py                 narrative: deterministic template + optional Claude rephrase
   cache.py              in-process TTL cache with per-key locks
 frontend/               static single-page UI (no framework, no build)
@@ -62,10 +65,14 @@ all keys stay server-side.
 ## API contract
 
 - `GET /api/health` → `{ ok, flags }`
-- `GET /api/slate?date=YYYY-MM-DD` → `{ date, count, games[], flags }` (fast; schedule only)
-- `GET /api/analyze/{gamePk}?date=&seasons=4&ai=0` → `{ gamePk, game, seasons, picks[], gameModel, flags }`
+- `GET /api/slate?date=YYYY-MM-DD&sport=mlb|nba` → `{ date, sport, count, games[], flags }` (fast; schedule only)
+- `GET /api/analyze/{gameId}?date=&sport=mlb|nba&seasons=4&ai=0` → MLB: `{ gamePk, game, picks[], gameModel, ... }`; NBA: `{ gameId, sport, game, gameModel }`
 
-`flags = { hasOdds, playerProps, hasAI }` drives the UI status pills.
+`flags = { hasOdds, playerProps, hasAI }` drives the UI status pills. `sport`
+defaults to `mlb`. The NBA `gameModel` carries `homeWinProb`/`awayWinProb`,
+`home/awayProjScore`, `projMargin`, `modelHomeSpread`, `projTotal`, `pace`,
+`ratings`, `rest`, and `signals[]` (`{label,detail,lean}`, lean ∈
+home/away/over/under/neutral). NBA is game-level only so far (no player props yet).
 
 A **pick** (see `analyze_strikeouts`) carries: `pick`, `side`, `line`,
 `projection`, `modelProb`, `confidence`, `tier`, `splits[]` (`{label,hits,n,rate}`),

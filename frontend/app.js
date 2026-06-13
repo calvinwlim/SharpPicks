@@ -13,6 +13,12 @@ const pillAi = document.getElementById("pill-ai");
 
 const charts = new Map(); // gamePk -> [Chart, ...] so we can destroy on re-render
 
+let currentSport = "mlb"; // "mlb" | "nba"
+
+function gameKey(game) {
+  return game.gameId != null ? game.gameId : game.gamePk;
+}
+
 function todayISO() {
   const d = new Date();
   const tz = d.getTimezoneOffset() * 60000;
@@ -44,7 +50,7 @@ async function loadSlate(date) {
 
   let data;
   try {
-    const res = await fetch(`/api/slate?date=${encodeURIComponent(date)}`);
+    const res = await fetch(`/api/slate?date=${encodeURIComponent(date)}&sport=${currentSport}`);
     data = await res.json();
     setFlags(data.flags || {});
   } catch (e) {
@@ -72,11 +78,16 @@ function renderGameCard(game, date) {
   const tpl = document.getElementById("tpl-game-card");
   const node = tpl.content.cloneNode(true);
   const card = node.querySelector(".game-card");
-  card.dataset.gamePk = game.gamePk;
+  card.dataset.gamePk = gameKey(game);
 
-  card.querySelector(".venue").textContent = game.venue || "";
-  card.querySelector(".time").textContent =
-    `${fmtTime(game.gameDate)} · ${game.dayNight === "night" ? "Night" : "Day"}`;
+  if (currentSport === "nba") {
+    card.querySelector(".venue").textContent = game.status || "";
+    card.querySelector(".time").textContent = fmtTime(game.gameDate);
+  } else {
+    card.querySelector(".venue").textContent = game.venue || "";
+    card.querySelector(".time").textContent =
+      `${fmtTime(game.gameDate)} · ${game.dayNight === "night" ? "Night" : "Day"}`;
+  }
 
   fillTeam(card.querySelector(".team.away"), game.away);
   fillTeam(card.querySelector(".team.home"), game.home);
@@ -101,8 +112,13 @@ function renderGameCard(game, date) {
 
 function fillTeam(el, team) {
   el.querySelector(".abbr").textContent = team.abbr || team.name;
-  const pp = team.probablePitcher;
-  el.querySelector(".pitcher").textContent = pp ? pp.name : "TBD";
+  const pitcherEl = el.querySelector(".pitcher");
+  if (currentSport === "nba") {
+    pitcherEl.textContent = team.name || "";
+  } else {
+    const pp = team.probablePitcher;
+    pitcherEl.textContent = pp ? pp.name : "TBD";
+  }
 }
 
 // ---- analysis ---------------------------------------------------------------
@@ -110,12 +126,17 @@ function fillTeam(el, team) {
 async function loadAnalysis(game, date, container, btn) {
   container.innerHTML = '<div class="loading">Crunching the numbers…</div>';
   try {
-    const res = await fetch(`/api/analyze/${game.gamePk}?date=${encodeURIComponent(date)}&ai=0`);
+    const res = await fetch(
+      `/api/analyze/${gameKey(game)}?date=${encodeURIComponent(date)}&sport=${currentSport}&ai=0`);
     if (!res.ok) throw new Error("bad response");
     const data = await res.json();
     container.dataset.loaded = "1";
-    renderAnalysis(data, game, container);
-    addToTopBoard(data, game);
+    if (data.sport === "nba") {
+      renderNbaAnalysis(data, game, container);
+    } else {
+      renderAnalysis(data, game, container);
+      addToTopBoard(data, game);
+    }
   } catch (e) {
     container.innerHTML = '<div class="error">Could not load analysis for this game.</div>';
     btn.textContent = "Analyze";
@@ -321,6 +342,85 @@ function renderNrfiCard(nrfi) {
   return card;
 }
 
+// ---- NBA rendering ----------------------------------------------------------
+
+function renderNbaAnalysis(data, game, container) {
+  container.innerHTML = "";
+  const gm = data.gameModel;
+  if (!gm) {
+    container.innerHTML = '<div class="empty">No model output for this game.</div>';
+    return;
+  }
+  const away = game.away, home = game.home;
+
+  const tpl = document.getElementById("tpl-game-model");
+  const node = tpl.content.cloneNode(true);
+  const awayWp = node.querySelector(".away-wp");
+  awayWp.querySelector(".label").textContent = `${away.abbr} ${(gm.awayWinProb * 100).toFixed(0)}% win`;
+  awayWp.querySelector(".bar > span").style.width = `${(gm.awayWinProb * 100).toFixed(0)}%`;
+  const homeWp = node.querySelector(".home-wp");
+  homeWp.querySelector(".label").textContent = `${home.abbr} ${(gm.homeWinProb * 100).toFixed(0)}% win`;
+  homeWp.querySelector(".bar > span").style.width = `${(gm.homeWinProb * 100).toFixed(0)}%`;
+  container.appendChild(node);
+
+  container.appendChild(renderNbaScoreCard(gm, away, home));
+  if (gm.signals && gm.signals.length) {
+    container.appendChild(renderNbaSignals(gm, away, home));
+  }
+}
+
+function renderNbaScoreCard(gm, away, home) {
+  const card = document.createElement("div");
+  card.className = "pick-card";
+  const sp = gm.modelHomeSpread;
+  const spreadTxt = `${home.abbr} ${sp > 0 ? "+" : ""}${sp}`;
+  const r = gm.ratings || { home: {}, away: {} };
+  const net = (v) => `${v > 0 ? "+" : ""}${v}`;
+  card.innerHTML = `
+    <div class="pick-header">
+      <div class="pick-title">Projected: ${away.abbr} ${gm.awayProjScore} — ${gm.homeProjScore} ${home.abbr}</div>
+    </div>
+    <div class="nba-lines">
+      <span>Spread: <strong>${spreadTxt}</strong></span>
+      <span>Total: <strong>${gm.projTotal}</strong></span>
+      <span>Pace: ${gm.pace}</span>
+    </div>
+    <div class="narrative">
+      ${away.abbr}: ${r.away.ortg} ORtg / ${r.away.drtg} DRtg (net ${net(r.away.net)}) ·
+      ${home.abbr}: ${r.home.ortg} ORtg / ${r.home.drtg} DRtg (net ${net(r.home.net)})
+    </div>`;
+  return card;
+}
+
+function renderNbaSignals(gm, away, home) {
+  const favored = gm.homeWinProb >= 0.5 ? "home" : "away";
+  const wrap = document.createElement("div");
+  wrap.className = "signals-block";
+  const heading = document.createElement("div");
+  heading.className = "signals-heading";
+  heading.textContent = "Signals & discrepancies";
+  wrap.appendChild(heading);
+
+  const tagMap = { home: home.abbr, away: away.abbr, over: "OVER", under: "UNDER", neutral: "—" };
+  for (const s of gm.signals) {
+    let color = "#97a3c4"; // neutral / total leans
+    if (s.lean === "home" || s.lean === "away") {
+      color = s.lean === favored ? "#3ecf8e" : "#ffcb47"; // agrees w/ projected winner vs leans the dog
+    } else if (s.lean === "over" || s.lean === "under") {
+      color = "#6ea8fe";
+    }
+    const row = document.createElement("div");
+    row.className = "signal-row";
+    row.innerHTML =
+      `<span class="signal-dot" style="color:${color}">●</span>` +
+      `<span class="signal-label">${s.label}</span>` +
+      `<span class="signal-detail">${s.detail}</span>` +
+      `<span class="signal-lean" style="color:${color}">${tagMap[s.lean] || s.lean}</span>`;
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
 // Discrepancy signals: each input behind the model number, tagged by which
 // side it leans, so the user can see where the evidence agrees or conflicts
 // with the pick (and form their own read) rather than just trusting confidence.
@@ -508,6 +608,16 @@ function addToTopBoard(data, game) {
 
 dateInput.value = todayISO();
 loadBtn.addEventListener("click", () => loadSlate(dateInput.value));
+
+// Sport tabs (MLB / NBA): switch the active sport and reload the slate.
+document.querySelectorAll(".sport-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    if (tab.dataset.sport === currentSport) return;
+    currentSport = tab.dataset.sport;
+    document.querySelectorAll(".sport-tab").forEach((t) => t.classList.toggle("active", t === tab));
+    loadSlate(dateInput.value);
+  });
+});
 
 // Pull flags on load so the pills reflect server config even before a search.
 fetch("/api/health")
