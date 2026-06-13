@@ -27,6 +27,18 @@ Tests (synthetic data, no network needed):
 python3 test_integration.py   # exercises the API end-to-end
 ```
 
+Backtesting (live data, measures model accuracy — needs network):
+
+```bash
+python3 backtest.py --season 2025 --pitchers 25
+```
+
+`backtest.py` replays each pitcher start point-in-time (game log filtered to
+before the game date — no look-ahead) and reports projection MAE/bias and
+probability calibration (Brier + reliability) vs actual results. It measures
+whether the *model* is accurate, not betting ROI (that needs paid historical
+closing lines).
+
 ## Architecture
 
 ```

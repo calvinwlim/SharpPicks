@@ -166,12 +166,8 @@ def check_factors():
     check(unconf["lineupConfirmed"] is False and unconf["projection"] == base["projection"],
           "unconfirmed lineup ignored")
 
-    # --- bullpen + umpire run factor on the game total ---------------------------
+    # --- umpire run factor on the game total -------------------------------------
     neutral_total = analysis.analyze_game_total(4.5, 4.5)
-    weak_pen = analysis.analyze_game_total(
-        4.5, 4.5, home_bullpen={"era": 5.5, "fatigued": True}, away_bullpen={"era": 5.0})
-    check(weak_pen["bullpenFactor"] > 1.0, "weak/gassed bullpen raises total factor")
-    check(weak_pen["projection"] > neutral_total["projection"], "weak bullpen raises projected runs")
     tight_total = analysis.analyze_game_total(4.5, 4.5, umpire=tight)
     check(tight_total["umpFactor"] > 1.0, "tight-zone ump raises run total")
 
@@ -197,6 +193,17 @@ def check_factors():
     # A dome ignores wind even with an azimuth on file.
     domed = analysis.analyze_game_total(4.5, 4.5, weather={"isDome": True}, park=wpark)
     check(domed["windFactor"] == 1.0, "dome ignores wind")
+
+    # --- pitcher-aware run model: starters + bullpen move win prob & total -------
+    rates = {"runsPerGame": 4.5}
+    prev = {"runsAllowedPerGame": 4.3}
+    ace = analysis.game_model(rates, rates, prev, prev, home_starter_ra9=2.0, away_starter_ra9=5.5)
+    scrub = analysis.game_model(rates, rates, prev, prev, home_starter_ra9=5.5, away_starter_ra9=2.0)
+    check(ace["homeWinProb"] > scrub["homeWinProb"], "home ace start raises home win prob")
+    check(ace["awayProjRuns"] < scrub["awayProjRuns"], "home ace suppresses away projected runs")
+    weak_pen = analysis.game_model(rates, rates, prev, prev, away_bullpen={"era": 6.5})
+    base_gm = analysis.game_model(rates, rates, prev, prev)
+    check(weak_pen["homeProjRuns"] > base_gm["homeProjRuns"], "weak away bullpen raises home runs")
 
     # --- Phase 3a: F5 + NRFI ------------------------------------------------------
     check(abs(mlb.parse_ip("5.2") - (5 + 2 / 3)) < 1e-9, "IP 5.2 parses to 5 + 2/3")
@@ -228,6 +235,15 @@ def check_factors():
     check(hi["projection"] > lo["projection"], "hittable starter raises batter projection")
     thin = analysis.analyze_batter_prop("hits", "hits", "Hits", "hits", "S", blog[:5], 110, "x", True)
     check(thin is None, "too few games -> no batter pick")
+
+    # --- discrepancy signals ------------------------------------------------------
+    sig_pick = proj()
+    labels = [s["label"] for s in sig_pick["signals"]]
+    check("Projection vs line" in labels and "Recent form" in labels, "core signals present")
+    check(all(s["lean"] in ("over", "under", "neutral") for s in sig_pick["signals"]),
+          "every signal has a valid lean")
+    check(any(s["label"] == "Opponent" for s in sig_pick["signals"]), "opponent signal present")
+    check(any(s["label"] == "Recent form" for s in bp["signals"]), "batter signals present")
 
 
 def check_batter_props(client):
@@ -334,7 +350,10 @@ def main():
     check(p["skill"] is None, "no skill info without Statcast")
     check(p["lineupConfirmed"] is False, "lineup not confirmed -> team rates used")
     check(total["umpFactor"] == 1.0, "neutral umpire run factor")
-    check(total["bullpenFactor"] == 1.0, "neutral bullpen factor")
+
+    # Discrepancy signals attached to every pick.
+    check(isinstance(p.get("signals"), list) and len(p["signals"]) >= 2, "strikeout pick has signals")
+    check(all({"label", "detail", "lean"} <= set(s) for s in p["signals"]), "signals shaped for UI")
     print("    narrative:", p["narrative"][:140])
 
     print("\n[batter props — confirmed lineup]")

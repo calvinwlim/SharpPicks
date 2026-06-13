@@ -380,6 +380,42 @@ header.app-header {
   color: var(--text-faint);
 }
 
+.signals-block {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.signals-heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+
+.signal-row {
+  display: grid;
+  grid-template-columns: 14px minmax(110px, auto) 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  padding: 2px 0;
+  color: var(--text-dim);
+}
+
+.signal-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.signal-lean {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .edge-box {
   display: flex;
   flex-wrap: wrap;

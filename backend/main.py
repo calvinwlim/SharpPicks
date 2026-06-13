@@ -24,11 +24,12 @@ app = FastAPI(title="Sharp Slate")
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 # Batter prop specs: (propType, gamelog stat key, label, noun, Odds API market,
-# how the park HR factor applies to this stat, default Over line when no market).
+# park HR factor application, default Over line, bernoulli?). ``bernoulli`` marks
+# at-most-one-per-AB stats (hits/HR -> binomial); total bases stays Poisson.
 BATTER_PROPS = [
-    ("hits", "hits", "Hits", "hits", "batter_hits", lambda hrf: 1.0, 0.5),
-    ("totalBases", "totalBases", "TB", "total bases", "batter_total_bases", lambda hrf: hrf ** 0.5, 1.5),
-    ("homeRuns", "homeRuns", "HR", "home runs", "batter_home_runs", lambda hrf: hrf, 0.5),
+    ("hits", "hits", "Hits", "hits", "batter_hits", lambda hrf: 1.0, 0.5, True),
+    ("totalBases", "totalBases", "TB", "total bases", "batter_total_bases", lambda hrf: hrf ** 0.5, 1.5, False),
+    ("homeRuns", "homeRuns", "HR", "home runs", "batter_home_runs", lambda hrf: hrf, 0.5, True),
 ]
 BATTER_PICK_CAP = 8       # most batter props to surface per game (keeps the board readable)
 BATTER_PER_TYPE_CAP = 3   # max analysis-only picks of one prop type (variety on the board)
@@ -224,6 +225,10 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
         _team_rates_or_default(team_rates, away["id"]),
         _run_prevention_or_default(run_prev, home["id"]),
         _run_prevention_or_default(run_prev, away["id"]),
+        home_starter_ra9=starter_ra9["home"],
+        away_starter_ra9=starter_ra9["away"],
+        home_bullpen=home_bullpen,
+        away_bullpen=away_bullpen,
         home_moneyline=home_ml,
         away_moneyline=away_ml,
     )
@@ -233,8 +238,6 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
         market=total_market,
         weather=weather,
         umpire=umpire,
-        home_bullpen=home_bullpen,
-        away_bullpen=away_bullpen,
         park=parks.get_park(game["venue"]),
     )
 
@@ -254,7 +257,7 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
     # of 18 hitters x 3 props doesn't bury the pitcher picks.
     batter_markets: Dict[str, Dict[str, Any]] = {}
     if market_event and odds.player_props_enabled():
-        for _, _, _, _, mkey, _, _ in BATTER_PROPS:
+        for _, _, _, _, mkey, _, _, _ in BATTER_PROPS:
             try:
                 batter_markets[mkey] = await odds.get_player_props(odds.client(), market_event["id"], mkey)
             except Exception:
@@ -279,11 +282,11 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
 
         for b in batters:
             specs = []
-            for prop_type, stat_key, stat_label, stat_noun, mkey, park_fn, default_line in BATTER_PROPS:
+            for prop_type, stat_key, stat_label, stat_noun, mkey, park_fn, default_line, bern in BATTER_PROPS:
                 mkt = batter_markets.get(mkey, {}).get(odds.norm(b["name"]))
                 if odds.player_props_enabled() and not mkt:
                     continue  # with odds available, only grade posted lines
-                specs.append((prop_type, stat_key, stat_label, stat_noun, mkt, park_fn, default_line))
+                specs.append((prop_type, stat_key, stat_label, stat_noun, mkt, park_fn, default_line, bern))
             if not specs:
                 continue
 
@@ -294,7 +297,7 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
             if not blog:
                 continue
 
-            for prop_type, stat_key, stat_label, stat_noun, mkt, park_fn, default_line in specs:
+            for prop_type, stat_key, stat_label, stat_noun, mkt, park_fn, default_line, bern in specs:
                 bp = analysis.analyze_batter_prop(
                     prop_type=prop_type,
                     stat_key=stat_key,
@@ -309,6 +312,7 @@ async def analyze(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dic
                     opp_factor=opp_factor,
                     park_factor=park_fn(hr_factor),
                     default_line=default_line,
+                    bernoulli=bern,
                 )
                 if bp is not None:
                     batter_candidates.append(bp)

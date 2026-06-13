@@ -336,6 +336,40 @@ async def get_lineup_batters(game_pk: int, team_id: int) -> Optional[List[Dict[s
     return None
 
 
+async def get_team_hitting_log(team_id: int, season: int) -> List[Dict[str, Any]]:
+    """A team's game-by-game hitting log (for point-in-time offensive rates).
+
+    Used by the backtester to compute an opponent's K%/BB% *as of* a game date
+    (summing only prior games) instead of the season-final figure.
+    """
+
+    async def fetch() -> List[Dict[str, Any]]:
+        c = client()
+        r = await c.get(
+            f"/teams/{team_id}/stats",
+            params={"stats": "gameLog", "group": "hitting", "season": season, "sportId": SPORT_ID},
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        rows: List[Dict[str, Any]] = []
+        for split in data.get("stats", [{}])[0].get("splits", []):
+            stat = split.get("stat", {})
+            rows.append(
+                {
+                    "date": split.get("date"),
+                    "strikeOuts": int(stat.get("strikeOuts", 0) or 0),
+                    "baseOnBalls": int(stat.get("baseOnBalls", 0) or 0),
+                    "plateAppearances": int(stat.get("plateAppearances", 0) or 0),
+                    "runs": int(stat.get("runs", 0) or 0),
+                }
+            )
+        rows.sort(key=lambda x: x["date"] or "")
+        return rows
+
+    return await cache.get_or_set(f"teamhitlog:{team_id}:{season}", 12 * 3600, fetch)
+
+
 async def get_batter_gamelog(person_id: int, season: int) -> List[Dict[str, Any]]:
     """A hitter's game log shaped for ``analysis.analyze_batter_prop``."""
 

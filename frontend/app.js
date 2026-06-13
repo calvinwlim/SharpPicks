@@ -255,7 +255,6 @@ function renderTotalCard(total) {
       : "";
   const weatherNote = factorNote("Weather", total.weatherFactor);
   const umpNote = total.umpire ? factorNote(`HP ump ${total.umpire.name}`, total.umpFactor) : "";
-  const bullpenNote = factorNote("Bullpens", total.bullpenFactor);
   const parkNote = factorNote("Park", total.parkFactor);
   const windNote = total.wind
     ? ` Wind ${Math.abs(total.wind.outMph)} mph ${total.wind.blowing} (${total.windFactor > 1 ? "+" : ""}${((total.windFactor - 1) * 100).toFixed(1)}%).`
@@ -264,7 +263,7 @@ function renderTotalCard(total) {
     <div class="pick-header">
       <div class="pick-title">Game Total — ${sideLabel} ${total.line}</div>
     </div>
-    <div class="narrative">Model projects ${total.projection} combined runs (${(total.modelProb * 100).toFixed(0)}% on ${sideLabel.toLowerCase()}).${weatherNote}${parkNote}${windNote}${umpNote}${bullpenNote}</div>
+    <div class="narrative">Model projects ${total.projection} combined runs (${(total.modelProb * 100).toFixed(0)}% on ${sideLabel.toLowerCase()}); starters + bullpens already baked in.${weatherNote}${parkNote}${windNote}${umpNote}</div>
     ${edgeHtml}
   `;
   return card;
@@ -322,6 +321,36 @@ function renderNrfiCard(nrfi) {
   return card;
 }
 
+// Discrepancy signals: each input behind the model number, tagged by which
+// side it leans, so the user can see where the evidence agrees or conflicts
+// with the pick (and form their own read) rather than just trusting confidence.
+function renderSignals(pick) {
+  const wrap = document.createElement("div");
+  wrap.className = "signals-block";
+
+  const heading = document.createElement("div");
+  heading.className = "signals-heading";
+  heading.textContent = "Signals & discrepancies";
+  wrap.appendChild(heading);
+
+  for (const s of pick.signals) {
+    const agree = s.lean === pick.side;
+    const disagree = s.lean !== "neutral" && s.lean !== pick.side;
+    const color = agree ? "#3ecf8e" : disagree ? "#ffcb47" : "#97a3c4";
+    const tag = s.lean === "neutral" ? "neutral" : `leans ${s.lean}`;
+
+    const row = document.createElement("div");
+    row.className = "signal-row";
+    row.innerHTML =
+      `<span class="signal-dot" style="color:${color}">●</span>` +
+      `<span class="signal-label">${s.label}</span>` +
+      `<span class="signal-detail">${s.detail}</span>` +
+      `<span class="signal-lean" style="color:${color}">${tag}${disagree ? " ⚠" : ""}</span>`;
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
 function renderPickCard(pick) {
   const tpl = document.getElementById("tpl-pick-card");
   const node = tpl.content.cloneNode(true);
@@ -369,6 +398,10 @@ function renderPickCard(pick) {
   node.querySelector(".narrative").textContent = pick.narrative || "";
 
   const edgeBox = node.querySelector(".edge-box");
+  if (pick.signals && pick.signals.length) {
+    edgeBox.parentNode.insertBefore(renderSignals(pick), edgeBox);
+  }
+
   if (pick.hasMarket && pick.edge) {
     edgeBox.style.display = "flex";
     edgeBox.innerHTML = edgeLine(pick.edge);

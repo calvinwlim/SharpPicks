@@ -23,6 +23,12 @@ MIN_STARTS = 3              # fewer starts than this -> no pick
 HOME_FIELD_EDGE = 0.03      # home win-prob bump applied after log5
 PYTHAG_EXP = 1.83           # Pythagorean-expectation exponent
 
+# Count-prop distributions (None = Poisson; a number = negative-binomial dispersion).
+# Tuned on the backtest: walks are over-dispersed (Poisson overstated the over),
+# strikeouts are adequately modeled by Poisson. Re-tune with backtest.py --sweep.
+K_DISPERSION = None       # strikeouts: Poisson beats base-rate Brier and is well-calibrated
+BB_DISPERSION = 2.5       # walks: backtest sweep minimized Brier near r=2-2.5
+
 DEFAULT_RUNS_PER_GAME = 4.3
 
 PLATOON_FACTOR_FLOOR = 0.95   # clamp on the platoon adjustment to a pitcher's projection
@@ -50,11 +56,8 @@ UMP_RUN_FACTOR_CEIL = 1.05
 SKILL_BLEND_WEIGHT = 0.35      # weight on the skill (season-rate) projection vs recent results
 SKILL_MIN_BF = 10             # need at least this many recent BF to trust expected-BF
 
-BULLPEN_INNINGS_SHARE = 0.33   # ~3 of 9 innings are thrown by the bullpen
-BULLPEN_LEAGUE_ERA = 4.05      # league-average bullpen ERA, the neutral reference
-BULLPEN_RUN_FACTOR_FLOOR = 0.94
-BULLPEN_RUN_FACTOR_CEIL = 1.08
-BULLPEN_FATIGUE_BUMP = 0.04    # extra run-factor nudge when a pen is gassed
+# Bullpen quality now feeds the run model directly via game_model's staff RA/9
+# blend (see STARTER_IP_SHARE), so there's no separate bullpen multiplier.
 
 # ---- Tier 2 signals (park factor, wind direction) ----------------------------
 PARK_RUN_FACTOR_FLOOR = 0.90   # safety clamp on the venue's run park factor
@@ -90,6 +93,61 @@ def prob_over(line: float, lam: float) -> float:
 def prob_under(line: float, lam: float) -> float:
     """P(X < line) for a half-integer line (e.g. 7.5)."""
     return poisson_cdf(math.floor(line), lam)
+
+
+# --- negative binomial (for over-dispersed counts like walks) -----------------
+# Parameterized by mean and a dispersion ``r`` (smaller = more over-dispersed;
+# r -> infinity recovers the Poisson). Variance = mean + mean^2 / r.
+
+def negbinom_pmf(k: int, mean: float, r: float) -> float:
+    if mean <= 0:
+        return 1.0 if k == 0 else 0.0
+    p = r / (r + mean)
+    log_pmf = (
+        math.lgamma(k + r) - math.lgamma(r) - math.lgamma(k + 1)
+        + r * math.log(p) + k * math.log(1.0 - p)
+    )
+    return math.exp(log_pmf)
+
+
+def negbinom_cdf(k: int, mean: float, r: float) -> float:
+    if k < 0:
+        return 0.0
+    return sum(negbinom_pmf(i, mean, r) for i in range(0, k + 1))
+
+
+def count_prob_over(line: float, mean: float, dispersion: Optional[float] = None) -> float:
+    """P(X > line); Poisson by default, negative binomial when ``dispersion`` is set."""
+    if dispersion is None:
+        return prob_over(line, mean)
+    return 1.0 - negbinom_cdf(math.floor(line), mean, dispersion)
+
+
+def count_prob_under(line: float, mean: float, dispersion: Optional[float] = None) -> float:
+    """P(X < line); Poisson by default, negative binomial when ``dispersion`` is set."""
+    if dispersion is None:
+        return prob_under(line, mean)
+    return negbinom_cdf(math.floor(line), mean, dispersion)
+
+
+# --- binomial (for per-at-bat Bernoulli counts like hits / home runs) ---------
+# A hit/HR is at most one per at-bat, so these counts are *under*-dispersed
+# relative to Poisson; Binomial(at-bats, rate) calibrates the "will it happen"
+# (Over 0.5) line correctly where Poisson understates it.
+
+def binom_pmf(k: int, n: int, p: float) -> float:
+    if n <= 0:
+        return 1.0 if k == 0 else 0.0
+    p = _clamp(p, 0.0, 1.0)
+    if k < 0 or k > n:
+        return 0.0
+    return math.comb(n, k) * p ** k * (1.0 - p) ** (n - k)
+
+
+def binom_cdf(k: int, n: int, p: float) -> float:
+    if k < 0:
+        return 0.0
+    return sum(binom_pmf(i, n, p) for i in range(0, min(k, n) + 1))
 
 
 # --------------------------------------------------------------------------- small stats helpers
@@ -254,43 +312,6 @@ def _skill_projection(
     return blended, info
 
 
-# --------------------------------------------------------------------------- bullpen run factor
-
-def _bullpen_run_factor(bullpen: Optional[Dict[str, Any]]) -> float:
-    """One team's bullpen multiplier on the runs it allows (>1 = weak/gassed pen)."""
-    if not bullpen or bullpen.get("era") is None:
-        return 1.0
-    factor = _clamp(
-        float(bullpen["era"]) / BULLPEN_LEAGUE_ERA,
-        BULLPEN_RUN_FACTOR_FLOOR,
-        BULLPEN_RUN_FACTOR_CEIL,
-    )
-    if bullpen.get("fatigued"):
-        factor = _clamp(factor + BULLPEN_FATIGUE_BUMP, BULLPEN_RUN_FACTOR_FLOOR, BULLPEN_RUN_FACTOR_CEIL)
-    return factor
-
-
-def _combined_bullpen_factor(
-    home_bullpen: Optional[Dict[str, Any]], away_bullpen: Optional[Dict[str, Any]]
-) -> Tuple[float, Optional[Dict[str, Any]]]:
-    """Total-runs multiplier from both bullpens, applied only to the ~1/3 of
-    innings the pens actually throw."""
-    hf = _bullpen_run_factor(home_bullpen)
-    af = _bullpen_run_factor(away_bullpen)
-    if hf == 1.0 and af == 1.0:
-        return 1.0, None
-    pen_factor = (hf + af) / 2.0
-    # Only the bullpen share of the game moves; starters cover the rest.
-    total_factor = (1.0 - BULLPEN_INNINGS_SHARE) + BULLPEN_INNINGS_SHARE * pen_factor
-    info = {
-        "homeFactor": round(hf, 4),
-        "awayFactor": round(af, 4),
-        "homeFatigued": bool((home_bullpen or {}).get("fatigued")),
-        "awayFatigued": bool((away_bullpen or {}).get("fatigued")),
-    }
-    return total_factor, info
-
-
 # --------------------------------------------------------------------------- park + wind factors
 
 def _park_factor(park: Optional[Dict[str, Any]]) -> Tuple[float, Optional[Dict[str, Any]]]:
@@ -335,17 +356,18 @@ def _wind_factor(
 # --------------------------------------------------------------------------- shared over/under helpers
 
 def _select_line_and_prob(
-    projection: float, market: Optional[Dict[str, Any]]
+    projection: float, market: Optional[Dict[str, Any]], dispersion: Optional[float] = None
 ) -> Tuple[str, float, float]:
-    """Pick a side + line + model probability for a Poisson(``projection``) count stat.
+    """Pick a side + line + model probability for a count stat.
 
-    With a live market line, grades that exact line. Without one, tests an over
-    just below the projection and an under just above it, and keeps whichever
-    side the model favors more strongly.
+    Poisson by default; pass ``dispersion`` to use a negative binomial (for
+    over-dispersed counts like walks). With a live market line, grades that
+    exact line. Without one, tests an over just below the projection and an
+    under just above it, and keeps whichever side the model favors more strongly.
     """
     if market and market.get("line") is not None:
         line = float(market["line"])
-        p_over = prob_over(line, projection)
+        p_over = count_prob_over(line, projection, dispersion)
         if p_over >= 0.5:
             return "over", line, p_over
         return "under", line, 1.0 - p_over
@@ -355,10 +377,10 @@ def _select_line_and_prob(
         # Sub-1 mean (e.g. home runs): the only meaningful line is the "will it
         # happen" Over 0.5, reported at its true (low) probability — never a
         # nonsensical negative line or a trivial near-lock under.
-        return "over", 0.5, prob_over(0.5, projection)
+        return "over", 0.5, count_prob_over(0.5, projection, dispersion)
     over_line, under_line = center - 0.5, center + 0.5
-    p_over = prob_over(over_line, projection)
-    p_under = prob_under(under_line, projection)
+    p_over = count_prob_over(over_line, projection, dispersion)
+    p_under = count_prob_under(under_line, projection, dispersion)
     if p_over >= p_under:
         return "over", over_line, p_over
     return "under", under_line, p_under
@@ -384,6 +406,103 @@ def _build_edge(side: str, model_prob: float, market: Optional[Dict[str, Any]]) 
         "evPct": round(odds.ev_pct(model_prob, price), 2),
         "kellyPct": round(odds.kelly_pct(model_prob, price), 2),
     }
+
+
+# --------------------------------------------------------------------------- discrepancy signals
+
+def _lean_vs(value: float, line: float) -> str:
+    """Which side a raw stat points to relative to the line."""
+    if value > line:
+        return "over"
+    if value < line:
+        return "under"
+    return "neutral"
+
+
+def _lean_factor(factor: float) -> str:
+    """Which side a multiplicative adjustment points to (>1 = more of the stat)."""
+    if factor > 1.0:
+        return "over"
+    if factor < 1.0:
+        return "under"
+    return "neutral"
+
+
+def _opposite(side: str) -> str:
+    return "under" if side == "over" else "over"
+
+
+def _count_prop_signals(
+    *,
+    projection: float,
+    line: float,
+    side: str,
+    results_baseline: float,
+    stat_label: str,
+    opp_name: str,
+    opp_rate: Optional[float],
+    opp_rank: Optional[int],
+    opp_factor: float,
+    platoon_info: Optional[Dict[str, Any]],
+    ump_info: Optional[Dict[str, Any]],
+    skill_info: Optional[Dict[str, Any]] = None,
+    edge: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """The discrepant inputs behind a pitcher prop, each tagged with the side it
+    leans, so the UI can flag where signals agree or disagree with the pick."""
+    signals: List[Dict[str, Any]] = [
+        {
+            "label": "Projection vs line",
+            "detail": f"{projection:.1f} projected vs {line} line",
+            "lean": _lean_vs(projection, line),
+        },
+        {
+            "label": "Recent form",
+            "detail": f"{results_baseline:.1f} {stat_label}/game in the projection window",
+            "lean": _lean_vs(results_baseline, line),
+        },
+    ]
+
+    if skill_info and skill_info.get("kPct") is not None:
+        signals.append({
+            "label": "Season skill (Statcast)",
+            "detail": f"{skill_info['kPct'] * 100:.0f}% K rate → {skill_info['skillProj']:.1f} projected",
+            "lean": _lean_vs(skill_info["skillProj"], line),
+        })
+
+    if opp_rate is not None:
+        rank_txt = f" (#{opp_rank} in MLB)" if opp_rank else ""
+        signals.append({
+            "label": "Opponent",
+            "detail": f"{opp_name}: {opp_rate * 100:.1f}% {stat_label} rate{rank_txt}",
+            "lean": _lean_factor(opp_factor),
+        })
+
+    if platoon_info:
+        signals.append({
+            "label": "Platoon",
+            "detail": f"vs lineup handedness ×{platoon_info['factor']}",
+            "lean": _lean_factor(platoon_info["factor"]),
+        })
+
+    if ump_info:
+        signals.append({
+            "label": "Umpire",
+            "detail": f"{ump_info['name']} ×{ump_info['factor']}",
+            "lean": _lean_factor(ump_info["factor"]),
+        })
+
+    if edge:
+        signals.append({
+            "label": "Model vs market",
+            "detail": (
+                f"model {edge['modelProb'] * 100:.0f}% vs market {edge['marketProb'] * 100:.0f}% "
+                f"({edge['evPct']:+.1f}% EV)"
+            ),
+            "lean": side if edge["evPct"] > 0 else _opposite(side),
+        })
+
+    return signals
 
 
 # --------------------------------------------------------------------------- strikeout prop
@@ -422,7 +541,7 @@ def analyze_strikeouts(
     ump_factor, ump_info = _umpire_factor(umpire, "k")
 
     projection = baseline * opp_factor * platoon_factor * ump_factor
-    side, line, model_prob = _select_line_and_prob(projection, market)
+    side, line, model_prob = _select_line_and_prob(projection, market, dispersion=K_DISPERSION)
 
     def hit(row: Dict[str, Any]) -> bool:
         return row["strikeOuts"] > line if side == "over" else row["strikeOuts"] < line
@@ -506,6 +625,22 @@ def analyze_strikeouts(
     # ---- edge (only with a live market) -----------------------------------------------
     edge = _build_edge(side, model_prob, market)
 
+    signals = _count_prop_signals(
+        projection=projection,
+        line=line,
+        side=side,
+        results_baseline=results_baseline,
+        stat_label="K",
+        opp_name=opponent_name,
+        opp_rate=opp_k_rate,
+        opp_rank=opp_team.get("kRank"),
+        opp_factor=opp_factor,
+        platoon_info=platoon_info,
+        ump_info=ump_info,
+        skill_info=skill_info,
+        edge=edge,
+    )
+
     side_label = "Over" if side == "over" else "Under"
 
     return {
@@ -528,6 +663,7 @@ def analyze_strikeouts(
         "umpire": ump_info,
         "skill": skill_info,
         "lineupConfirmed": used_lineup,
+        "signals": signals,
     }
 
 
@@ -554,6 +690,7 @@ def analyze_pitcher_count_prop(
     umpire: Optional[Dict[str, Any]] = None,
     ump_kind: str = "k",
     opp_lineup: Optional[Dict[str, Any]] = None,
+    dispersion: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     """Grade a pitcher prop that's well-modeled as a Poisson count (walks, outs, etc.).
 
@@ -577,7 +714,7 @@ def analyze_pitcher_count_prop(
     ump_factor, ump_info = _umpire_factor(umpire, ump_kind)
 
     projection = baseline * opp_factor * platoon_factor * ump_factor
-    side, line, model_prob = _select_line_and_prob(projection, market)
+    side, line, model_prob = _select_line_and_prob(projection, market, dispersion=dispersion)
 
     def hit(row: Dict[str, Any]) -> bool:
         val = row.get(stat_key, 0)
@@ -650,6 +787,23 @@ def analyze_pitcher_count_prop(
         tier = "Lean"
 
     edge = _build_edge(side, model_prob, market)
+
+    signals = _count_prop_signals(
+        projection=projection,
+        line=line,
+        side=side,
+        results_baseline=baseline,
+        stat_label=stat_label,
+        opp_name=opponent_name,
+        opp_rate=opp_rate,
+        opp_rank=opp_team.get(opp_rank_key),
+        opp_factor=opp_factor,
+        platoon_info=platoon_info,
+        ump_info=ump_info,
+        skill_info=None,
+        edge=edge,
+    )
+
     side_label = "Over" if side == "over" else "Under"
 
     return {
@@ -671,6 +825,7 @@ def analyze_pitcher_count_prop(
         "platoon": platoon_info,
         "umpire": ump_info,
         "lineupConfirmed": used_lineup,
+        "signals": signals,
     }
 
 
@@ -710,6 +865,7 @@ def analyze_walks(
         umpire=umpire,
         ump_kind="bb",
         opp_lineup=opp_lineup,
+        dispersion=BB_DISPERSION,
     )
 
 
@@ -741,13 +897,19 @@ def analyze_batter_prop(
     opp_factor: float = 1.0,
     park_factor: float = 1.0,
     default_line: float = 0.5,
+    bernoulli: bool = True,
 ) -> Optional[Dict[str, Any]]:
-    """Grade a batter counting prop (hits / total bases / home runs) as a Poisson.
+    """Grade a batter counting prop (hits / total bases / home runs).
 
     Projection = recent-game baseline, scaled by how hittable the opposing
     starter is (``opp_factor``) and the park (``park_factor``, mainly for HR/TB).
     Same pick-dict shape as the pitcher props so the frontend renders it
     unchanged.
+
+    Distribution: hits and home runs are at most one per at-bat, so they're
+    graded with a **binomial** over expected at-bats (backtesting showed Poisson
+    badly understates "Over 0.5 hits"); total bases (multiple per at-bat) stays
+    Poisson. ``bernoulli=True`` selects the binomial path.
 
     With a live market line we grade that exact number. Without one we frame the
     *action side* — the Over on the prop's primary line (``default_line``: 0.5
@@ -761,10 +923,21 @@ def analyze_batter_prop(
     baseline = sum(r.get(stat_key, 0) for r in recent) / len(recent)
     projection = baseline * opp_factor * park_factor
 
+    recent_ab = sum(r.get("atBats", 0) for r in recent) / len(recent)
+    n_ab = max(int(round(recent_ab)), 1)
+
+    def p_over(L: float) -> float:
+        if bernoulli and recent_ab > 0:
+            rate = _clamp(projection / recent_ab, 0.0, 1.0)
+            return 1.0 - binom_cdf(math.floor(L), n_ab, rate)
+        return prob_over(L, projection)
+
     if market and market.get("line") is not None:
-        side, line, model_prob = _select_line_and_prob(projection, market)
+        line = float(market["line"])
+        po = p_over(line)
+        side, model_prob = ("over", po) if po >= 0.5 else ("under", 1.0 - po)
     else:
-        side, line, model_prob = "over", default_line, prob_over(default_line, projection)
+        side, line, model_prob = "over", default_line, p_over(default_line)
 
     def hit(row: Dict[str, Any]) -> bool:
         val = row.get(stat_key, 0)
@@ -820,6 +993,40 @@ def analyze_batter_prop(
 
     tier = "Premium" if confidence >= 75 else "Strong" if confidence >= 60 else "Lean"
     edge = _build_edge(side, model_prob, market)
+
+    signals: List[Dict[str, Any]] = [
+        {
+            "label": "Projection vs line",
+            "detail": f"{projection:.2f} projected vs {line} line",
+            "lean": _lean_vs(projection, line),
+        },
+        {
+            "label": "Recent form",
+            "detail": f"{baseline:.2f} {stat_label}/game over last {len(recent)}",
+            "lean": _lean_vs(baseline, line),
+        },
+        {
+            "label": "Opposing starter",
+            "detail": f"{opp_pitcher_name} (×{opp_factor:.2f} hittability)",
+            "lean": _lean_factor(opp_factor),
+        },
+    ]
+    if park_factor != 1.0:
+        signals.append({
+            "label": "Park",
+            "detail": f"venue ×{park_factor:.2f}",
+            "lean": _lean_factor(park_factor),
+        })
+    if edge:
+        signals.append({
+            "label": "Model vs market",
+            "detail": (
+                f"model {edge['modelProb'] * 100:.0f}% vs market {edge['marketProb'] * 100:.0f}% "
+                f"({edge['evPct']:+.1f}% EV)"
+            ),
+            "lean": side if edge["evPct"] > 0 else _opposite(side),
+        })
+
     side_label = "Over" if side == "over" else "Under"
 
     return {
@@ -839,6 +1046,7 @@ def analyze_batter_prop(
         "hasMarket": edge is not None,
         "lowSample": low_sample,
         "opponentPitcher": opp_pitcher_name,
+        "signals": signals,
     }
 
 
@@ -850,19 +1058,18 @@ def analyze_game_total(
     market: Optional[Dict[str, Any]] = None,
     weather: Optional[Dict[str, Any]] = None,
     umpire: Optional[Dict[str, Any]] = None,
-    home_bullpen: Optional[Dict[str, Any]] = None,
-    away_bullpen: Optional[Dict[str, Any]] = None,
     park: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Grade the game's total-runs (over/under) market.
 
-    Approximates total runs as Poisson around the combined team projections —
-    a simplification (real run totals are over-dispersed), good enough to
-    compare a projection to a market total. Five environment factors nudge it,
-    each neutral when its data is missing: temperature (warmer air -> the ball
+    The base projection (``home_proj_runs + away_proj_runs``) already reflects
+    both starters and bullpens via ``game_model``, so this layer only applies
+    the *environmental* multipliers not captured in team/pitcher stats — each
+    neutral when its data is missing: temperature (warmer air -> the ball
     carries), the home-plate umpire's zone (tight zone -> more baserunners),
-    bullpen quality/fatigue (applied only to the innings the pens throw), the
-    venue's park factor, and the wind blowing out to / in from center field.
+    the venue's park factor, and the wind blowing out to / in from center field.
+    Runs are approximated as Poisson around the projection (a simplification —
+    real totals are over-dispersed — but fine for comparing to a market line).
     """
     projection = home_proj_runs + away_proj_runs
 
@@ -876,11 +1083,10 @@ def analyze_game_total(
         )
 
     ump_factor, ump_info = _umpire_factor(umpire, "run")
-    bullpen_factor, bullpen_info = _combined_bullpen_factor(home_bullpen, away_bullpen)
     park_factor, park_info = _park_factor(park)
     wind_factor, wind_info = _wind_factor(weather, park)
 
-    projection *= weather_factor * ump_factor * bullpen_factor * park_factor * wind_factor
+    projection *= weather_factor * ump_factor * park_factor * wind_factor
 
     side, line, model_prob = _select_line_and_prob(projection, market)
     edge = _build_edge(side, model_prob, market)
@@ -898,8 +1104,6 @@ def analyze_game_total(
         "weatherFactor": round(weather_factor, 4),
         "umpFactor": round(ump_factor, 4),
         "umpire": ump_info,
-        "bullpenFactor": round(bullpen_factor, 4),
-        "bullpen": bullpen_info,
         "parkFactor": round(park_factor, 4),
         "park": park_info,
         "windFactor": round(wind_factor, 4),
@@ -913,6 +1117,7 @@ F5_INNINGS = 5
 LEAGUE_RUNS_REF = 4.3          # league-average runs per team per game (normalizer)
 STARTER_RA9_DEFAULT = 4.1      # fallback / league-average starter runs allowed per 9
 RA9_WINDOW = 8                 # recent starts used for a starter's RA/9
+STARTER_IP_SHARE = 0.60        # share of a 9-inning game the starter is expected to cover
 NRFI_LEAGUE_P_SCORE = 0.27     # league-average chance a given team scores in the 1st
 NRFI_FACTOR_FLOOR = 0.55
 NRFI_FACTOR_CEIL = 1.7
@@ -1061,10 +1266,20 @@ def game_model(
     away_rates: Dict[str, Any],
     home_run_prevention: Dict[str, Any],
     away_run_prevention: Dict[str, Any],
+    home_starter_ra9: Optional[float] = None,
+    away_starter_ra9: Optional[float] = None,
+    home_bullpen: Optional[Dict[str, Any]] = None,
+    away_bullpen: Optional[Dict[str, Any]] = None,
     home_moneyline: Optional[int] = None,
     away_moneyline: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Pythagorean expectation + log5 + a small home-field bump."""
+    """Pitcher-aware matchup model: each team's projected runs come from its
+    offense facing the *opposing* pitching staff for this game (the listed
+    starter for ~60% of innings, the bullpen for the rest), and the win
+    probability is the Pythagorean expectation of those projections plus a
+    small home-field bump. Unlike a pure team-talent model, an ace start (or a
+    gassed bullpen) shifts both the moneyline and the total.
+    """
 
     def pyth(runs_for: float, runs_against: float) -> float:
         rf = max(runs_for, 0.1)
@@ -1076,20 +1291,30 @@ def game_model(
     home_ra = home_run_prevention.get("runsAllowedPerGame", DEFAULT_RUNS_PER_GAME)
     away_ra = away_run_prevention.get("runsAllowedPerGame", DEFAULT_RUNS_PER_GAME)
 
-    p_home = pyth(home_rs, home_ra)
-    p_away = pyth(away_rs, away_ra)
+    def staff_ra9(starter_ra9: Optional[float], bullpen: Optional[Dict[str, Any]], team_full_ra: float) -> float:
+        # Blend the listed starter's RA/9 with the bullpen ERA over a 9-inning
+        # game; fall back to the team's full-staff rate where a piece is missing.
+        starter = starter_ra9 if starter_ra9 is not None else team_full_ra
+        pen = (bullpen or {}).get("era")
+        pen = pen if pen is not None else team_full_ra
+        return STARTER_IP_SHARE * starter + (1.0 - STARTER_IP_SHARE) * pen
 
-    # log5: P(home beats away) = (pH - pH*pA) / (pH + pA - 2*pH*pA).
-    denom = p_home + p_away - 2 * p_home * p_away
-    log5 = (p_home * (1 - p_away) / denom) if denom else 0.5
+    home_staff = staff_ra9(home_starter_ra9, home_bullpen, home_ra)  # runs/9 home pitching allows
+    away_staff = staff_ra9(away_starter_ra9, away_bullpen, away_ra)
 
-    home_win = _clamp(log5 + HOME_FIELD_EDGE, 0.01, 0.99)
+    # Each team's offense (relative to league) vs the run rate it will face.
+    home_proj = 0.5 * home_rs + 0.5 * away_staff
+    away_proj = 0.5 * away_rs + 0.5 * home_staff
+
+    home_win = _clamp(pyth(home_proj, away_proj) + HOME_FIELD_EDGE, 0.02, 0.98)
 
     result: Dict[str, Any] = {
         "homeWinProb": round(home_win, 4),
         "awayWinProb": round(1 - home_win, 4),
-        "homeProjRuns": round((home_rs + away_ra) / 2, 2),
-        "awayProjRuns": round((away_rs + home_ra) / 2, 2),
+        "homeProjRuns": round(home_proj, 2),
+        "awayProjRuns": round(away_proj, 2),
+        "homeStarterRA9": round(home_starter_ra9, 2) if home_starter_ra9 is not None else None,
+        "awayStarterRA9": round(away_starter_ra9, 2) if away_starter_ra9 is not None else None,
     }
 
     if home_moneyline is not None and away_moneyline is not None:
