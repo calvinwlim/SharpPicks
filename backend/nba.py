@@ -118,26 +118,37 @@ async def last_game_before(team_id: int, season: str, date: str) -> Optional[str
     return max(dates) if dates else None
 
 
+# --------------------------------------------------------------------------- league-dash params
+
+def _league_params(season: str, **overrides: Any) -> Dict[str, str]:
+    """Base param set for the param-hungry leaguedash* endpoints; override as needed."""
+    p = {
+        "LeagueID": "00", "Season": season, "SeasonType": "Regular Season",
+        "MeasureType": "Base", "PerMode": "PerGame", "PlusMinus": "N",
+        "PaceAdjust": "N", "Rank": "N", "Outcome": "", "Location": "", "Month": "0",
+        "SeasonSegment": "", "DateFrom": "", "DateTo": "", "OpponentTeamID": "0",
+        "VsConference": "", "VsDivision": "", "GameSegment": "", "Period": "0",
+        "LastNGames": "0", "GameScope": "", "PlayerExperience": "",
+        "PlayerPosition": "", "StarterBench": "", "TwoWay": "0", "TeamID": "0",
+        "Conference": "", "Division": "", "College": "", "Country": "",
+        "DraftPick": "", "DraftYear": "", "Height": "", "Weight": "", "ShotClockRange": "",
+    }
+    p.update({k: str(v) for k, v in overrides.items()})
+    return p
+
+
 # --------------------------------------------------------------------------- team ratings
 
-async def get_team_ratings(season: str, last_n: int = 0) -> Dict[str, Any]:
+async def get_team_ratings(season: str, last_n: int = 0, location: str = "") -> Dict[str, Any]:
     """Advanced ratings keyed by team id: ORtg / DRtg / Pace, plus league averages.
 
     ``last_n`` = 0 -> full season; e.g. 10 -> last 10 games (recent form).
+    ``location`` = "" / "Home" / "Road" for venue splits.
     """
 
     async def fetch() -> Dict[str, Any]:
         c = client()
-        params = {
-            "LeagueID": "00", "Season": season, "SeasonType": "Regular Season",
-            "MeasureType": "Advanced", "PerMode": "PerGame", "PlusMinus": "N",
-            "PaceAdjust": "N", "Rank": "N", "Outcome": "", "Location": "", "Month": "0",
-            "SeasonSegment": "", "DateFrom": "", "DateTo": "", "OpponentTeamID": "0",
-            "VsConference": "", "VsDivision": "", "GameSegment": "", "Period": "0",
-            "LastNGames": str(last_n), "GameScope": "", "PlayerExperience": "",
-            "PlayerPosition": "", "StarterBench": "", "TwoWay": "0", "TeamID": "0",
-            "Conference": "", "Division": "",
-        }
+        params = _league_params(season, MeasureType="Advanced", LastNGames=last_n, Location=location)
         r = await c.get(f"{STATS_BASE}/leaguedashteamstats", params=params)
         r.raise_for_status()
         rs = r.json()["resultSets"][0]
@@ -163,4 +174,105 @@ async def get_team_ratings(season: str, last_n: int = 0) -> Dict[str, Any]:
         return {"season": season, "lastN": last_n, "teams": teams,
                 "leagueOrtg": round(league_ortg, 2), "leaguePace": round(league_pace, 2)}
 
-    return await cache.get_or_set(f"nba:ratings:{season}:{last_n}", 6 * 3600, fetch)
+    return await cache.get_or_set(f"nba:ratings:{season}:{last_n}:{location or 'all'}", 6 * 3600, fetch)
+
+
+# --------------------------------------------------------------------------- opponent stat-defense
+
+async def get_team_opp_stats(season: str) -> Dict[str, Any]:
+    """Per-game stats teams ALLOW (OPP_PTS/REB/AST/FG3M), keyed by team id, plus
+    league averages — for adjusting player props by how generous the opponent is."""
+
+    async def fetch() -> Dict[str, Any]:
+        c = client()
+        params = _league_params(season, MeasureType="Opponent")
+        r = await c.get(f"{STATS_BASE}/leaguedashteamstats", params=params)
+        r.raise_for_status()
+        rs = r.json()["resultSets"][0]
+        idx = {h: i for i, h in enumerate(rs["headers"])}
+
+        def col(row, key):
+            return float(row[idx[key]]) if key in idx else 0.0
+
+        teams: Dict[int, Dict[str, float]] = {}
+        agg = {"pts": [], "reb": [], "ast": [], "fg3m": []}
+        for row in rs["rowSet"]:
+            tid = row[idx["TEAM_ID"]]
+            rec = {"pts": col(row, "OPP_PTS"), "reb": col(row, "OPP_REB"),
+                   "ast": col(row, "OPP_AST"), "fg3m": col(row, "OPP_FG3M")}
+            teams[tid] = rec
+            for k in agg:
+                agg[k].append(rec[k])
+        league = {k: (sum(v) / len(v) if v else 0.0) for k, v in agg.items()}
+        return {"season": season, "teams": teams, "league": league}
+
+    return await cache.get_or_set(f"nba:oppstats:{season}", 6 * 3600, fetch)
+
+
+# --------------------------------------------------------------------------- players
+
+async def get_player_season_stats(season: str) -> Dict[int, Dict[str, Any]]:
+    """All players' season per-game stats keyed by player id (PTS/REB/AST/FG3M/MIN + team)."""
+
+    async def fetch() -> Dict[int, Dict[str, Any]]:
+        c = client()
+        params = _league_params(season, MeasureType="Base")
+        r = await c.get(f"{STATS_BASE}/leaguedashplayerstats", params=params)
+        r.raise_for_status()
+        rs = r.json()["resultSets"][0]
+        idx = {h: i for i, h in enumerate(rs["headers"])}
+        out: Dict[int, Dict[str, Any]] = {}
+        for row in rs["rowSet"]:
+            out[row[idx["PLAYER_ID"]]] = {
+                "name": row[idx["PLAYER_NAME"]],
+                "teamId": row[idx["TEAM_ID"]],
+                "gp": int(row[idx["GP"]] or 0),
+                "min": float(row[idx["MIN"]] or 0),
+                "pts": float(row[idx["PTS"]] or 0),
+                "reb": float(row[idx["REB"]] or 0),
+                "ast": float(row[idx["AST"]] or 0),
+                "fg3m": float(row[idx["FG3M"]] or 0),
+            }
+        return out
+
+    return await cache.get_or_set(f"nba:players:{season}", 6 * 3600, fetch)
+
+
+def _parse_matchup(matchup: str) -> Dict[str, Any]:
+    """'DEN @ SAS' / 'DEN vs. SAS' -> {opponent tricode, isHome}."""
+    parts = (matchup or "").split()
+    is_home = "vs." in matchup
+    opp = parts[-1] if parts else ""
+    return {"opponent": opp, "isHome": is_home}
+
+
+async def get_player_gamelog(player_id: int, season: str) -> List[Dict[str, Any]]:
+    """A player's game log, oldest-first: date / opponent / isHome / min / pts / reb / ast / fg3m."""
+    import datetime
+
+    async def fetch() -> List[Dict[str, Any]]:
+        c = client()
+        r = await c.get(f"{STATS_BASE}/playergamelog", params={
+            "PlayerID": str(player_id), "Season": season,
+            "SeasonType": "Regular Season", "LeagueID": "00"})
+        r.raise_for_status()
+        rs = r.json()["resultSets"][0]
+        idx = {h: i for i, h in enumerate(rs["headers"])}
+        rows: List[Dict[str, Any]] = []
+        for row in rs["rowSet"]:
+            raw_date = row[idx["GAME_DATE"]]
+            try:
+                iso = datetime.datetime.strptime(raw_date, "%b %d, %Y").date().isoformat()
+            except (ValueError, TypeError):
+                iso = ""
+            mu = _parse_matchup(row[idx["MATCHUP"]])
+            rows.append({
+                "date": iso, "opponent": mu["opponent"], "isHome": mu["isHome"],
+                "min": float(row[idx["MIN"]] or 0), "pts": float(row[idx["PTS"]] or 0),
+                "reb": float(row[idx["REB"]] or 0), "ast": float(row[idx["AST"]] or 0),
+                "fg3m": float(row[idx["FG3M"]] or 0),
+            })
+        rows.sort(key=lambda x: x["date"])
+        return rows
+
+    return await cache.get_or_set(f"nba:plog:{player_id}:{season}", 3 * 3600, fetch)

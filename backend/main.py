@@ -104,10 +104,106 @@ async def _analyze_nba(game_id: str, date: str) -> Dict[str, Any]:
     except Exception:
         pass
 
+    # Added factors: venue splits + head-to-head this season (signals only).
+    home_split_net = away_split_net = None
+    try:
+        home_loc = await nba.get_team_ratings(season, location="Home")
+        away_loc = await nba.get_team_ratings(season, location="Road")
+        home_split_net = home_loc["teams"].get(home["id"], {}).get("netRtg")
+        away_split_net = away_loc["teams"].get(away["id"], {}).get("netRtg")
+    except Exception:
+        pass
+    try:
+        h2h = await _nba_h2h(home["id"], away["id"], season, date)
+    except Exception:
+        h2h = None
+
     game_model = nba_analysis.nba_game_model(
         home, away, ratings, recent=recent, home_rest=home_rest, away_rest=away_rest,
+        h2h=h2h, home_split_net=home_split_net, away_split_net=away_split_net,
     )
-    return {"gameId": game_id, "sport": "nba", "game": game, "gameModel": game_model, "flags": _flags()}
+
+    # Player props (points / rebounds / assists / threes) for the rotation.
+    picks: List[Dict[str, Any]] = []
+    try:
+        opp_stats = await nba.get_team_opp_stats(season)
+    except Exception:
+        opp_stats = {"teams": {}, "league": {}}
+    try:
+        players = await nba.get_player_season_stats(season)
+    except Exception:
+        players = {}
+    if players:
+        picks = await _nba_player_picks(home, away, season, ratings, opp_stats, players, game_model["pace"])
+
+    return {"gameId": game_id, "sport": "nba", "game": game, "gameModel": game_model,
+            "picks": picks, "flags": _flags()}
+
+
+async def _nba_h2h(home_id: int, away_id: int, season: str, before_date: str):
+    """This-season head-to-head from the schedule (needs final scores)."""
+    games = await nba._full_schedule(season)
+    margins: List[float] = []
+    wins = 0
+    for g in games:
+        if g.get("statusCode") != 3 or g["date"] >= before_date:
+            continue
+        ids = {g["home"]["id"], g["away"]["id"]}
+        if ids != {home_id, away_id} or g.get("homeScore") is None or g.get("awayScore") is None:
+            continue
+        # margin from the perspective of *this game's* home team
+        m = (g["homeScore"] - g["awayScore"]) if g["home"]["id"] == home_id else (g["awayScore"] - g["homeScore"])
+        margins.append(m)
+        if m > 0:
+            wins += 1
+    if not margins:
+        return None
+    return {"games": len(margins), "homeWins": wins, "homeAvgMargin": round(sum(margins) / len(margins), 1)}
+
+
+NBA_PLAYER_PICK_CAP = 14
+NBA_PLAYERS_PER_TEAM = 6
+
+
+async def _nba_player_picks(home, away, season, ratings, opp_stats, players, exp_pace):
+    picks: List[Dict[str, Any]] = []
+    for team, opp in ((home, away), (away, home)):
+        team_pace = ratings.get("teams", {}).get(team["id"], {}).get("pace")
+        roster = sorted(
+            [(pid, p) for pid, p in players.items() if p["teamId"] == team["id"] and p["gp"] >= 5],
+            key=lambda kp: kp[1]["min"], reverse=True)[:NBA_PLAYERS_PER_TEAM]
+        for pid, p in roster:
+            try:
+                glog = await nba.get_player_gamelog(pid, season)
+            except Exception:
+                continue
+            if not glog:
+                continue
+            for stat_key, label, noun, opp_key, std_floor, thresh in nba_analysis.PLAYER_PROP_SPECS:
+                if p.get(stat_key, 0) < thresh:
+                    continue
+                pick = nba_analysis.analyze_nba_player_prop(
+                    player_name=p["name"], stat_key=stat_key, stat_label=label, stat_noun=noun,
+                    gamelog=glog, season_avg=p[stat_key],
+                    opp_allowed=opp_stats.get("teams", {}).get(opp["id"], {}).get(opp_key),
+                    league_allowed=opp_stats.get("league", {}).get(opp_key),
+                    opp_abbr=opp["abbr"], exp_pace=exp_pace, team_pace=team_pace, std_floor=std_floor)
+                if pick is not None:
+                    picks.append(pick)
+
+    # Cap per stat type so low-variance threes don't crowd out points/reb/ast,
+    # then group by type for a readable board (points first).
+    type_caps = {"nba_pts": 6, "nba_reb": 3, "nba_ast": 3, "nba_fg3m": 3}
+    type_order = {"nba_pts": 0, "nba_reb": 1, "nba_ast": 2, "nba_fg3m": 3}
+    by_type: Dict[str, List[Dict[str, Any]]] = {}
+    for p in picks:
+        by_type.setdefault(p["propType"], []).append(p)
+    selected: List[Dict[str, Any]] = []
+    for ptype, lst in by_type.items():
+        lst.sort(key=lambda p: p["confidence"], reverse=True)
+        selected.extend(lst[:type_caps.get(ptype, 3)])
+    selected.sort(key=lambda p: (type_order.get(p["propType"], 9), -p["confidence"]))
+    return selected[:NBA_PLAYER_PICK_CAP]
 
 
 async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dict[str, Any]:

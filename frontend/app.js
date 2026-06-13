@@ -367,6 +367,23 @@ function renderNbaAnalysis(data, game, container) {
   if (gm.signals && gm.signals.length) {
     container.appendChild(renderNbaSignals(gm, away, home));
   }
+
+  if (data.picks && data.picks.length) {
+    const heading = document.createElement("div");
+    heading.className = "signals-heading";
+    heading.style.marginTop = "10px";
+    heading.textContent = "Player props";
+    container.appendChild(heading);
+
+    const chartList = [];
+    for (const pick of data.picks) {
+      const { node, canvas } = renderPickCard(pick);
+      container.appendChild(node);
+      const chart = drawChip(canvas, pick);
+      if (chart) chartList.push(chart);
+    }
+    charts.set(gameKey(game), chartList);
+  }
 }
 
 function renderNbaScoreCard(gm, away, home) {

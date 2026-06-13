@@ -142,8 +142,18 @@ def nba_game_model(
     home_rest: Optional[int] = None,
     away_rest: Optional[int] = None,
     market: Optional[Dict[str, Any]] = None,
+    h2h: Optional[Dict[str, Any]] = None,
+    home_split_net: Optional[float] = None,
+    away_split_net: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Project score / spread / total / win probability for an NBA game."""
+    """Project score / spread / total / win probability for an NBA game.
+
+    ``h2h`` (this-season head-to-head record/margin), ``home_split_net`` (home
+    team's net rating *at home*) and ``away_split_net`` (away team's net *on the
+    road*) are surfaced as signals only — they're either small-sample or already
+    captured by the flat home-court term, so they inform the reader without
+    double-counting in the projection.
+    """
     lg_ortg = ratings.get("leagueOrtg", DEFAULT_ORTG)
     lg_pace = ratings.get("leaguePace", DEFAULT_PACE)
 
@@ -163,6 +173,30 @@ def nba_game_model(
     home_win = normal_cdf(margin / NBA_MARGIN_SD)
 
     signals = _build_signals(home, away, hv, av, exp_pace, lg_pace, home_rest, away_rest, margin, market)
+
+    # Home/road venue splits (team-specific strength, beyond the flat home court).
+    if home_split_net is not None:
+        delta = home_split_net - hv["seasonNet"]
+        signals.append(_signal(
+            f"{home['abbr']} at home",
+            f"{home_split_net:+.1f} net at home vs {hv['seasonNet']:+.1f} overall ({delta:+.1f})",
+            "home" if delta >= 0 else "away"))
+    if away_split_net is not None:
+        delta = away_split_net - av["seasonNet"]
+        signals.append(_signal(
+            f"{away['abbr']} on the road",
+            f"{away_split_net:+.1f} net on road vs {av['seasonNet']:+.1f} overall ({delta:+.1f})",
+            "away" if delta >= 0 else "home"))
+
+    # Head-to-head this season.
+    if h2h and h2h.get("games"):
+        n = h2h["games"]
+        hw = h2h.get("homeWins", 0)
+        margin_h = h2h.get("homeAvgMargin", 0.0)
+        signals.append(_signal(
+            "Head-to-head (season)",
+            f"{home['abbr']} {hw}-{n - hw} vs {away['abbr']}, avg margin {margin_h:+.1f} ({n} mtg)",
+            "home" if margin_h >= 0 else "away"))
 
     result: Dict[str, Any] = {
         "homeWinProb": round(home_win, 4),
@@ -202,3 +236,139 @@ def nba_game_model(
         }
 
     return result
+
+
+# --------------------------------------------------------------------------- player props
+
+NBA_PLAYER_WINDOW = 12        # recent games for a player's baseline/std
+NBA_PLAYER_MIN_GAMES = 8
+NBA_PLAYER_RECENT_WEIGHT = 0.40
+NBA_OPP_FACTOR_FLOOR, NBA_OPP_FACTOR_CEIL = 0.85, 1.15
+NBA_PACE_FACTOR_FLOOR, NBA_PACE_FACTOR_CEIL = 0.92, 1.08
+
+# (statKey in gamelog, label, noun, opp-allowed key, std floor, min season avg to surface)
+PLAYER_PROP_SPECS = [
+    ("pts", "Points", "points", "pts", 4.0, 0.0),
+    ("reb", "Rebounds", "rebounds", "reb", 1.8, 4.0),
+    ("ast", "Assists", "assists", "ast", 1.5, 3.5),
+    ("fg3m", "Threes", "threes", "fg3m", 0.9, 1.2),
+]
+
+
+def _stdev(vals: List[float]) -> float:
+    n = len(vals)
+    if n < 2:
+        return 0.0
+    m = sum(vals) / n
+    return (sum((v - m) ** 2 for v in vals) / (n - 1)) ** 0.5
+
+
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
+
+
+def analyze_nba_player_prop(
+    player_name: str,
+    stat_key: str,
+    stat_label: str,
+    stat_noun: str,
+    gamelog: List[Dict[str, Any]],
+    season_avg: float,
+    opp_allowed: Optional[float],
+    league_allowed: Optional[float],
+    opp_abbr: str,
+    exp_pace: Optional[float],
+    team_pace: Optional[float],
+    std_floor: float,
+) -> Optional[Dict[str, Any]]:
+    """Grade an NBA player counting prop (points/rebounds/assists/threes).
+
+    Projection = season average blended with recent form, scaled by how much the
+    opponent allows of this stat (relative to league) and the expected pace
+    (more possessions -> more counting stats). Over/under via a normal with the
+    player's own game-to-game std (floored). Same pick-dict shape as MLB props.
+    """
+    if len(gamelog) < NBA_PLAYER_MIN_GAMES:
+        return None
+
+    recent = gamelog[-NBA_PLAYER_WINDOW:]
+    recent_avg = sum(r.get(stat_key, 0.0) for r in recent) / len(recent)
+    baseline = (1.0 - NBA_PLAYER_RECENT_WEIGHT) * season_avg + NBA_PLAYER_RECENT_WEIGHT * recent_avg
+
+    opp_factor = 1.0
+    if opp_allowed is not None and league_allowed:
+        opp_factor = _clamp(opp_allowed / league_allowed, NBA_OPP_FACTOR_FLOOR, NBA_OPP_FACTOR_CEIL)
+    pace_factor = 1.0
+    if exp_pace and team_pace:
+        pace_factor = _clamp(exp_pace / team_pace, NBA_PACE_FACTOR_FLOOR, NBA_PACE_FACTOR_CEIL)
+
+    projection = baseline * opp_factor * pace_factor
+    std = max(_stdev([r.get(stat_key, 0.0) for r in recent]), std_floor)
+
+    # Pick the side the projection favors around the nearest line.
+    center = max(round(projection), 1)
+    over_line, under_line = center - 0.5, center + 0.5
+    p_over = 1.0 - normal_cdf((over_line - projection) / std)
+    p_under = normal_cdf((under_line - projection) / std)
+    if p_over >= p_under:
+        side, line, model_prob = "over", over_line, p_over
+    else:
+        side, line, model_prob = "under", under_line, p_under
+
+    # Splits.
+    def hit(r: Dict[str, Any]) -> bool:
+        v = r.get(stat_key, 0.0)
+        return v > line if side == "over" else v < line
+
+    def split(label: str, rows: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not rows:
+            return None
+        h = sum(1 for r in rows if hit(r))
+        return {"label": label, "hits": h, "n": len(rows), "rate": round(h / len(rows), 4), "thin": len(rows) < 5}
+
+    splits = [s for s in [
+        split("All games", gamelog),
+        split(f"Last {len(recent)}", recent),
+        split(f"vs {opp_abbr}", [r for r in gamelog if r.get("opponent") == opp_abbr]),
+    ] if s]
+
+    spark = [{"date": r["date"], "opp": r.get("opponent", "")[:3].upper() or "???",
+              "k": r.get(stat_key, 0.0), "home": r.get("isHome", False)} for r in recent]
+
+    # Discrepancy signals.
+    signals = [
+        {"label": "Projection vs line", "detail": f"{projection:.1f} projected vs {line} line",
+         "lean": "over" if projection > line else "under"},
+        {"label": "Recent form", "detail": f"L{len(recent)} avg {recent_avg:.1f} vs season {season_avg:.1f}",
+         "lean": "over" if recent_avg >= season_avg else "under"},
+    ]
+    if opp_allowed is not None and league_allowed:
+        signals.append({
+            "label": "Opponent defense",
+            "detail": f"{opp_abbr} allows {opp_allowed:.1f} {stat_noun}/g vs league {league_allowed:.1f} (×{opp_factor:.2f})",
+            "lean": "over" if opp_factor > 1.0 else "under"})
+    if exp_pace and team_pace:
+        signals.append({
+            "label": "Pace", "detail": f"game pace {exp_pace:.1f} vs team {team_pace:.1f} (×{pace_factor:.2f})",
+            "lean": "over" if pace_factor > 1.0 else "under"})
+
+    low_sample = len(gamelog) < NBA_PLAYER_WINDOW
+    confidence = int(_clamp(round(model_prob * 100), 0, 100))
+    if low_sample:
+        confidence = min(confidence, 70)
+    tier = "Premium" if confidence >= 75 else "Strong" if confidence >= 60 else "Lean"
+    side_label = "Over" if side == "over" else "Under"
+
+    return {
+        "propType": f"nba_{stat_key}",
+        "statNoun": stat_noun,
+        "player": player_name,
+        "pick": f"{player_name} {side_label} {line} {stat_label}",
+        "side": side, "line": line,
+        "projection": round(projection, 1),
+        "modelProb": round(model_prob, 4),
+        "confidence": confidence, "tier": tier,
+        "splits": splits, "spark": spark, "signals": signals,
+        "edge": None, "hasMarket": False, "lowSample": low_sample,
+        "opponent": opp_abbr,
+    }
