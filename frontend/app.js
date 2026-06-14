@@ -473,6 +473,7 @@ function renderMmaAnalysis(data, game, container) {
 
   container.appendChild(renderMmaSummaryCard(fm));
   if (fm.signals && fm.signals.length) container.appendChild(renderMmaSignals(fm));
+  if (data.comps) container.appendChild(renderMmaComps(data.comps));
 
   if (data.picks && data.picks.length) {
     const heading = document.createElement("div");
@@ -533,6 +534,28 @@ function renderMmaSignals(fm) {
     wrap.appendChild(row);
   }
   return wrap;
+}
+
+function renderMmaComps(c) {
+  const card = document.createElement("div");
+  card.className = "pick-card";
+  const m = c.method;
+  const rows = c.similar.map((s) =>
+    `<div class="signal-row"><span class="signal-label">${s.fav} vs ${s.dog}</span>` +
+    `<span class="signal-detail">${s.date.slice(0, 7)} · ${s.result}</span>` +
+    `<span class="signal-lean">d ${s.dist}</span></div>`).join("");
+  card.innerHTML = `
+    <div class="pick-header"><div class="pick-title">Historical comps — ${c.n} most-similar past fights</div></div>
+    <div class="nba-lines">
+      <span>${c.favorite} (fav) won <strong>${(c.favWinPct * 100).toFixed(0)}%</strong> of comps</span>
+      <span>KO ${(m.ko * 100).toFixed(0)}% · Sub ${(m.sub * 100).toFixed(0)}% · Dec ${(m.dec * 100).toFixed(0)}%</span>
+      <span>Distance ${(c.distancePct * 100).toFixed(0)}%</span>
+      <span>~${c.avgSigStrikes} sig strikes</span>
+    </div>
+    <div class="narrative">How the most comparable style-matchups actually played out
+      (empirical, point-in-time). A second lens to weigh against the model above.</div>
+    <div class="signals-block" style="margin-top:6px;">${rows}</div>`;
+  return card;
 }
 
 // Discrepancy signals: each input behind the model number, tagged by which

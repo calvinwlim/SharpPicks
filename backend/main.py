@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from . import ai as ai_module
-from . import (analysis, mlb, mma, mma_analysis, mma_data, nba, nba_analysis,
+from . import (analysis, mlb, mma, mma_analysis, mma_comps, mma_data, nba, nba_analysis,
                odds, parks, savant, umpires, weather as weather_module)
 
 load_dotenv()
@@ -99,8 +99,12 @@ async def _analyze_mma(game_id: str, date: str) -> Dict[str, Any]:
                 "flags": _flags()}
 
     model = mma_analysis.analyze_fight(a, b, a_name, b_name, rounds=fight.get("rounds", 3), fight_date=date)
-    return {"gameId": game_id, "sport": "mma", "fight": fight,
-            "fightModel": model["fightModel"], "picks": model["picks"], "flags": _flags()}
+    try:
+        comps = mma_comps.find_comps(a, b, a_name, b_name, rounds=fight.get("rounds", 3), fight_date=date)
+    except Exception:
+        comps = None
+    return {"gameId": game_id, "sport": "mma", "fight": fight, "fightModel": model["fightModel"],
+            "picks": model["picks"], "comps": comps, "flags": _flags()}
 
 
 async def _analyze_nba(game_id: str, date: str) -> Dict[str, Any]:

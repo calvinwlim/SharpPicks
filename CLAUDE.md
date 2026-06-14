@@ -34,7 +34,8 @@ there is no live free rate-stat API). (Re)build it by aggregating the public
 ufcstats mirror — run after new events:
 
 ```bash
-python3 scripts/build_ufc_dataset.py
+python3 scripts/build_ufc_dataset.py    # fighter rate stats -> backend/data/ufc_fighters.json
+python3 scripts/build_mma_comps.py      # matchup vectors -> backend/data/ufc_fight_vectors.json (+ holdout validation)
 ```
 
 Backtests (live data, measure model accuracy):

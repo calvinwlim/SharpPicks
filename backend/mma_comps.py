@@ -1,0 +1,136 @@
+"""MMA "comps" — case-based matching of a fight to its historical variants.
+
+Styles make fights: rather than only producing a parametric projection, this
+represents a matchup as a vector of *style differentials* (favorite minus
+underdog) plus shared context (combined finish tendency, combined pace, rounds),
+then finds the most similar past fights and reports how those actually turned
+out — an empirical outcome distribution (favorite win %, KO/Sub/Dec split,
+distance %, typical significant strikes) plus the named most-similar bouts.
+
+The historical vectors are built point-in-time (each fight uses the two
+fighters' stats *before* it) by ``scripts/build_mma_comps.py`` ->
+``backend/data/ufc_fight_vectors.json``. This module builds the query vector the
+same way and does the k-NN match. Pure Python (no numpy).
+"""
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from .mma_analysis import _age, _winpct
+
+VECTORS_FILE = Path(__file__).resolve().parent / "data" / "ufc_fight_vectors.json"
+
+FEATURE_NAMES = [
+    "d_slpm", "d_sapm", "d_strDef", "d_tdAvg", "d_tdDef", "d_subAvg", "d_kdPer15",
+    "d_finishRate", "d_finishedRate", "d_winpct", "d_reach", "d_age",
+    "c_finish", "c_pace", "rounds",
+]
+
+
+def build_vector(a: Dict[str, Any], b: Dict[str, Any], rounds: int,
+                 fight_date: Optional[str] = None) -> Tuple[List[float], bool]:
+    """Matchup feature vector, oriented favorite-minus-underdog (favorite = higher
+    win%). Returns ``(vector, fav_is_a)``."""
+    fav_is_a = _winpct(a) >= _winpct(b)
+    fav, dog = (a, b) if fav_is_a else (b, a)
+    fa, da = _age(fav.get("dob"), fight_date), _age(dog.get("dob"), fight_date)
+    d_age = (fa - da) if (fa is not None and da is not None) else 0.0
+
+    def g(f, k):
+        return float(f.get(k, 0.0) or 0.0)
+
+    vec = [
+        g(fav, "slpm") - g(dog, "slpm"),
+        g(fav, "sapm") - g(dog, "sapm"),
+        g(fav, "strDef") - g(dog, "strDef"),
+        g(fav, "tdAvg") - g(dog, "tdAvg"),
+        g(fav, "tdDef") - g(dog, "tdDef"),
+        g(fav, "subAvg") - g(dog, "subAvg"),
+        g(fav, "kdPer15") - g(dog, "kdPer15"),
+        g(fav, "finishRate") - g(dog, "finishRate"),
+        g(fav, "finishedRate") - g(dog, "finishedRate"),
+        _winpct(fav) - _winpct(dog),
+        (fav.get("reachIn") or 0.0) - (dog.get("reachIn") or 0.0),
+        d_age,
+        g(fav, "finishRate") + g(dog, "finishRate"),
+        g(fav, "slpm") + g(dog, "slpm"),
+        float(rounds),
+    ]
+    return vec, fav_is_a
+
+
+_cache: Optional[Dict[str, Any]] = None
+
+
+def _load() -> Optional[Dict[str, Any]]:
+    global _cache
+    if _cache is None:
+        try:
+            data = json.loads(VECTORS_FILE.read_text(encoding="utf-8"))
+            mean, std = data["mean"], data["std"]
+            # pre-standardize the historical vectors once
+            for row in data["vectors"]:
+                row["z"] = [(row["vec"][i] - mean[i]) / std[i] for i in range(len(mean))]
+            _cache = data
+        except Exception:
+            _cache = {}
+    return _cache or None
+
+
+def available() -> bool:
+    return _load() is not None
+
+
+def find_comps(a: Dict[str, Any], b: Dict[str, Any], a_name: str, b_name: str,
+               rounds: int, fight_date: Optional[str] = None, k: int = 60) -> Optional[Dict[str, Any]]:
+    data = _load()
+    if not data:
+        return None
+    mean, std, rows = data["mean"], data["std"], data["vectors"]
+    vec, fav_is_a = build_vector(a, b, rounds, fight_date)
+    zq = [(vec[i] - mean[i]) / std[i] for i in range(len(mean))]
+
+    scored = sorted(
+        ((sum((zq[i] - row["z"][i]) ** 2 for i in range(len(zq))), row) for row in rows),
+        key=lambda x: x[0])[:k]
+    if not scored:
+        return None
+
+    comps = [r for _, r in scored]
+    n = len(comps)
+    fav_won = sum(1 for c in comps if c["out"]["favWon"]) / n
+    methods = {"ko": 0, "sub": 0, "dec": 0}
+    for c in comps:
+        m = c["out"]["method"]
+        if m in methods:
+            methods[m] += 1
+    method_pct = {m: methods[m] / n for m in methods}
+    distance_pct = sum(1 for c in comps if c["out"]["distance"]) / n
+    avg_sig = sum(c["out"]["totalSig"] for c in comps) / n
+    avg_round = sum(c["out"]["endRound"] for c in comps) / n
+
+    fav_name, dog_name = (a_name, b_name) if fav_is_a else (b_name, a_name)
+
+    def result_str(c):
+        o = c["out"]
+        who = "Fav" if o["favWon"] else "Dog"
+        how = {"ko": "KO/TKO", "sub": "Sub", "dec": "Dec"}.get(o["method"], o["method"])
+        return f"{who} by {how} R{o['endRound']}"
+
+    similar = [{
+        "fav": c["meta"]["fav"], "dog": c["meta"]["dog"], "event": c["meta"]["event"],
+        "date": c["meta"]["date"], "result": result_str(c), "dist": round(d ** 0.5, 2),
+    } for d, c in scored[:6]]
+
+    return {
+        "favorite": fav_name, "underdog": dog_name, "n": n,
+        "favWinPct": round(fav_won, 3),
+        "method": {m: round(v, 3) for m, v in method_pct.items()},
+        "distancePct": round(distance_pct, 3),
+        "avgSigStrikes": round(avg_sig, 1),
+        "avgEndRound": round(avg_round, 1),
+        "similar": similar,
+    }

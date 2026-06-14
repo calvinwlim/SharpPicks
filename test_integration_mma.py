@@ -88,6 +88,17 @@ def main():
     print(f"    {fm['aName']} {fm['aWinProb']:.0%} vs {fm['bName']} {fm['bWinProb']:.0%} | "
           f"KO {m['ko']:.0%} Sub {m['sub']:.0%} Dec {m['decision']:.0%} | picks {len(picks)}")
 
+    # Comps (nearest-neighbor) — present + shaped when the vectors dataset exists.
+    comps = a.get("comps")
+    if comps is not None:
+        check(comps["favorite"] in (FIGHT["away"]["name"], FIGHT["home"]["name"]), "comps favorite is one of the fighters")
+        check(0.0 <= comps["favWinPct"] <= 1.0, "comps favorite win pct in range")
+        check(abs(sum(comps["method"].values()) - 1.0) < 0.05, "comps method dist ~sums to 1")
+        check(isinstance(comps["similar"], list) and len(comps["similar"]) >= 1, "comps lists similar fights")
+        print(f"    comps: {comps['favorite']} won {comps['favWinPct']:.0%} of {comps['n']} comps; distance {comps['distancePct']:.0%}")
+    else:
+        print("    comps: none (vectors dataset not built)")
+
     print("\n[missing fighter -> graceful note]")
     mma_data.get_fighter = lambda name: _fighter("Alpha" in name) if "Alpha" in name else None
     a2 = client.get(f"/api/analyze/{FIGHT['gameId']}?date={DATE}&sport=mma").json()
