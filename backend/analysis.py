@@ -28,6 +28,7 @@ PYTHAG_EXP = 1.83           # Pythagorean-expectation exponent
 # strikeouts are adequately modeled by Poisson. Re-tune with backtest.py --sweep.
 K_DISPERSION = None       # strikeouts: Poisson beats base-rate Brier and is well-calibrated
 BB_DISPERSION = 2.5       # walks: backtest sweep minimized Brier near r=2-2.5
+TOTAL_DISPERSION = 12.0   # run totals: mildly over-dispersed; backtest sweep best near r=10-14
 
 DEFAULT_RUNS_PER_GAME = 4.3
 
@@ -1088,7 +1089,7 @@ def analyze_game_total(
 
     projection *= weather_factor * ump_factor * park_factor * wind_factor
 
-    side, line, model_prob = _select_line_and_prob(projection, market)
+    side, line, model_prob = _select_line_and_prob(projection, market, dispersion=TOTAL_DISPERSION)
     edge = _build_edge(side, model_prob, market)
     side_label = "Over" if side == "over" else "Under"
 
@@ -1182,7 +1183,7 @@ def analyze_f5(
     away_f5 = _half_inning_runs(away_rpg, home_starter_ra9) * F5_INNINGS
     total = home_f5 + away_f5
 
-    side, line, model_prob = _select_line_and_prob(total, market)
+    side, line, model_prob = _select_line_and_prob(total, market, dispersion=TOTAL_DISPERSION)
     edge = _build_edge(side, model_prob, market)
     side_label = "Over" if side == "over" else "Under"
 

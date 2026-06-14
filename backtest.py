@@ -319,6 +319,11 @@ def report_total(totals: List[Tuple[float, float]], line: float = 8.5) -> None:
     print(f"\n=== Game Total ({len(totals)} games) ===")
     print(f"  total MAE  {mae:.2f}   bias {bias:+.2f}")
     print(f"  calibration @ {line}:  Brier {_brier(preds, outs):.4f}  (over rate {mean(outs):.0%})")
+    print("  dispersion sweep (Brier @ line; lower=better — run totals are over-dispersed):")
+    for r in (None, 20.0, 14.0, 10.0, 8.0, 6.0):
+        sp = [analysis.count_prob_over(line, p, r) for p in projs]
+        tag = "Poisson" if r is None else f"NB r={r}"
+        print(f"     {tag:>10}: {_brier(sp, outs):.4f}")
 
 
 def report_moneyline(mls: List[Tuple[float, int]]) -> None:

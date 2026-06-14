@@ -25,6 +25,7 @@
       </div>
       <input type="date" id="date-input" />
       <button id="load-btn">Visualize</button>
+      <button id="board-toggle" title="Toggle bet board">📋 Board</button>
       <div class="pills">
         <span class="pill" id="pill-odds">Odds</span>
         <span class="pill" id="pill-props">Props</span>
@@ -41,11 +42,6 @@
     21+ where legal. If it stops being fun, call 1-800-GAMBLER.
   </div>
 
-  <section class="top-board" id="top-board-section" style="display:none;">
-    <h2 class="section-title">Top Board</h2>
-    <div class="top-board-list" id="top-board-list"></div>
-  </section>
-
   <section>
     <h2 class="section-title">Slate</h2>
     <div id="slate-container">
@@ -58,6 +54,23 @@
     promise winners. Bet responsibly.
   </footer>
 </div>
+
+<!-- ---- bet board sidebar -------------------------------------------- -->
+<aside class="bet-sidebar open" id="bet-sidebar">
+  <div class="bet-sidebar-header">
+    <span>Bet Board</span>
+    <button id="bet-sidebar-close" title="Collapse">›</button>
+  </div>
+  <div class="bet-sidebar-sub">
+    <span id="bet-count">0 bets</span>
+    <label class="bet-evonly"><input type="checkbox" id="bet-evonly" /> +EV only</label>
+  </div>
+  <div class="bet-filters" id="bet-filters"></div>
+  <div class="bet-list" id="bet-list">
+    <div class="empty">Analyze games to populate the board.</div>
+  </div>
+</aside>
+<button class="bet-sidebar-reopen" id="bet-sidebar-open" title="Open bet board">📋</button>
 
 <!-- ---- templates ---------------------------------------------------- -->
 
