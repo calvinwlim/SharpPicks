@@ -6,6 +6,7 @@ See CLAUDE.md for the API contract. Data flows one direction:
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -86,31 +87,37 @@ async def _analyze_nba(game_id: str, date: str) -> Dict[str, Any]:
     season = nba.season_for_date(date)
     home, away = game["home"], game["away"]
 
-    try:
-        ratings = await nba.get_team_ratings(season)
-    except Exception:
-        ratings = {"teams": {}, "leagueOrtg": nba_analysis.DEFAULT_ORTG, "leaguePace": nba_analysis.DEFAULT_PACE}
-    try:
-        recent = await nba.get_team_ratings(season, last_n=10)
-    except Exception:
-        recent = None
+    def _ok(v, default):
+        return default if isinstance(v, Exception) else v
 
+    # All team-level fetches are independent — run them concurrently (stats.nba.com
+    # is slow per request, so sequential calls here are what made the tab hang).
+    ratings, recent, opp_stats, players, home_loc, away_loc = await asyncio.gather(
+        nba.get_team_ratings(season),
+        nba.get_team_ratings(season, last_n=10),
+        nba.get_team_opp_stats(season),
+        nba.get_player_season_stats(season),
+        nba.get_team_ratings(season, location="Home"),
+        nba.get_team_ratings(season, location="Road"),
+        return_exceptions=True,
+    )
+    ratings = _ok(ratings, {"teams": {}, "leagueOrtg": nba_analysis.DEFAULT_ORTG,
+                            "leaguePace": nba_analysis.DEFAULT_PACE})
+    recent = _ok(recent, None)
+    opp_stats = _ok(opp_stats, {"teams": {}, "league": {}})
+    players = _ok(players, {})
+    home_split_net = home_loc["teams"].get(home["id"], {}).get("netRtg") if not isinstance(home_loc, Exception) else None
+    away_split_net = away_loc["teams"].get(away["id"], {}).get("netRtg") if not isinstance(away_loc, Exception) else None
+
+    # Rest (schedule already cached by get_schedule above) + H2H.
     home_rest = away_rest = None
     try:
-        hg = await nba.last_game_before(home["id"], season, date)
+        hg, ag = await asyncio.gather(
+            nba.last_game_before(home["id"], season, date),
+            nba.last_game_before(away["id"], season, date),
+        )
         home_rest = (_days(date) - _days(hg)) if hg else None
-        ag = await nba.last_game_before(away["id"], season, date)
         away_rest = (_days(date) - _days(ag)) if ag else None
-    except Exception:
-        pass
-
-    # Added factors: venue splits + head-to-head this season (signals only).
-    home_split_net = away_split_net = None
-    try:
-        home_loc = await nba.get_team_ratings(season, location="Home")
-        away_loc = await nba.get_team_ratings(season, location="Road")
-        home_split_net = home_loc["teams"].get(home["id"], {}).get("netRtg")
-        away_split_net = away_loc["teams"].get(away["id"], {}).get("netRtg")
     except Exception:
         pass
     try:
@@ -123,16 +130,7 @@ async def _analyze_nba(game_id: str, date: str) -> Dict[str, Any]:
         h2h=h2h, home_split_net=home_split_net, away_split_net=away_split_net,
     )
 
-    # Player props (points / rebounds / assists / threes) for the rotation.
     picks: List[Dict[str, Any]] = []
-    try:
-        opp_stats = await nba.get_team_opp_stats(season)
-    except Exception:
-        opp_stats = {"teams": {}, "league": {}}
-    try:
-        players = await nba.get_player_season_stats(season)
-    except Exception:
-        players = {}
     if players:
         picks = await _nba_player_picks(home, away, season, ratings, opp_stats, players, game_model["pace"])
 
@@ -166,30 +164,44 @@ NBA_PLAYERS_PER_TEAM = 6
 
 
 async def _nba_player_picks(home, away, season, ratings, opp_stats, players, exp_pace):
-    picks: List[Dict[str, Any]] = []
+    # Select the rotation (top by minutes) for both teams, then fetch all their
+    # game logs concurrently (a semaphore keeps stats.nba.com from throttling).
+    selected = []  # (team, opp, pid, player)
     for team, opp in ((home, away), (away, home)):
-        team_pace = ratings.get("teams", {}).get(team["id"], {}).get("pace")
         roster = sorted(
             [(pid, p) for pid, p in players.items() if p["teamId"] == team["id"] and p["gp"] >= 5],
             key=lambda kp: kp[1]["min"], reverse=True)[:NBA_PLAYERS_PER_TEAM]
         for pid, p in roster:
+            selected.append((team, opp, pid, p))
+
+    sem = asyncio.Semaphore(6)
+
+    async def fetch(pid):
+        async with sem:
             try:
-                glog = await nba.get_player_gamelog(pid, season)
+                return pid, await nba.get_player_gamelog(pid, season)
             except Exception:
+                return pid, None
+
+    logs = dict(await asyncio.gather(*[fetch(pid) for _, _, pid, _ in selected]))
+
+    picks: List[Dict[str, Any]] = []
+    for team, opp, pid, p in selected:
+        glog = logs.get(pid)
+        if not glog:
+            continue
+        team_pace = ratings.get("teams", {}).get(team["id"], {}).get("pace")
+        for stat_key, label, noun, opp_key, std_floor, thresh in nba_analysis.PLAYER_PROP_SPECS:
+            if p.get(stat_key, 0) < thresh:
                 continue
-            if not glog:
-                continue
-            for stat_key, label, noun, opp_key, std_floor, thresh in nba_analysis.PLAYER_PROP_SPECS:
-                if p.get(stat_key, 0) < thresh:
-                    continue
-                pick = nba_analysis.analyze_nba_player_prop(
-                    player_name=p["name"], stat_key=stat_key, stat_label=label, stat_noun=noun,
-                    gamelog=glog, season_avg=p[stat_key],
-                    opp_allowed=opp_stats.get("teams", {}).get(opp["id"], {}).get(opp_key),
-                    league_allowed=opp_stats.get("league", {}).get(opp_key),
-                    opp_abbr=opp["abbr"], exp_pace=exp_pace, team_pace=team_pace, std_floor=std_floor)
-                if pick is not None:
-                    picks.append(pick)
+            pick = nba_analysis.analyze_nba_player_prop(
+                player_name=p["name"], stat_key=stat_key, stat_label=label, stat_noun=noun,
+                gamelog=glog, season_avg=p[stat_key],
+                opp_allowed=opp_stats.get("teams", {}).get(opp["id"], {}).get(opp_key),
+                league_allowed=opp_stats.get("league", {}).get(opp_key),
+                opp_abbr=opp["abbr"], exp_pace=exp_pace, team_pace=team_pace, std_floor=std_floor)
+            if pick is not None:
+                picks.append(pick)
 
     # Cap per stat type so low-variance threes don't crowd out points/reb/ast,
     # then group by type for a readable board (points first).
