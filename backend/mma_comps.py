@@ -23,17 +23,54 @@ from .mma_analysis import _age, _winpct
 
 VECTORS_FILE = Path(__file__).resolve().parent / "data" / "ufc_fight_vectors.json"
 
+# Feature vector = absolute STYLE descriptors (what kind of fight) + GAP
+# descriptors (how lopsided). Style is weighted far higher so comps are
+# stylistically similar first; the gap still informs the favorite win %.
 FEATURE_NAMES = [
-    "d_slpm", "d_sapm", "d_strDef", "d_tdAvg", "d_tdDef", "d_subAvg", "d_kdPer15",
-    "d_finishRate", "d_finishedRate", "d_winpct", "d_reach", "d_age",
-    "c_finish", "c_pace", "rounds",
+    # --- style (absolute, order-invariant) ---
+    "weight",        # division size (lbs) — a heavyweight slugfest != a flyweight match
+    "c_volume",      # combined SLpM (high-output vs low-output fight)
+    "c_power",       # combined knockdowns/15 (KO-prone)
+    "c_grappling",   # combined takedowns/15 (wrestling-heavy)
+    "c_control",     # combined control time/min (grind)
+    "c_sub",         # combined sub attempts/15 (submission threat)
+    "c_finish",      # combined finish rate (does this style finish?)
+    "c_strDef",      # combined striking defense (technical vs sloppy)
+    "c_durability",  # combined finished-loss rate (how finishable)
+    "rounds",        # 3 vs 5
+    # --- gap (favorite minus underdog) ---
+    "d_winpct", "d_slpm", "d_strDef", "d_tdAvg", "d_kdPer15", "d_finishRate", "d_reach", "d_age",
 ]
+
+# Weighted Euclidean: style dimensions dominate so we match the *kind* of fight,
+# then the gap breaks ties / drives the win %.
+FEATURE_WEIGHTS = [
+    3.0, 1.6, 1.6, 1.6, 1.1, 1.1, 1.4, 1.1, 1.2, 0.8,        # style
+    0.5, 0.5, 0.4, 0.5, 0.5, 0.5, 0.4, 0.4,                  # gap
+]
+
+_WC_TABLE = [
+    ("strawweight", 115), ("flyweight", 125), ("bantamweight", 135), ("featherweight", 145),
+    ("lightweight", 155), ("welterweight", 170), ("middleweight", 185), ("heavyweight", 265),
+]
+
+
+def weight_lbs(weight_class: Optional[str]) -> float:
+    """Approximate division weight in lbs (light heavyweight handled before heavyweight)."""
+    s = (weight_class or "").lower()
+    if "light heavyweight" in s:
+        return 205.0
+    for key, lbs in _WC_TABLE:
+        if key in s:
+            return float(lbs)
+    return 170.0  # catchweight / unknown -> welterweight-ish
 
 
 def build_vector(a: Dict[str, Any], b: Dict[str, Any], rounds: int,
                  fight_date: Optional[str] = None) -> Tuple[List[float], bool]:
-    """Matchup feature vector, oriented favorite-minus-underdog (favorite = higher
-    win%). Returns ``(vector, fav_is_a)``."""
+    """Matchup feature vector. Style features are symmetric; gap features are
+    oriented favorite-minus-underdog (favorite = higher win%). Returns
+    ``(vector, fav_is_a)``."""
     fav_is_a = _winpct(a) >= _winpct(b)
     fav, dog = (a, b) if fav_is_a else (b, a)
     fa, da = _age(fav.get("dob"), fight_date), _age(dog.get("dob"), fight_date)
@@ -42,22 +79,28 @@ def build_vector(a: Dict[str, Any], b: Dict[str, Any], rounds: int,
     def g(f, k):
         return float(f.get(k, 0.0) or 0.0)
 
+    weight = (weight_lbs(a.get("weightClass")) + weight_lbs(b.get("weightClass"))) / 2.0
     vec = [
+        # style (absolute)
+        weight,
+        g(a, "slpm") + g(b, "slpm"),
+        g(a, "kdPer15") + g(b, "kdPer15"),
+        g(a, "tdAvg") + g(b, "tdAvg"),
+        g(a, "ctrlPerMin") + g(b, "ctrlPerMin"),
+        g(a, "subAvg") + g(b, "subAvg"),
+        g(a, "finishRate") + g(b, "finishRate"),
+        g(a, "strDef") + g(b, "strDef"),
+        g(a, "finishedRate") + g(b, "finishedRate"),
+        float(rounds),
+        # gap (favorite - underdog)
+        _winpct(fav) - _winpct(dog),
         g(fav, "slpm") - g(dog, "slpm"),
-        g(fav, "sapm") - g(dog, "sapm"),
         g(fav, "strDef") - g(dog, "strDef"),
         g(fav, "tdAvg") - g(dog, "tdAvg"),
-        g(fav, "tdDef") - g(dog, "tdDef"),
-        g(fav, "subAvg") - g(dog, "subAvg"),
         g(fav, "kdPer15") - g(dog, "kdPer15"),
         g(fav, "finishRate") - g(dog, "finishRate"),
-        g(fav, "finishedRate") - g(dog, "finishedRate"),
-        _winpct(fav) - _winpct(dog),
         (fav.get("reachIn") or 0.0) - (dog.get("reachIn") or 0.0),
         d_age,
-        g(fav, "finishRate") + g(dog, "finishRate"),
-        g(fav, "slpm") + g(dog, "slpm"),
-        float(rounds),
     ]
     return vec, fav_is_a
 
@@ -92,9 +135,10 @@ def find_comps(a: Dict[str, Any], b: Dict[str, Any], a_name: str, b_name: str,
     mean, std, rows = data["mean"], data["std"], data["vectors"]
     vec, fav_is_a = build_vector(a, b, rounds, fight_date)
     zq = [(vec[i] - mean[i]) / std[i] for i in range(len(mean))]
+    w = FEATURE_WEIGHTS
 
     scored = sorted(
-        ((sum((zq[i] - row["z"][i]) ** 2 for i in range(len(zq))), row) for row in rows),
+        ((sum(w[i] * (zq[i] - row["z"][i]) ** 2 for i in range(len(zq))), row) for row in rows),
         key=lambda x: x[0])[:k]
     if not scored:
         return None

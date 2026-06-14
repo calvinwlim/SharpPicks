@@ -50,7 +50,8 @@ async def main_async() -> None:
             er = 0
         rounds = 5 if "5 Rnd" in (row.get("TIME FORMAT") or "") else 3
         bouts.append({"date": d, "event": event, "bout": bout, "names": names, "winner": winner,
-                      "method": B.classify(row.get("METHOD", "")), "endRound": max(er, 1), "rounds": rounds})
+                      "method": B.classify(row.get("METHOD", "")), "endRound": max(er, 1), "rounds": rounds,
+                      "wc": (row.get("WEIGHTCLASS") or "").replace("Bout", "").strip()})
     bouts.sort(key=lambda x: x["date"])
 
     running: Dict[str, Dict[str, float]] = {}
@@ -64,6 +65,7 @@ async def main_async() -> None:
         if acc_a and acc_b and acc_a["fights"] >= MIN_PRIOR and acc_b["fights"] >= MIN_PRIOR and sa and sb:
             fa = B.rates(acc_a, phys.get(na, {}))
             fb = B.rates(acc_b, phys.get(nb, {}))
+            fa["weightClass"] = bt["wc"]; fb["weightClass"] = bt["wc"]  # division from the bout
             vec, fav_is_a = C.build_vector(fa, fb, bt["rounds"], bt["date"].isoformat())
             fav = a if fav_is_a else b
             dog = b if fav_is_a else a
@@ -109,6 +111,7 @@ async def main_async() -> None:
 def _validate(vectors, mean_v, std_v, k=60, since="2023-01-01"):
     """Holdout: predict each fight since `since` from earlier comps only."""
     dim = len(mean_v)
+    w = C.FEATURE_WEIGHTS
     z = [[(v["vec"][i] - mean_v[i]) / std_v[i] for i in range(dim)] for v in vectors]
     since_d = since
     fav_p, fav_o, dist_p, dist_o, method_correct, method_n = [], [], [], [], 0, 0
@@ -116,8 +119,8 @@ def _validate(vectors, mean_v, std_v, k=60, since="2023-01-01"):
         if v["meta"]["date"] < since_d or i < 200:
             continue
         zi = z[i]
-        # neighbors strictly earlier (vectors are in chronological order)
-        scored = sorted(((sum((zi[d] - z[j][d]) ** 2 for d in range(dim)), j) for j in range(i)),
+        # neighbors strictly earlier (vectors are in chronological order), weighted
+        scored = sorted(((sum(w[d] * (zi[d] - z[j][d]) ** 2 for d in range(dim)), j) for j in range(i)),
                         key=lambda x: x[0])[:k]
         comps = [vectors[j] for _, j in scored]
         p = sum(c["out"]["favWon"] for c in comps) / len(comps)
