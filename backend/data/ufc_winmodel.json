@@ -1,0 +1,34 @@
+{
+  "features": [
+    "d_striking_net",
+    "d_slpm",
+    "d_strDef",
+    "d_tdAvg",
+    "d_tdDef",
+    "d_ctrl",
+    "d_sub",
+    "d_kd",
+    "d_finish",
+    "d_durability",
+    "d_winpct",
+    "d_reach",
+    "d_age"
+  ],
+  "weights": [
+    0.149537,
+    -0.038956,
+    1.820738,
+    0.062915,
+    0.209982,
+    0.179479,
+    -0.084119,
+    -0.046777,
+    0.508458,
+    0.073738,
+    0.883318,
+    0.024827,
+    0.060728
+  ],
+  "intercept": -0.0,
+  "n": 5972
+}

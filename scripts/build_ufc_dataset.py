@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import datetime
 import io
 import json
 import re
@@ -84,12 +85,24 @@ def classify_method(method: str) -> str:
 
 async def main() -> None:
     async with httpx.AsyncClient(timeout=60.0, headers=UA, follow_redirects=True) as c:
-        print("fetching results, stats, tale-of-the-tape...")
-        results, fstats, tott = await asyncio.gather(
+        print("fetching results, stats, tale-of-the-tape, events...")
+        results, fstats, tott, events = await asyncio.gather(
             fetch_csv(c, "ufc_fight_results.csv"),
             fetch_csv(c, "ufc_fight_stats.csv"),
             fetch_csv(c, "ufc_fighter_tott.csv"),
+            fetch_csv(c, "ufc_event_details.csv"),
         )
+
+    # Event -> date, so we can record each fighter's most recent bout (for layoff).
+    event_date: Dict[str, datetime.date] = {}
+    for e in events:
+        raw = (e.get("DATE") or "").strip()
+        for fmt in ("%B %d, %Y", "%b %d, %Y"):
+            try:
+                event_date[e["EVENT"].strip()] = datetime.datetime.strptime(raw, fmt).date()
+                break
+            except ValueError:
+                continue
 
     # Bout metadata: winner, method, ending round/time -> fight minutes.
     bouts: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -125,12 +138,19 @@ async def main() -> None:
 
     # Aggregate per fighter, pairing opponents within each bout.
     agg: Dict[str, Dict[str, Any]] = {}
+    last_date: Dict[str, datetime.date] = {}  # most recent bout per fighter (for layoff)
     for (event, bout), meta in bouts.items():
         a, bb = meta["names"]
         sa, sb = box.get((event, bout, a)), box.get((event, bout, bb))
         if not sa or not sb:
             continue
         minutes = meta["minutes"]
+        d = event_date.get(event)
+        if d:
+            for nm in (a, bb):
+                key = _norm(nm)
+                if key not in last_date or d > last_date[key]:
+                    last_date[key] = d
         for me, opp, ms, os in ((a, bb, sa, sb), (bb, a, sb, sa)):
             g = agg.setdefault(_norm(me), _fresh())
             g["name"] = me
@@ -185,6 +205,7 @@ async def main() -> None:
             "finishRate": rate(g["koW"] + g["subW"], wins),
             "finishedRate": rate(g["koL"] + g["subL"], losses),
             "weightClass": max(g["wc"], key=g["wc"].get) if g["wc"] else None,
+            "lastFightDate": last_date[key].isoformat() if key in last_date else None,
         }
         rec.update(phys.get(key, {}))
         out[key] = rec

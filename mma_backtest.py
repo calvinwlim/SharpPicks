@@ -99,7 +99,9 @@ async def load() -> Tuple[list, list, dict, dict]:
                 continue
     phys = {}
     for row in tott:
-        phys[norm(row["FIGHTER"])] = {"reachIn": reach_in(row.get("REACH", "")), "dob": (row.get("DOB") or "").strip() or None}
+        phys[norm(row["FIGHTER"])] = {"reachIn": reach_in(row.get("REACH", "")),
+                                      "dob": (row.get("DOB") or "").strip() or None,
+                                      "stance": (row.get("STANCE") or "").strip() or None}
     # per (event,bout,fighter) box sums
     box: Dict[Tuple[str, str, str], Dict[str, float]] = {}
     for row in fstats:
@@ -251,16 +253,18 @@ async def main_async(since: str) -> None:
     rec_acc = mean(int((p >= 0.5) == bool(o)) for p, o in zip(win_p_recent, win_o))
     print(f"  recent-blend Brier {_brier(win_p_recent, win_o):.4f}   acc {rec_acc:.1%}")
 
-    print("\n=== Win-prob scale sweep (Brier; lower=better) ===")
+    # winDiff is the decision logit (learned model or hand-tuned/scale); a
+    # temperature sweep should bottom out near T=1.0 if it's well-calibrated.
+    model_tag = "learned coefficients" if M._WINMODEL else f"hand-tuned (WIN_DIFF_SCALE={M.WIN_DIFF_SCALE})"
+    print(f"\n=== Win-prob logit-temperature sweep (Brier; lower=better) — {model_tag} ===")
     best = None
-    for scale in (3, 4, 5, 6, 7, 8, 10, 12):
-        preds = [min(max(1 / (1 + math.exp(-d / scale)), M.WIN_PROB_FLOOR), M.WIN_PROB_CEIL) for d, _ in win_diff_pairs]
+    for temp in (0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0):
+        preds = [min(max(1 / (1 + math.exp(-d / temp)), M.WIN_PROB_FLOOR), M.WIN_PROB_CEIL) for d, _ in win_diff_pairs]
         br = _brier(preds, [o for _, o in win_diff_pairs])
-        mark = ""
         if best is None or br < best[1]:
-            best = (scale, br); mark = ""
-        print(f"  scale {scale:>2}: Brier {br:.4f}")
-    print(f"  -> best scale {best[0]} (Brier {best[1]:.4f}); current WIN_DIFF_SCALE={M.WIN_DIFF_SCALE}")
+            best = (temp, br)
+        print(f"  T={temp:>4}: Brier {br:.4f}")
+    print(f"  -> best temperature {best[0]} (Brier {best[1]:.4f}); 1.0 = as-calibrated")
 
     print("\n=== Distance (goes to decision) ===")
     print(f"  accuracy  {mean(int((p>=0.5)==bool(o)) for p,o in zip(dist_p,dist_o)):.1%}")

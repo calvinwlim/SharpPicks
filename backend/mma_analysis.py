@@ -21,7 +21,9 @@ Pure functions, no I/O.
 """
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .analysis import poisson_cdf
@@ -33,9 +35,18 @@ LG_STR_DEF = 0.55
 LG_TD_DEF = 0.65
 LG_FIN_PER_FIGHT = 0.22  # league-average finishes per fight (for durability scaling)
 WIN_PROB_FLOOR, WIN_PROB_CEIL = 0.12, 0.88  # MMA upsets are common — don't overclaim
-WIN_DIFF_SCALE = 6.0   # logistic scale on the skill differential (calibrated via mma_backtest.py)
+WIN_DIFF_SCALE = 6.0   # logistic scale on the hand-tuned differential (fallback when no learned model)
 SIG_STD_FRAC = 0.30    # std of a sig-strike projection as a fraction of the mean
 FINISH_MID_FRAC = 0.45  # finishes land ~45% of the way through the scheduled time
+
+# Learned winner model (coefficients fit by scripts/build_mma_winmodel.py on
+# point-in-time bouts). When present we use it; otherwise the hand-tuned formula
+# in _win_diff is the fallback, so the model degrades gracefully.
+_WINMODEL_FILE = Path(__file__).resolve().parent / "data" / "ufc_winmodel.json"
+try:
+    _WINMODEL: Optional[Dict[str, Any]] = json.loads(_WINMODEL_FILE.read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    _WINMODEL = None
 
 
 def normal_cdf(x: float) -> float:
@@ -118,7 +129,10 @@ def _td_projection(att: Dict[str, Any], dfn: Dict[str, Any], minutes: float) -> 
 # --------------------------------------------------------------------------- winner
 
 def _skill_score(f: Dict[str, Any], opp: Dict[str, Any]) -> float:
-    """A fighter's composite rating in this matchup (higher = better)."""
+    """A fighter's composite rating in this matchup (higher = better).
+
+    Used by the hand-tuned fallback and still surfaced in the signals.
+    """
     striking_net = (f.get("slpm", 0) - f.get("sapm", 0))
     grappling = f.get("tdAvg", 0) * f.get("tdAcc", 0) + f.get("ctrlPerMin", 0) * 2.0 + f.get("subAvg", 0)
     defense = f.get("strDef", LG_STR_DEF) * 6.0 + f.get("tdDef", LG_TD_DEF) * 3.0
@@ -126,17 +140,105 @@ def _skill_score(f: Dict[str, Any], opp: Dict[str, Any]) -> float:
     return striking_net + grappling + defense + finishing
 
 
-def _win_diff(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_age: Optional[float]) -> float:
+# Canonical learned-model feature order. scripts/build_mma_winmodel.py imports
+# this and _win_features, so the trained coefficients always line up.
+WIN_FEATURE_NAMES = [
+    "d_striking_net", "d_slpm", "d_strDef", "d_tdAvg", "d_tdDef", "d_ctrl",
+    "d_sub", "d_kd", "d_finish", "d_durability", "d_winpct", "d_reach", "d_age",
+    "d_age_cliff", "d_stance", "d_rust",
+]
+
+_SOUTHPAW, _ORTHODOX = "southpaw", "orthodox"
+
+
+def _stance_edge(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+    """+1 when ``a`` is the southpaw vs an orthodox ``b`` (the known small edge),
+    -1 in the reverse, 0 when stances match or are unknown/switch."""
+    sa = (a.get("stance") or "").strip().lower()
+    sb = (b.get("stance") or "").strip().lower()
+    if sa == _SOUTHPAW and sb == _ORTHODOX:
+        return 1.0
+    if sa == _ORTHODOX and sb == _SOUTHPAW:
+        return -1.0
+    return 0.0
+
+
+def _age_cliff(age: Optional[float]) -> float:
+    """Years past 35 (the rough decline cliff); 0 below it or when unknown."""
+    return max(age - 35.0, 0.0) if age is not None else 0.0
+
+
+def rust_value(layoff_years: Optional[float]) -> float:
+    """Ring-rust penalty input: years of layoff beyond 1, capped at 2."""
+    if layoff_years is None:
+        return 0.0
+    return _clamp(layoff_years - 1.0, 0.0, 2.0)
+
+
+def layoff_years(last_fight_date: Optional[str], fight_date: Optional[str]) -> Optional[float]:
+    if not last_fight_date or not fight_date:
+        return None
+    import datetime
+    try:
+        d0 = datetime.date.fromisoformat(last_fight_date)
+        d1 = datetime.date.fromisoformat(fight_date)
+        return max((d1 - d0).days, 0) / 365.25
+    except (ValueError, TypeError):
+        return None
+
+
+def _win_features(a: Dict[str, Any], b: Dict[str, Any],
+                  a_age: Optional[float], b_age: Optional[float],
+                  a_rust: float = 0.0, b_rust: float = 0.0) -> List[float]:
+    """``a − b`` differentials, in WIN_FEATURE_NAMES order (each oriented so a
+    higher value favours fighter ``a``)."""
+    reach = ((a.get("reachIn") or 0) - (b.get("reachIn") or 0)) if (a.get("reachIn") and b.get("reachIn")) else 0.0
+    age = (b_age - a_age) if (a_age is not None and b_age is not None) else 0.0
+    return [
+        (a.get("slpm", 0) - a.get("sapm", 0)) - (b.get("slpm", 0) - b.get("sapm", 0)),
+        a.get("slpm", 0) - b.get("slpm", 0),
+        a.get("strDef", LG_STR_DEF) - b.get("strDef", LG_STR_DEF),
+        a.get("tdAvg", 0) - b.get("tdAvg", 0),
+        a.get("tdDef", LG_TD_DEF) - b.get("tdDef", LG_TD_DEF),
+        a.get("ctrlPerMin", 0) - b.get("ctrlPerMin", 0),
+        a.get("subAvg", 0) - b.get("subAvg", 0),
+        a.get("kdPer15", 0) - b.get("kdPer15", 0),
+        a.get("finishRate", 0) - b.get("finishRate", 0),
+        b.get("finishedRate", 0) - a.get("finishedRate", 0),  # durability: a tougher -> positive
+        _winpct(a) - _winpct(b),
+        reach,
+        age,
+        _age_cliff(b_age) - _age_cliff(a_age),  # a past the cliff -> negative
+        _stance_edge(a, b),
+        b_rust - a_rust,  # b rustier -> favours a
+    ]
+
+
+def _win_logit(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_age: Optional[float],
+               a_rust: float = 0.0, b_rust: float = 0.0) -> float:
+    """Logit for P(a beats b): learned coefficients when available, else the
+    hand-tuned composite scaled by WIN_DIFF_SCALE."""
+    if _WINMODEL:
+        feats = _win_features(a, b, a_age, b_age, a_rust, b_rust)
+        w = _WINMODEL["weights"]
+        return _WINMODEL["intercept"] + sum(w[i] * feats[i] for i in range(len(w)))
     diff = _skill_score(a, b) - _skill_score(b, a)
     diff += (_winpct(a) - _winpct(b)) * 3.0
     diff += ((a.get("reachIn") or 0) - (b.get("reachIn") or 0)) * 0.05
     if a_age is not None and b_age is not None:
         diff += (b_age - a_age) * 0.06  # youth edge
-    return diff
+    return diff / WIN_DIFF_SCALE
 
 
-def _win_prob(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_age: Optional[float]) -> float:
-    return _clamp(_logistic(_win_diff(a, b, a_age, b_age) / WIN_DIFF_SCALE), WIN_PROB_FLOOR, WIN_PROB_CEIL)
+# Back-compat alias: ``winDiff`` in the fight model is the decision logit.
+def _win_diff(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_age: Optional[float],
+              a_rust: float = 0.0, b_rust: float = 0.0) -> float:
+    return _win_logit(a, b, a_age, b_age, a_rust, b_rust)
+
+
+def _win_prob(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_age: Optional[float],
+              a_rust: float = 0.0, b_rust: float = 0.0) -> float:
+    return _clamp(_logistic(_win_logit(a, b, a_age, b_age, a_rust, b_rust)), WIN_PROB_FLOOR, WIN_PROB_CEIL)
 
 
 # --------------------------------------------------------------------------- pick helpers
@@ -174,10 +276,13 @@ def analyze_fight(
 ) -> Dict[str, Any]:
     """Full fight model + prop picks. ``a`` is treated as the first-listed corner."""
     a_age, b_age = _age(a.get("dob"), fight_date), _age(b.get("dob"), fight_date)
+    a_layoff = layoff_years(a.get("lastFightDate"), fight_date)
+    b_layoff = layoff_years(b.get("lastFightDate"), fight_date)
+    a_rust, b_rust = rust_value(a_layoff), rust_value(b_layoff)
 
     # ---- winner ----
-    win_diff = _win_diff(a, b, a_age, b_age)
-    a_win = _win_prob(a, b, a_age, b_age)
+    win_diff = _win_diff(a, b, a_age, b_age, a_rust, b_rust)
+    a_win = _win_prob(a, b, a_age, b_age, a_rust, b_rust)
 
     # ---- distance / method / rounds ----
     pa_fin = _p_finish(a, b)
@@ -234,8 +339,16 @@ def analyze_fight(
         signals.append(_sig("Reach", f"{a_name} {a['reachIn']:.0f}\" vs {b_name} {b['reachIn']:.0f}\"",
                             "a" if a["reachIn"] >= b["reachIn"] else "b"))
     if a_age is not None and b_age is not None:
-        signals.append(_sig("Age", f"{a_name} {a_age:.0f} vs {b_name} {b_age:.0f}",
+        cliff = " (one past the ~35 decline)" if (_age_cliff(a_age) or _age_cliff(b_age)) else ""
+        signals.append(_sig("Age", f"{a_name} {a_age:.0f} vs {b_name} {b_age:.0f}{cliff}",
                             "a" if a_age <= b_age else "b"))
+    stance_edge = _stance_edge(a, b)
+    if stance_edge:
+        signals.append(_sig("Stance", f"{a_name} {a.get('stance')} vs {b_name} {b.get('stance')} "
+                            f"(southpaw edge)", "a" if stance_edge > 0 else "b"))
+    if (a_layoff and a_layoff >= 1.0) or (b_layoff and b_layoff >= 1.0):
+        signals.append(_sig("Layoff", f"{a_name} {a_layoff or 0:.1f}y vs {b_name} {b_layoff or 0:.1f}y since last bout "
+                            f"(ring rust)", "a" if a_rust <= b_rust else "b"))
 
     fight_model = {
         "aName": a_name, "bName": b_name, "rounds": rounds,
