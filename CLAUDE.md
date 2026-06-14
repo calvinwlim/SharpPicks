@@ -26,6 +26,22 @@ Tests (synthetic data, no network needed):
 ```bash
 python3 test_integration.py       # MLB API end-to-end
 python3 test_integration_nba.py   # NBA API end-to-end (?sport=nba)
+python3 test_integration_mma.py   # MMA/UFC API end-to-end (?sport=mma)
+```
+
+UFC fighter dataset (the MMA model reads `backend/data/ufc_fighters.json`;
+there is no live free rate-stat API). (Re)build it by aggregating the public
+ufcstats mirror — run after new events:
+
+```bash
+python3 scripts/build_ufc_dataset.py
+```
+
+Backtests (live data, measure model accuracy):
+
+```bash
+python3 backtest.py --season 2025 --pitchers 25   # MLB projection accuracy + calibration
+python3 mma_backtest.py --since 2022-01-01         # MMA winner/distance/method point-in-time
 ```
 
 Backtesting (live data, measures model accuracy — needs network):

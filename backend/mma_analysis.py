@@ -33,6 +33,7 @@ LG_STR_DEF = 0.55
 LG_TD_DEF = 0.65
 LG_FIN_PER_FIGHT = 0.22  # league-average finishes per fight (for durability scaling)
 WIN_PROB_FLOOR, WIN_PROB_CEIL = 0.12, 0.88  # MMA upsets are common — don't overclaim
+WIN_DIFF_SCALE = 6.0   # logistic scale on the skill differential (calibrated via mma_backtest.py)
 SIG_STD_FRAC = 0.30    # std of a sig-strike projection as a fraction of the mean
 FINISH_MID_FRAC = 0.45  # finishes land ~45% of the way through the scheduled time
 
@@ -125,13 +126,17 @@ def _skill_score(f: Dict[str, Any], opp: Dict[str, Any]) -> float:
     return striking_net + grappling + defense + finishing
 
 
-def _win_prob(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_age: Optional[float]) -> float:
+def _win_diff(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_age: Optional[float]) -> float:
     diff = _skill_score(a, b) - _skill_score(b, a)
     diff += (_winpct(a) - _winpct(b)) * 3.0
     diff += ((a.get("reachIn") or 0) - (b.get("reachIn") or 0)) * 0.05
     if a_age is not None and b_age is not None:
         diff += (b_age - a_age) * 0.06  # youth edge
-    return _clamp(_logistic(diff / 6.0), WIN_PROB_FLOOR, WIN_PROB_CEIL)
+    return diff
+
+
+def _win_prob(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_age: Optional[float]) -> float:
+    return _clamp(_logistic(_win_diff(a, b, a_age, b_age) / WIN_DIFF_SCALE), WIN_PROB_FLOOR, WIN_PROB_CEIL)
 
 
 # --------------------------------------------------------------------------- pick helpers
@@ -171,6 +176,7 @@ def analyze_fight(
     a_age, b_age = _age(a.get("dob"), fight_date), _age(b.get("dob"), fight_date)
 
     # ---- winner ----
+    win_diff = _win_diff(a, b, a_age, b_age)
     a_win = _win_prob(a, b, a_age, b_age)
 
     # ---- distance / method / rounds ----
@@ -234,6 +240,7 @@ def analyze_fight(
     fight_model = {
         "aName": a_name, "bName": b_name, "rounds": rounds,
         "aWinProb": round(a_win, 4), "bWinProb": round(1 - a_win, 4),
+        "winDiff": round(win_diff, 3),
         "distanceProb": round(distance_p, 4),
         "method": {"ko": round(p_ko, 4), "sub": round(p_sub, 4), "decision": round(distance_p, 4)},
         "roundProbs": round_probs_named,
