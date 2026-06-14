@@ -861,6 +861,7 @@ fetch("/api/health")
 
 betSidebarClose.addEventListener("click", () => betSidebar.classList.remove("open"));
 betSidebarOpen.addEventListener("click", () => betSidebar.classList.add("open"));
+document.getElementById("board-toggle").addEventListener("click", () => betSidebar.classList.toggle("open"));
 betEvOnly.addEventListener("change", renderBetBoard);
 
 loadSlate(dateInput.value);
