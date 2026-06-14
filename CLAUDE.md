@@ -50,6 +50,10 @@ backend/                FastAPI app + the model (Python, async)
   analysis.py           THE MLB MODEL: projection, splits, confidence, EV, game model
   nba.py                NBA client (cdn.nba.com schedule + stats.nba.com ratings, no key)
   nba_analysis.py       THE NBA MODEL: efficiency+pace -> score/spread/total/winprob + signals
+  mma.py                UFC card client (ESPN MMA API, no key)
+  mma_data.py           loader for the bundled fighter rate-stat dataset
+  mma_analysis.py       THE MMA MODEL: rate-stat diffs + finish hazard -> winner/method/distance/strikes/TD + signals
+  data/ufc_fighters.json  bundled fighter career rate stats (built by scripts/build_ufc_dataset.py)
   ai.py                 narrative: deterministic template + optional Claude rephrase
   cache.py              in-process TTL cache with per-key locks
 frontend/               static single-page UI (no framework, no build)

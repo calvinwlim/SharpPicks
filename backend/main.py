@@ -16,7 +16,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from . import ai as ai_module
-from . import analysis, mlb, nba, nba_analysis, odds, parks, savant, umpires, weather as weather_module
+from . import (analysis, mlb, mma, mma_analysis, mma_data, nba, nba_analysis,
+               odds, parks, savant, umpires, weather as weather_module)
 
 load_dotenv()
 
@@ -54,6 +55,9 @@ async def slate(date: str, sport: str = "mlb") -> Dict[str, Any]:
     if sport == "nba":
         games = await nba.get_schedule(date)
         return {"date": date, "sport": "nba", "count": len(games), "games": games, "flags": _flags()}
+    if sport == "mma":
+        games = await mma.get_schedule(date)
+        return {"date": date, "sport": "mma", "count": len(games), "games": games, "flags": _flags()}
     games = await mlb.get_schedule(date)
     return {"date": date, "sport": "mlb", "count": len(games), "games": games, "flags": _flags()}
 
@@ -75,7 +79,28 @@ def _days(iso: str) -> int:
 async def analyze(game_id: str, date: str, seasons: int = 4, ai: int = 0, sport: str = "mlb") -> Dict[str, Any]:
     if sport == "nba":
         return await _analyze_nba(game_id, date)
+    if sport == "mma":
+        return await _analyze_mma(game_id, date)
     return await _analyze_mlb(int(game_id), date, seasons, ai)
+
+
+async def _analyze_mma(game_id: str, date: str) -> Dict[str, Any]:
+    fights = await mma.get_schedule(date)
+    fight = next((f for f in fights if f["gameId"] == game_id), None)
+    if fight is None:
+        raise HTTPException(status_code=404, detail="fight not found for that date")
+
+    a_name, b_name = fight["away"]["name"], fight["home"]["name"]
+    a, b = mma_data.get_fighter(a_name), mma_data.get_fighter(b_name)
+    if not a or not b:
+        missing = a_name if not a else b_name
+        return {"gameId": game_id, "sport": "mma", "fight": fight, "fightModel": None,
+                "picks": [], "note": f"No rate-stat data for {missing} — run scripts/build_ufc_dataset.py to refresh.",
+                "flags": _flags()}
+
+    model = mma_analysis.analyze_fight(a, b, a_name, b_name, rounds=fight.get("rounds", 3), fight_date=date)
+    return {"gameId": game_id, "sport": "mma", "fight": fight,
+            "fightModel": model["fightModel"], "picks": model["picks"], "flags": _flags()}
 
 
 async def _analyze_nba(game_id: str, date: str) -> Dict[str, Any]:
@@ -511,6 +536,7 @@ async def shutdown() -> None:
     await weather_module.close()
     await savant.close()
     await nba.close()
+    await mma.close()
 
 
 if FRONTEND_DIR.exists():

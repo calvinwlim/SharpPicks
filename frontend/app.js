@@ -83,6 +83,11 @@ function renderGameCard(game, date) {
   if (currentSport === "nba") {
     card.querySelector(".venue").textContent = game.status || "";
     card.querySelector(".time").textContent = fmtTime(game.gameDate);
+  } else if (currentSport === "mma") {
+    card.querySelector(".venue").textContent = `${game.rounds}R · ${(game.event || "").split(":")[0]}`;
+    card.querySelector(".time").textContent = game.status || "";
+    const at = card.querySelector(".at");
+    if (at) at.textContent = "vs";
   } else {
     card.querySelector(".venue").textContent = game.venue || "";
     card.querySelector(".time").textContent =
@@ -115,6 +120,8 @@ function fillTeam(el, team) {
   const pitcherEl = el.querySelector(".pitcher");
   if (currentSport === "nba") {
     pitcherEl.textContent = team.name || "";
+  } else if (currentSport === "mma") {
+    pitcherEl.textContent = team.record || "";
   } else {
     const pp = team.probablePitcher;
     pitcherEl.textContent = pp ? pp.name : "TBD";
@@ -133,6 +140,8 @@ async function loadAnalysis(game, date, container, btn) {
     container.dataset.loaded = "1";
     if (data.sport === "nba") {
       renderNbaAnalysis(data, game, container);
+    } else if (data.sport === "mma") {
+      renderMmaAnalysis(data, game, container);
     } else {
       renderAnalysis(data, game, container);
       addToTopBoard(data, game);
@@ -438,6 +447,94 @@ function renderNbaSignals(gm, away, home) {
   return wrap;
 }
 
+// ---- MMA / UFC rendering ----------------------------------------------------
+
+function renderMmaAnalysis(data, game, container) {
+  container.innerHTML = "";
+  const fm = data.fightModel;
+  if (!fm) {
+    const div = document.createElement("div");
+    div.className = "empty";
+    div.textContent = data.note || "No model output for this fight.";
+    container.appendChild(div);
+    return;
+  }
+
+  // Win-probability bars (away corner = fighter A, home corner = fighter B).
+  const tpl = document.getElementById("tpl-game-model");
+  const node = tpl.content.cloneNode(true);
+  const aWp = node.querySelector(".away-wp");
+  aWp.querySelector(".label").textContent = `${fm.aName} ${(fm.aWinProb * 100).toFixed(0)}%`;
+  aWp.querySelector(".bar > span").style.width = `${(fm.aWinProb * 100).toFixed(0)}%`;
+  const bWp = node.querySelector(".home-wp");
+  bWp.querySelector(".label").textContent = `${fm.bName} ${(fm.bWinProb * 100).toFixed(0)}%`;
+  bWp.querySelector(".bar > span").style.width = `${(fm.bWinProb * 100).toFixed(0)}%`;
+  container.appendChild(node);
+
+  container.appendChild(renderMmaSummaryCard(fm));
+  if (fm.signals && fm.signals.length) container.appendChild(renderMmaSignals(fm));
+
+  if (data.picks && data.picks.length) {
+    const heading = document.createElement("div");
+    heading.className = "signals-heading";
+    heading.style.marginTop = "10px";
+    heading.textContent = "Props";
+    container.appendChild(heading);
+    for (const pick of data.picks) {
+      const { node: card } = renderPickCard(pick);
+      container.appendChild(card);
+    }
+  }
+}
+
+function renderMmaSummaryCard(fm) {
+  const card = document.createElement("div");
+  card.className = "pick-card";
+  const m = fm.method;
+  const rp = fm.roundProbs || {};
+  const roundsTxt = Object.keys(rp).filter((k) => k.startsWith("R"))
+    .map((k) => `${k} ${(rp[k] * 100).toFixed(0)}%`).join(" · ");
+  card.innerHTML = `
+    <div class="pick-header"><div class="pick-title">${fm.aName} vs ${fm.bName} (${fm.rounds}R)</div></div>
+    <div class="nba-lines">
+      <span>KO/TKO <strong>${(m.ko * 100).toFixed(0)}%</strong></span>
+      <span>Sub <strong>${(m.sub * 100).toFixed(0)}%</strong></span>
+      <span>Decision <strong>${(m.decision * 100).toFixed(0)}%</strong></span>
+      <span>Goes distance ${(fm.distanceProb * 100).toFixed(0)}%</span>
+    </div>
+    <div class="narrative">Finish by round: ${roundsTxt} · decision ${(rp.decision * 100).toFixed(0)}%.
+      Projected sig. strikes: ${fm.aName} ${fm.projSigStrikes.a} / ${fm.bName} ${fm.projSigStrikes.b}
+      (total ${fm.projSigStrikes.total}) over ~${fm.expMinutes} min.</div>`;
+  return card;
+}
+
+function renderMmaSignals(fm) {
+  const favored = fm.aWinProb >= 0.5 ? "a" : "b";
+  const wrap = document.createElement("div");
+  wrap.className = "signals-block";
+  const heading = document.createElement("div");
+  heading.className = "signals-heading";
+  heading.textContent = "Signals & discrepancies";
+  wrap.appendChild(heading);
+
+  const tagMap = { a: fm.aName.split(" ").pop(), b: fm.bName.split(" ").pop(),
+                   over: "OVER", under: "UNDER", neutral: "—" };
+  for (const s of fm.signals) {
+    let color = "#97a3c4";
+    if (s.lean === "a" || s.lean === "b") color = s.lean === favored ? "#3ecf8e" : "#ffcb47";
+    else if (s.lean === "over" || s.lean === "under") color = "#6ea8fe";
+    const row = document.createElement("div");
+    row.className = "signal-row";
+    row.innerHTML =
+      `<span class="signal-dot" style="color:${color}">●</span>` +
+      `<span class="signal-label">${s.label}</span>` +
+      `<span class="signal-detail">${s.detail}</span>` +
+      `<span class="signal-lean" style="color:${color}">${tagMap[s.lean] || s.lean}</span>`;
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
 // Discrepancy signals: each input behind the model number, tagged by which
 // side it leans, so the user can see where the evidence agrees or conflicts
 // with the pick (and form their own read) rather than just trusting confidence.
@@ -528,6 +625,10 @@ function renderPickCard(pick) {
   }
 
   const canvas = node.querySelector("canvas");
+  if (!pick.spark || !pick.spark.length) {
+    const wrap = node.querySelector(".chip-wrap");
+    if (wrap) wrap.style.display = "none";
+  }
   return { node, canvas };
 }
 
