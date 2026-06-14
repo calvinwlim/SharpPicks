@@ -276,9 +276,16 @@ header.app-header {
   border-top: 1px solid var(--border);
   padding-top: 14px;
   display: none;
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .analysis.open { display: block; }
+
+.analysis::-webkit-scrollbar { width: 8px; }
+.analysis::-webkit-scrollbar-track { background: transparent; }
+.analysis::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
 .game-model {
   display: flex;
@@ -324,11 +331,40 @@ header.app-header {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+  cursor: pointer;
 }
 
 .pick-card .pick-title {
   font-weight: 700;
   font-size: 14px;
+}
+
+.pick-card .pick-title::before {
+  content: "▸ ";
+  display: inline-block;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+}
+
+.pick-card.expanded .pick-title::before {
+  content: "▾ ";
+}
+
+.pick-card .chip-wrap,
+.pick-card .splits,
+.pick-card .narrative,
+.pick-card .signals-block {
+  display: none;
+}
+
+.pick-card.expanded .chip-wrap,
+.pick-card.expanded .narrative,
+.pick-card.expanded .signals-block {
+  display: block;
+}
+
+.pick-card.expanded .splits {
+  display: flex;
 }
 
 .tier {
@@ -380,7 +416,7 @@ header.app-header {
   color: var(--text-faint);
 }
 
-.signals-block {
+.signals-block-block {
   margin: 8px 0;
   padding: 8px 10px;
   background: var(--bg-elevated);
@@ -388,7 +424,7 @@ header.app-header {
   border-radius: var(--radius-sm);
 }
 
-.signals-heading {
+.signals-block-heading {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;

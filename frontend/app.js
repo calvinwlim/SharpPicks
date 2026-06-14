@@ -22,8 +22,18 @@ const betFilters = document.getElementById("bet-filters");
 const betList = document.getElementById("bet-list");
 
 const BET_TIERS = ["Premium", "Strong", "Lean"];
-let betItems = []; // { pick, game, evPct, tier }
+let betItems = []; // { pick, game, evPct, tier, type }
 let activeBetTiers = new Set(BET_TIERS);
+let activeBetTypes = new Set(); // populated as types are seen
+const knownBetTypes = new Set();
+
+function propTypeLabel(propType) {
+  if (!propType) return "Other";
+  return propType
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 let currentSport = "mlb"; // "mlb" | "nba"
 
@@ -58,6 +68,8 @@ async function loadSlate(date) {
   topBoardSection.style.display = "none";
   topBoardList.innerHTML = "";
   betItems = [];
+  knownBetTypes.clear();
+  activeBetTypes.clear();
   renderBetBoard();
   charts.forEach((list) => list.forEach((c) => c.destroy()));
   charts.clear();
@@ -763,11 +775,59 @@ function addToTopBoard(data, game) {
 // ---- bet board sidebar ------------------------------------------------------
 
 function addToBetBoard(data, game) {
-  if (!data.picks || !data.picks.length) return;
+  const added = [];
 
-  for (const pick of data.picks) {
+  for (const pick of data.picks || []) {
     const evPct = pick.hasMarket && pick.edge ? pick.edge.evPct : null;
-    betItems.push({ pick, game, evPct, tier: pick.tier });
+    added.push({ pick, game, evPct, tier: pick.tier, type: propTypeLabel(pick.propType) });
+  }
+
+  const gm = data.gameModel;
+  if (gm) {
+    if (gm.moneyline) {
+      for (const side of ["away", "home"]) {
+        const m = gm.moneyline[side];
+        if (!m) continue;
+        added.push({
+          pick: {
+            pick: `${game[side].abbr} ML (${m.price > 0 ? "+" : ""}${m.price})`,
+            confidence: Math.round(m.modelProb * 100),
+          },
+          game,
+          evPct: m.evPct,
+          tier: "Strong",
+          type: "Moneyline",
+        });
+      }
+    }
+    if (gm.total && gm.total.hasMarket) {
+      added.push({
+        pick: { pick: gm.total.pick, confidence: Math.round(gm.total.modelProb * 100) },
+        game, evPct: gm.total.edge.evPct, tier: "Strong", type: "Total",
+      });
+    }
+    if (gm.f5 && gm.f5.hasMarket) {
+      added.push({
+        pick: { pick: gm.f5.pick, confidence: Math.round(gm.f5.modelProb * 100) },
+        game, evPct: gm.f5.edge.evPct, tier: "Strong", type: "First 5",
+      });
+    }
+    if (gm.nrfi && gm.nrfi.hasMarket) {
+      added.push({
+        pick: { pick: gm.nrfi.pick, confidence: Math.round(gm.nrfi.modelProb * 100) },
+        game, evPct: gm.nrfi.edge.evPct, tier: "Strong", type: "NRFI/YRFI",
+      });
+    }
+  }
+
+  if (!added.length) return;
+  betItems.push(...added);
+
+  for (const item of added) {
+    if (!knownBetTypes.has(item.type)) {
+      knownBetTypes.add(item.type);
+      activeBetTypes.add(item.type);
+    }
   }
 
   betItems.sort((a, b) => {
@@ -795,9 +855,24 @@ function renderBetBoard() {
     betFilters.appendChild(chip);
   }
 
+  // Filter chips for bet types seen so far (ML, Total, Strikeouts, Hits, ...).
+  const typesSeen = Array.from(knownBetTypes).filter((t) => betItems.some((i) => i.type === t));
+  for (const type of typesSeen) {
+    const chip = document.createElement("button");
+    chip.className = "bet-filter" + (activeBetTypes.has(type) ? "" : " off");
+    chip.textContent = type;
+    chip.addEventListener("click", () => {
+      if (activeBetTypes.has(type)) activeBetTypes.delete(type);
+      else activeBetTypes.add(type);
+      renderBetBoard();
+    });
+    betFilters.appendChild(chip);
+  }
+
   const evOnly = betEvOnly.checked;
   const visible = betItems.filter((item) => {
     if (!activeBetTiers.has(item.tier)) return false;
+    if (!activeBetTypes.has(item.type)) return false;
     if (evOnly && !(item.evPct > 0)) return false;
     return true;
   });
@@ -811,7 +886,7 @@ function renderBetBoard() {
   }
 
   for (const item of visible) {
-    const { pick, game, evPct, tier } = item;
+    const { pick, game, evPct, tier, type } = item;
     const el = document.createElement("div");
     el.className = "bet-item";
 
@@ -822,7 +897,7 @@ function renderBetBoard() {
 
     el.innerHTML = `
       <div class="bet-item-top">
-        <span class="bet-cat">${tier}</span>
+        <span class="bet-cat">${type} · ${tier}</span>
         ${evLabel}
       </div>
       <div class="bet-label">${pick.pick}</div>
@@ -862,6 +937,14 @@ fetch("/api/health")
 betSidebarClose.addEventListener("click", () => betSidebar.classList.remove("open"));
 betSidebarOpen.addEventListener("click", () => betSidebar.classList.add("open"));
 document.getElementById("board-toggle").addEventListener("click", () => betSidebar.classList.toggle("open"));
+
+// Click a pick card's header to expand/collapse its details (splits, chart,
+// narrative). Keeps long analyses from blowing up page length.
+document.addEventListener("click", (e) => {
+  const header = e.target.closest(".pick-card .pick-header");
+  if (!header) return;
+  header.closest(".pick-card").classList.toggle("expanded");
+});
 betEvOnly.addEventListener("change", renderBetBoard);
 
 loadSlate(dateInput.value);
