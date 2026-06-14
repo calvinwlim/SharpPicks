@@ -13,6 +13,18 @@ const pillAi = document.getElementById("pill-ai");
 
 const charts = new Map(); // gamePk -> [Chart, ...] so we can destroy on re-render
 
+const betSidebar = document.getElementById("bet-sidebar");
+const betSidebarClose = document.getElementById("bet-sidebar-close");
+const betSidebarOpen = document.getElementById("bet-sidebar-open");
+const betCount = document.getElementById("bet-count");
+const betEvOnly = document.getElementById("bet-evonly");
+const betFilters = document.getElementById("bet-filters");
+const betList = document.getElementById("bet-list");
+
+const BET_TIERS = ["Premium", "Strong", "Lean"];
+let betItems = []; // { pick, game, evPct, tier }
+let activeBetTiers = new Set(BET_TIERS);
+
 let currentSport = "mlb"; // "mlb" | "nba"
 
 function gameKey(game) {
@@ -45,6 +57,8 @@ async function loadSlate(date) {
   slateContainer.innerHTML = '<div class="loading">Loading slate…</div>';
   topBoardSection.style.display = "none";
   topBoardList.innerHTML = "";
+  betItems = [];
+  renderBetBoard();
   charts.forEach((list) => list.forEach((c) => c.destroy()));
   charts.clear();
 
@@ -145,6 +159,7 @@ async function loadAnalysis(game, date, container, btn) {
     } else {
       renderAnalysis(data, game, container);
       addToTopBoard(data, game);
+      addToBetBoard(data, game);
     }
   } catch (e) {
     container.innerHTML = '<div class="error">Could not load analysis for this game.</div>';
@@ -745,6 +760,84 @@ function addToTopBoard(data, game) {
   items.forEach((el) => topBoardList.appendChild(el));
 }
 
+// ---- bet board sidebar ------------------------------------------------------
+
+function addToBetBoard(data, game) {
+  if (!data.picks || !data.picks.length) return;
+
+  for (const pick of data.picks) {
+    const evPct = pick.hasMarket && pick.edge ? pick.edge.evPct : null;
+    betItems.push({ pick, game, evPct, tier: pick.tier });
+  }
+
+  betItems.sort((a, b) => {
+    const aKey = a.evPct !== null ? a.evPct : a.pick.confidence;
+    const bKey = b.evPct !== null ? b.evPct : b.pick.confidence;
+    return bKey - aKey;
+  });
+
+  renderBetBoard();
+}
+
+function renderBetBoard() {
+  // Filter chips for tiers seen so far.
+  const tiersSeen = BET_TIERS.filter((t) => betItems.some((i) => i.tier === t));
+  betFilters.innerHTML = "";
+  for (const tier of tiersSeen) {
+    const chip = document.createElement("button");
+    chip.className = "bet-filter" + (activeBetTiers.has(tier) ? "" : " off");
+    chip.textContent = tier;
+    chip.addEventListener("click", () => {
+      if (activeBetTiers.has(tier)) activeBetTiers.delete(tier);
+      else activeBetTiers.add(tier);
+      renderBetBoard();
+    });
+    betFilters.appendChild(chip);
+  }
+
+  const evOnly = betEvOnly.checked;
+  const visible = betItems.filter((item) => {
+    if (!activeBetTiers.has(item.tier)) return false;
+    if (evOnly && !(item.evPct > 0)) return false;
+    return true;
+  });
+
+  betCount.textContent = `${visible.length} bet${visible.length === 1 ? "" : "s"}`;
+
+  betList.innerHTML = "";
+  if (!visible.length) {
+    betList.innerHTML = '<div class="empty">Analyze games to populate the board.</div>';
+    return;
+  }
+
+  for (const item of visible) {
+    const { pick, game, evPct, tier } = item;
+    const el = document.createElement("div");
+    el.className = "bet-item";
+
+    const evLabel =
+      evPct !== null
+        ? `<span class="${evPct > 0 ? "ev-pos" : "ev-neg"}">${evPct > 0 ? "+" : ""}${evPct.toFixed(1)}% EV</span>`
+        : `<span>${pick.confidence}% conf</span>`;
+
+    el.innerHTML = `
+      <div class="bet-item-top">
+        <span class="bet-cat">${tier}</span>
+        ${evLabel}
+      </div>
+      <div class="bet-label">${pick.pick}</div>
+      <div class="bet-detail">${game.away.abbr} @ ${game.home.abbr}</div>
+    `;
+
+    el.addEventListener("click", () => {
+      const card = document.querySelector(`.game-card[data-game-pk="${game.gamePk}"]`);
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    betList.appendChild(el);
+  }
+}
+
 // ---- init ------------------------------------------------------------------
 
 dateInput.value = todayISO();
@@ -765,5 +858,9 @@ fetch("/api/health")
   .then((r) => r.json())
   .then((d) => setFlags(d.flags || {}))
   .catch(() => {});
+
+betSidebarClose.addEventListener("click", () => betSidebar.classList.remove("open"));
+betSidebarOpen.addEventListener("click", () => betSidebar.classList.add("open"));
+betEvOnly.addEventListener("change", renderBetBoard);
 
 loadSlate(dateInput.value);
