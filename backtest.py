@@ -87,13 +87,16 @@ async def replay_pitcher_prop(
     prior_rates: Dict[str, Any],
     stat_key: str,
     use_skill: bool,
-) -> List[Tuple[float, float, float]]:
-    """``(projection, actual, naive)`` for every replayed start, point-in-time."""
+) -> List[Tuple[float, float, float, Optional[float]]]:
+    """``(projection, actual, naive, trials)`` for every replayed start, point-in-time.
+
+    ``trials`` is the model's expected batters faced (binomial ``n`` for the
+    strikeout law); ``None`` for walks (which use the negative binomial)."""
     lg_k = prior_rates.get("leagueAvgK", 0.225) or 0.225
     lg_bb = prior_rates.get("leagueAvgBB", 0.085) or 0.085
     prior_teams = prior_rates.get("teams", {})
 
-    records: List[Tuple[float, float, float]] = []
+    records: List[Tuple[float, float, float, Optional[float]]] = []
     for pid, glog in pairs:
         prior_skill = None
         if use_skill:
@@ -121,7 +124,8 @@ async def replay_pitcher_prop(
             if pick is None:
                 continue
             naive = mean(r.get(stat_key, 0) for r in before)
-            records.append((pick["projection"], float(actual_row.get(stat_key, 0)), naive))
+            records.append((pick["projection"], float(actual_row.get(stat_key, 0)),
+                            naive, pick.get("expectedBF")))
     return records
 
 
@@ -277,7 +281,7 @@ def reliability_table(preds: List[float], outs: List[float], bins: int = 5) -> L
     return rows
 
 
-def report_count(label: str, records: List[Tuple[float, float, float]], line: float,
+def report_count(label: str, records: List[Tuple], line: float,
                  dispersion: Optional[float], model_preds: Optional[List[float]] = None) -> None:
     if not records:
         print(f"\n=== {label} ===\n  no replayed samples")
@@ -285,18 +289,25 @@ def report_count(label: str, records: List[Tuple[float, float, float]], line: fl
     projs = [r[0] for r in records]
     actuals = [r[1] for r in records]
     naives = [r[2] for r in records]
+    # Per-record binomial trials (expected BF), when the replay captured them.
+    trials = [(int(round(r[3])) if len(r) > 3 and r[3] else None) for r in records]
+    used_binom = any(t is not None for t in trials)
     mae = mean(abs(p - a) for p, a in zip(projs, actuals))
     bias = mean(p - a for p, a in zip(projs, actuals))
     naive_mae = mean(abs(nv - a) for nv, a in zip(naives, actuals))
-    # Use the model's own probabilities when supplied (e.g. batter binomial),
-    # else re-derive from the projection's distribution.
-    preds = model_preds if model_preds is not None else [
-        analysis.count_prob_over(line, p, dispersion) for p in projs]
+    # Probability precedence: caller-supplied model_preds (e.g. batter binomial)
+    # > per-record binomial trials (strikeouts) > the projection's distribution.
+    if model_preds is not None:
+        preds = model_preds
+    elif used_binom:
+        preds = [analysis.count_prob_over(line, p, dispersion, t) for p, t in zip(projs, trials)]
+    else:
+        preds = [analysis.count_prob_over(line, p, dispersion) for p in projs]
     outs = [1.0 if a > line else 0.0 for a in actuals]
     brier = _brier(preds, outs)
     base = mean(outs)
     brier_base = _brier([base] * len(outs), outs)
-    dist = "Poisson" if dispersion is None else f"neg-binom r={dispersion}"
+    dist = "Binomial(BF)" if used_binom else ("Poisson" if dispersion is None else f"neg-binom r={dispersion}")
     print(f"\n=== {label} ({len(records)} samples, {dist}) ===")
     print(f"  projection MAE  {mae:.2f}   (naive {naive_mae:.2f})")
     print(f"  bias            {bias:+.2f}   ({'over' if bias > 0 else 'under'}-projecting)")
@@ -316,8 +327,13 @@ def report_total(totals: List[Tuple[float, float]], line: float = 8.5) -> None:
     bias = mean(p - a for p, a in zip(projs, actuals))
     preds = [analysis.prob_over(line, p) for p in projs]
     outs = [1.0 if a > line else 0.0 for a in actuals]
-    print(f"\n=== Game Total ({len(totals)} games) ===")
-    print(f"  total MAE  {mae:.2f}   bias {bias:+.2f}")
+    print(f"\n=== Game Total ({len(totals)} games, calibration ×{analysis.TOTAL_CALIBRATION}) ===")
+    print(f"  total MAE  {mae:.2f}   bias {bias:+.2f}   (target ~0; nudge TOTAL_CALIBRATION if biased)")
+    # What calibration factor would zero out the residual bias on this sample.
+    proj_mean = mean(projs)
+    if proj_mean > 0:
+        suggested = analysis.TOTAL_CALIBRATION * (proj_mean - bias) / proj_mean
+        print(f"  suggested TOTAL_CALIBRATION for zero bias here: ×{suggested:.3f}")
     print(f"  calibration @ {line}:  Brier {_brier(preds, outs):.4f}  (over rate {mean(outs):.0%})")
     print("  dispersion sweep (Brier @ line; lower=better — run totals are over-dispersed):")
     for r in (None, 20.0, 14.0, 10.0, 8.0, 6.0):
@@ -359,9 +375,9 @@ async def main_async(args: argparse.Namespace) -> None:
     if args.sweep:
         print("\n=== Walk dispersion sweep (Brier @ 1.5; lower is better) ===")
         line = 1.5
-        outs = [1.0 if a > line else 0.0 for _, a, _ in bb_recs]
+        outs = [1.0 if rec[1] > line else 0.0 for rec in bb_recs]
         for r in (None, 8.0, 5.0, 4.0, 3.0, 2.5, 2.0, 1.5):
-            preds = [analysis.count_prob_over(line, p, r) for p, _, _ in bb_recs]
+            preds = [analysis.count_prob_over(line, rec[0], r) for rec in bb_recs]
             tag = "Poisson" if r is None else f"r={r}"
             print(f"  {tag:>9}:  Brier {_brier(preds, outs):.4f}")
     report_count("Walks", bb_recs, line=1.5, dispersion=analysis.BB_DISPERSION)

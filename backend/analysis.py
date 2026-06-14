@@ -20,15 +20,22 @@ OPP_FACTOR_CEIL = 1.15
 TOP_BUCKET = 10             # top-N teams by K%/BB% rank counts as "elite" for splits
 SHRINK_PSEUDO = 8           # pseudo-observations pulling small samples to 0.5
 MIN_STARTS = 3              # fewer starts than this -> no pick
-HOME_FIELD_EDGE = 0.03      # home win-prob bump applied after log5
-PYTHAG_EXP = 1.83           # Pythagorean-expectation exponent
+HOME_FIELD_RUNS = 0.20      # home-field advantage, expressed as extra projected runs for the home team
+                            # (feeds the Skellam win prob so it scales correctly with the run environment)
 
 # Count-prop distributions (None = Poisson; a number = negative-binomial dispersion).
 # Tuned on the backtest: walks are over-dispersed (Poisson overstated the over),
-# strikeouts are adequately modeled by Poisson. Re-tune with backtest.py --sweep.
-K_DISPERSION = None       # strikeouts: Poisson beats base-rate Brier and is well-calibrated
+# strikeouts are *under*-dispersed (a K count is the sum of per-batter Bernoullis,
+# so Binomial(BF, kRate) is the right law — see K_BINOMIAL). Re-tune with
+# backtest.py --sweep.
+K_DISPERSION = None       # strikeouts: fallback only — K_BINOMIAL takes precedence when BF is known
+K_BINOMIAL = True         # model Ks as Binomial(expected batters faced, implied K rate); tighter
+                          # than Poisson, fixing the measured high-bucket under-confidence
 BB_DISPERSION = 2.5       # walks: backtest sweep minimized Brier near r=2-2.5
 TOTAL_DISPERSION = 12.0   # run totals: mildly over-dispersed; backtest sweep best near r=10-14
+TOTAL_CALIBRATION = 0.92  # multiplicative correction on projected runs — the raw model over-
+                          # projected totals by ~+0.8 runs on the backtest. Applied to BOTH teams
+                          # so the win model still sees the (better-calibrated) run estimates.
 
 DEFAULT_RUNS_PER_GAME = 4.3
 
@@ -117,15 +124,31 @@ def negbinom_cdf(k: int, mean: float, r: float) -> float:
     return sum(negbinom_pmf(i, mean, r) for i in range(0, k + 1))
 
 
-def count_prob_over(line: float, mean: float, dispersion: Optional[float] = None) -> float:
-    """P(X > line); Poisson by default, negative binomial when ``dispersion`` is set."""
+def count_prob_over(
+    line: float, mean: float, dispersion: Optional[float] = None, trials: Optional[int] = None
+) -> float:
+    """P(X > line).
+
+    Distribution precedence: Binomial when ``trials`` is given (under-dispersed
+    counts that are a sum of per-trial Bernoullis, e.g. strikeouts over batters
+    faced), else negative binomial when ``dispersion`` is set (over-dispersed
+    counts like walks/totals), else Poisson.
+    """
+    if trials is not None and trials > 0:
+        p = _clamp(mean / trials, 0.0, 1.0)
+        return 1.0 - binom_cdf(math.floor(line), trials, p)
     if dispersion is None:
         return prob_over(line, mean)
     return 1.0 - negbinom_cdf(math.floor(line), mean, dispersion)
 
 
-def count_prob_under(line: float, mean: float, dispersion: Optional[float] = None) -> float:
-    """P(X < line); Poisson by default, negative binomial when ``dispersion`` is set."""
+def count_prob_under(
+    line: float, mean: float, dispersion: Optional[float] = None, trials: Optional[int] = None
+) -> float:
+    """P(X < line); see :func:`count_prob_over` for the distribution precedence."""
+    if trials is not None and trials > 0:
+        p = _clamp(mean / trials, 0.0, 1.0)
+        return binom_cdf(math.floor(line), trials, p)
     if dispersion is None:
         return prob_under(line, mean)
     return negbinom_cdf(math.floor(line), mean, dispersion)
@@ -278,6 +301,19 @@ def _opp_k_rate(
 
 # --------------------------------------------------------------------------- pitcher-skill blend
 
+def _expected_bf(recent: List[Dict[str, Any]]) -> Optional[float]:
+    """Mean batters faced over the recent window, or ``None`` if unrecorded.
+
+    Used as the binomial ``n`` for the strikeout law: a start's K count is the
+    sum of per-batter Bernoulli(K) trials, so Binomial(BF, kRate) is the correct
+    (under-dispersed) distribution rather than Poisson.
+    """
+    bfs = [r["battersFaced"] for r in recent if r.get("battersFaced")]
+    if not bfs:
+        return None
+    return sum(bfs) / len(bfs)
+
+
 def _skill_projection(
     baseline: float, recent: List[Dict[str, Any]], pitcher_skill: Optional[Dict[str, Any]]
 ) -> Tuple[float, Optional[Dict[str, Any]]]:
@@ -357,18 +393,20 @@ def _wind_factor(
 # --------------------------------------------------------------------------- shared over/under helpers
 
 def _select_line_and_prob(
-    projection: float, market: Optional[Dict[str, Any]], dispersion: Optional[float] = None
+    projection: float, market: Optional[Dict[str, Any]],
+    dispersion: Optional[float] = None, trials: Optional[int] = None,
 ) -> Tuple[str, float, float]:
     """Pick a side + line + model probability for a count stat.
 
-    Poisson by default; pass ``dispersion`` to use a negative binomial (for
-    over-dispersed counts like walks). With a live market line, grades that
-    exact line. Without one, tests an over just below the projection and an
+    Poisson by default; pass ``dispersion`` for a negative binomial (over-
+    dispersed counts like walks) or ``trials`` for a binomial (under-dispersed
+    counts like strikeouts over batters faced). With a live market line, grades
+    that exact line. Without one, tests an over just below the projection and an
     under just above it, and keeps whichever side the model favors more strongly.
     """
     if market and market.get("line") is not None:
         line = float(market["line"])
-        p_over = count_prob_over(line, projection, dispersion)
+        p_over = count_prob_over(line, projection, dispersion, trials)
         if p_over >= 0.5:
             return "over", line, p_over
         return "under", line, 1.0 - p_over
@@ -378,10 +416,10 @@ def _select_line_and_prob(
         # Sub-1 mean (e.g. home runs): the only meaningful line is the "will it
         # happen" Over 0.5, reported at its true (low) probability — never a
         # nonsensical negative line or a trivial near-lock under.
-        return "over", 0.5, count_prob_over(0.5, projection, dispersion)
+        return "over", 0.5, count_prob_over(0.5, projection, dispersion, trials)
     over_line, under_line = center - 0.5, center + 0.5
-    p_over = count_prob_over(over_line, projection, dispersion)
-    p_under = count_prob_under(under_line, projection, dispersion)
+    p_over = count_prob_over(over_line, projection, dispersion, trials)
+    p_under = count_prob_under(under_line, projection, dispersion, trials)
     if p_over >= p_under:
         return "over", over_line, p_over
     return "under", under_line, p_under
@@ -542,7 +580,14 @@ def analyze_strikeouts(
     ump_factor, ump_info = _umpire_factor(umpire, "k")
 
     projection = baseline * opp_factor * platoon_factor * ump_factor
-    side, line, model_prob = _select_line_and_prob(projection, market, dispersion=K_DISPERSION)
+
+    # A K count is the sum of per-batter Bernoulli(K) trials, so it's binomial
+    # (under-dispersed) rather than Poisson. Use Binomial(expected BF, implied
+    # rate) when BF is recorded; fall back to K_DISPERSION (Poisson) otherwise.
+    expected_bf = _expected_bf(recent)
+    trials = round(expected_bf) if (K_BINOMIAL and expected_bf and expected_bf > projection) else None
+    side, line, model_prob = _select_line_and_prob(
+        projection, market, dispersion=K_DISPERSION, trials=trials)
 
     def hit(row: Dict[str, Any]) -> bool:
         return row["strikeOuts"] > line if side == "over" else row["strikeOuts"] < line
@@ -660,6 +705,7 @@ def analyze_strikeouts(
         "edge": edge,
         "hasMarket": edge is not None,
         "lowSample": len(gamelog) < PROJECTION_WINDOW,
+        "expectedBF": round(expected_bf, 1) if expected_bf else None,
         "platoon": platoon_info,
         "umpire": ump_info,
         "skill": skill_info,
@@ -1276,16 +1322,13 @@ def game_model(
 ) -> Dict[str, Any]:
     """Pitcher-aware matchup model: each team's projected runs come from its
     offense facing the *opposing* pitching staff for this game (the listed
-    starter for ~60% of innings, the bullpen for the rest), and the win
-    probability is the Pythagorean expectation of those projections plus a
-    small home-field bump. Unlike a pure team-talent model, an ace start (or a
-    gassed bullpen) shifts both the moneyline and the total.
+    starter for ~60% of innings, the bullpen for the rest). The win probability
+    is the single-game Poisson (Skellam) probability that the home team outscores
+    the away team — the statistically correct law for one game, vs. the
+    season-level Pythagorean it replaces — with home-field folded in as runs.
+    Unlike a pure team-talent model, an ace start (or a gassed bullpen) shifts
+    both the moneyline and the total.
     """
-
-    def pyth(runs_for: float, runs_against: float) -> float:
-        rf = max(runs_for, 0.1)
-        ra = max(runs_against, 0.1)
-        return rf ** PYTHAG_EXP / (rf ** PYTHAG_EXP + ra ** PYTHAG_EXP)
 
     home_rs = home_rates.get("runsPerGame", DEFAULT_RUNS_PER_GAME)
     away_rs = away_rates.get("runsPerGame", DEFAULT_RUNS_PER_GAME)
@@ -1304,10 +1347,18 @@ def game_model(
     away_staff = staff_ra9(away_starter_ra9, away_bullpen, away_ra)
 
     # Each team's offense (relative to league) vs the run rate it will face.
-    home_proj = 0.5 * home_rs + 0.5 * away_staff
-    away_proj = 0.5 * away_rs + 0.5 * home_staff
+    # TOTAL_CALIBRATION removes the raw model's measured ~+0.8-run over-projection;
+    # applying it to both teams keeps the win model on the better-scaled runs.
+    # Home-field is a *transfer* (home bats last / is more comfortable): +/- half a
+    # run-edge each way, so it tilts the win prob without changing the total.
+    home_proj = TOTAL_CALIBRATION * (0.5 * home_rs + 0.5 * away_staff) + HOME_FIELD_RUNS / 2
+    away_proj = TOTAL_CALIBRATION * (0.5 * away_rs + 0.5 * home_staff) - HOME_FIELD_RUNS / 2
 
-    home_win = _clamp(pyth(home_proj, away_proj) + HOME_FIELD_EDGE, 0.02, 0.98)
+    # Single-game win prob from two independent Poisson run counts; ties (extra
+    # innings) are split proportionally to each side's regulation win chance.
+    p_home, p_away, p_tie = _poisson_win_prob(home_proj, away_proj)
+    decisive = p_home + p_away
+    home_win = _clamp(p_home + (p_tie * p_home / decisive if decisive > 0 else 0.5), 0.02, 0.98)
 
     result: Dict[str, Any] = {
         "homeWinProb": round(home_win, 4),

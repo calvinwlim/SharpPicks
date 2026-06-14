@@ -38,17 +38,11 @@ python3 scripts/build_ufc_dataset.py    # fighter rate stats -> backend/data/ufc
 python3 scripts/build_mma_comps.py      # matchup vectors -> backend/data/ufc_fight_vectors.json (+ holdout validation)
 ```
 
-Backtests (live data, measure model accuracy):
+Backtests (live data, measure model accuracy — needs network):
 
 ```bash
 python3 backtest.py --season 2025 --pitchers 25   # MLB projection accuracy + calibration
 python3 mma_backtest.py --since 2022-01-01         # MMA winner/distance/method point-in-time
-```
-
-Backtesting (live data, measures model accuracy — needs network):
-
-```bash
-python3 backtest.py --season 2025 --pitchers 25
 ```
 
 `backtest.py` replays each pitcher start point-in-time (game log filtered to
@@ -56,6 +50,22 @@ before the game date — no look-ahead) and reports projection MAE/bias and
 probability calibration (Brier + reliability) vs actual results. It measures
 whether the *model* is accurate, not betting ROI (that needs paid historical
 closing lines).
+
+Live tracking (record today's picks, grade them tonight):
+
+```bash
+python3 track.py snapshot                 # save today's predictions to tracking/<date>.json
+python3 track.py grade                     # once games are final, score them vs results
+python3 track.py grade --date 2026-06-14   # re-grade a specific day
+```
+
+`track.py` is the going-forward counterpart to the backtest: `snapshot` runs the
+exact app analysis (`backend.main._analyze_mlb`) over the day's slate and saves
+each strikeout/total/moneyline prediction; `grade` pulls final scores from the
+schedule and actual strikeouts from each boxscore, then prints a W-L record +
+Brier per market (plus the day's total-runs bias). Snapshots live under
+`tracking/` (gitignored). Run `snapshot` before first pitch (no look-ahead) and
+`grade` after the games go final; pending games can be re-graded later.
 
 ## Architecture
 
@@ -104,8 +114,15 @@ live line was matched: `{decimal,modelProb,marketProb,fairProb,evPct,kellyPct,..
 
 **Tune the model.** All knobs are constants at the top of `backend/analysis.py`:
 `PROJECTION_WINDOW`, `OPP_FACTOR_FLOOR/CEIL`, `TOP_BUCKET`, `SHRINK_PSEUDO`,
-`MIN_STARTS`, `HOME_FIELD_EDGE`, `PYTHAG_EXP`. Change them there; nothing else
-hard-codes these values.
+`MIN_STARTS`, `HOME_FIELD_RUNS` (home edge as projected runs, feeds the Skellam
+win prob), `TOTAL_CALIBRATION` (multiplicative run-total correction — the raw
+model over-projected totals; `backtest.py` prints a suggested value), and the
+count-prop distributions `K_BINOMIAL` / `BB_DISPERSION` / `TOTAL_DISPERSION`.
+Change them there; nothing else hard-codes these values.
+
+The game-level win probability is the single-game Poisson/Skellam P(home
+outscores away) — not a season-level Pythagorean — so an ace start moves the
+moneyline and the total together.
 
 **Add a new prop type (e.g. batter hits, total bases).**
 1. Add a fetch in `backend/mlb.py` for the needed game logs (mirror

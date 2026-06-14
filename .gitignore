@@ -11,6 +11,9 @@ venv/
 # Local secrets — never commit real keys
 .env
 
+# Live pick-tracking snapshots (local result logs)
+tracking/
+
 # OS / editor
 .DS_Store
 *.swp
