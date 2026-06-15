@@ -336,6 +336,41 @@ async def get_lineup_batters(game_pk: int, team_id: int) -> Optional[List[Dict[s
     return None
 
 
+async def get_recent_lineup_batters(team_id: int, before_date: str, season: int) -> Optional[List[Dict[str, Any]]]:
+    """A "projected" lineup: the batting order from this team's most recent
+    *completed* game before ``before_date``, used as a stand-in when today's
+    lineup hasn't posted yet. Returns ``None`` if no recent final game has a
+    full 9-spot order on file.
+    """
+    from datetime import date as _date, timedelta
+
+    end = _date.fromisoformat(before_date) - timedelta(days=1)
+    start = end - timedelta(days=10)
+
+    async def fetch_schedule() -> List[Dict[str, Any]]:
+        c = client()
+        r = await c.get(
+            "/schedule",
+            params={"sportId": SPORT_ID, "teamId": team_id, "startDate": start.isoformat(),
+                    "endDate": end.isoformat()},
+        )
+        r.raise_for_status()
+        data = r.json()
+        pks: List[int] = []
+        for d in data.get("dates", []):
+            for g in d.get("games", []):
+                if g.get("status", {}).get("abstractGameState") == "Final":
+                    pks.append(g["gamePk"])
+        return pks
+
+    pks = await cache.get_or_set(f"recentgames:{team_id}:{before_date}", 3600, fetch_schedule)
+    for game_pk in reversed(pks):  # most recent first
+        batters = await get_lineup_batters(game_pk, team_id)
+        if batters:
+            return batters
+    return None
+
+
 async def get_team_hitting_log(team_id: int, season: int) -> List[Dict[str, Any]]:
     """A team's game-by-game hitting log (for point-in-time offensive rates).
 

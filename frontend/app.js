@@ -707,8 +707,10 @@ function renderPickCard(pick) {
   if (pick.umpire && pick.umpire.factor) {
     addChip(`HP ump ${pick.umpire.name}: ×${pick.umpire.factor}`);
   }
-  if (pick.lineupConfirmed) {
+  if (pick.lineupConfirmed === true) {
     addChip("Confirmed lineup");
+  } else if (pick.lineupConfirmed === false) {
+    addChip("Projected lineup (last game's order — not yet confirmed)");
   }
 
   node.querySelector(".narrative").textContent = pick.narrative || "";

@@ -131,15 +131,25 @@ async def replay_pitcher_prop(
 
 # --------------------------------------------------------------------------- batter prop replay
 
+# (prop_type, stat_key, line, bernoulli) — mirrors backend.main.BATTER_PROPS,
+# minus the odds-market/park-factor wiring (neutral here: tests the core
+# recent-form projection point-in-time).
+BATTER_PROP_SPECS = [
+    ("hits", "hits", 0.5, True),
+    ("totalBases", "totalBases", 1.5, False),
+    ("homeRuns", "homeRuns", 0.5, True),
+]
+
+
 async def replay_batter_prop(
-    season: int, n_batters: int
+    season: int, n_batters: int, prop_type: str, stat_key: str, line: float, bernoulli: bool
 ) -> Tuple[List[Tuple[float, float, float]], List[float]]:
-    """Hits projection accuracy for a sample of qualified hitters (opponent
-    starter / park neutral — tests the core recent-form projection).
+    """Projection accuracy for a sample of qualified hitters (opponent starter /
+    park neutral — tests the core recent-form projection).
 
     Returns ``(records, model_probs)`` where ``model_probs`` are the model's own
-    P(Over 0.5 hits) — the binomial output, so calibration reflects the real
-    model rather than a re-derived Poisson."""
+    P(Over ``line``) for ``prop_type`` (binomial for hits/HR, Poisson for TB), so
+    calibration reflects the real model rather than a re-derived distribution."""
     try:
         c = mlb.client()
         r = await c.get("/stats", params={
@@ -171,15 +181,16 @@ async def replay_batter_prop(
         for i in range(analysis.BATTER_MIN_GAMES, len(glog)):
             before, actual_row = glog[:i], glog[i]
             pick = analysis.analyze_batter_prop(
-                "hits", "hits", "Hits", "hits", "bt", before,
+                prop_type, stat_key, stat_key, stat_key, "bt", before,
                 opp_team_id=actual_row.get("opponentId"), opp_pitcher_name="x",
                 is_home=actual_row.get("isHome", False),
+                default_line=line, bernoulli=bernoulli,
             )
             if pick is None:
                 continue
-            naive = mean(r.get("hits", 0) for r in before)
-            records.append((pick["projection"], float(actual_row.get("hits", 0)), naive))
-            model_probs.append(pick["modelProb"])  # P(Over 0.5 hits), binomial
+            naive = mean(r.get(stat_key, 0) for r in before)
+            records.append((pick["projection"], float(actual_row.get(stat_key, 0)), naive))
+            model_probs.append(pick["modelProb"])  # P(Over `line`), as graded in production
     return records, model_probs
 
 
@@ -282,7 +293,8 @@ def reliability_table(preds: List[float], outs: List[float], bins: int = 5) -> L
 
 
 def report_count(label: str, records: List[Tuple], line: float,
-                 dispersion: Optional[float], model_preds: Optional[List[float]] = None) -> None:
+                 dispersion: Optional[float], model_preds: Optional[List[float]] = None,
+                 dist_label: Optional[str] = None) -> None:
     if not records:
         print(f"\n=== {label} ===\n  no replayed samples")
         return
@@ -307,7 +319,10 @@ def report_count(label: str, records: List[Tuple], line: float,
     brier = _brier(preds, outs)
     base = mean(outs)
     brier_base = _brier([base] * len(outs), outs)
-    dist = "Binomial(BF)" if used_binom else ("Poisson" if dispersion is None else f"neg-binom r={dispersion}")
+    if dist_label:
+        dist = dist_label
+    else:
+        dist = "Binomial(BF)" if used_binom else ("Poisson" if dispersion is None else f"neg-binom r={dispersion}")
     print(f"\n=== {label} ({len(records)} samples, {dist}) ===")
     print(f"  projection MAE  {mae:.2f}   (naive {naive_mae:.2f})")
     print(f"  bias            {bias:+.2f}   ({'over' if bias > 0 else 'under'}-projecting)")
@@ -383,8 +398,12 @@ async def main_async(args: argparse.Namespace) -> None:
     report_count("Walks", bb_recs, line=1.5, dispersion=analysis.BB_DISPERSION)
 
     if not args.quick:
-        bat_recs, bat_preds = await replay_batter_prop(season, args.batters)
-        report_count("Batter hits", bat_recs, line=0.5, dispersion=None, model_preds=bat_preds)
+        labels = {"hits": "Batter Hits", "totalBases": "Batter Total Bases", "homeRuns": "Batter Home Runs"}
+        for prop_type, stat_key, line, bernoulli in BATTER_PROP_SPECS:
+            bat_recs, bat_preds = await replay_batter_prop(season, args.batters, prop_type, stat_key, line, bernoulli)
+            dist_label = "Binomial(AB)" if bernoulli else "Poisson"
+            report_count(labels[prop_type], bat_recs, line=line, dispersion=None, model_preds=bat_preds,
+                          dist_label=dist_label)
 
         totals, mls = await replay_games(season, args.games)
         report_total(totals)

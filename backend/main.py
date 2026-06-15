@@ -474,10 +474,20 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         (False, away, home.get("probablePitcher"), home["id"], starter_ra9["home"]),
     ]
     for is_home_bat, team, opp_pitcher, opp_team_id, opp_ra9 in sides:
+        lineup_confirmed = True
         try:
             batters = await mlb.get_lineup_batters(game_pk, team["id"])
         except Exception:
             batters = None
+        if not batters:
+            # Lineup not posted yet — fall back to the team's last completed
+            # game's batting order as a "projected" lineup so the board isn't
+            # empty all morning.
+            lineup_confirmed = False
+            try:
+                batters = await mlb.get_recent_lineup_batters(team["id"], date, season)
+            except Exception:
+                batters = None
         if not batters:
             continue
 
@@ -519,6 +529,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
                     bernoulli=bern,
                 )
                 if bp is not None:
+                    bp["lineupConfirmed"] = lineup_confirmed
                     batter_candidates.append(bp)
 
     # Matched-market edges first (ranked by EV, no type cap so the best prices win).
