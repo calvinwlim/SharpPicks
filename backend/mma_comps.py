@@ -127,6 +127,14 @@ def available() -> bool:
     return _load() is not None
 
 
+def comp_win_prob_for(comps: Optional[Dict[str, Any]], a_name: str) -> Optional[float]:
+    """P(``a_name`` wins) from a ``find_comps`` result, oriented to that fighter
+    (the result stores the *favorite*'s win %); ``None`` if comps are unavailable."""
+    if not comps or comps.get("favWinPct") is None:
+        return None
+    return comps["favWinPct"] if comps.get("favorite") == a_name else 1.0 - comps["favWinPct"]
+
+
 def find_comps(a: Dict[str, Any], b: Dict[str, Any], a_name: str, b_name: str,
                rounds: int, fight_date: Optional[str] = None, k: int = 60) -> Optional[Dict[str, Any]]:
     data = _load()

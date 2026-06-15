@@ -26,6 +26,7 @@
       <input type="date" id="date-input" />
       <button id="load-btn">Visualize</button>
       <button id="board-toggle" title="Toggle bet board">📋 Board</button>
+      <button id="settings-toggle" title="API keys">⚙️ Keys</button>
       <div class="pills">
         <span class="pill" id="pill-odds">Odds</span>
         <span class="pill" id="pill-props">Props</span>
@@ -33,6 +34,28 @@
       </div>
     </div>
   </header>
+
+  <div class="settings-overlay" id="settings-overlay">
+    <div class="settings-panel">
+      <div class="settings-header">
+        <h2>API Keys</h2>
+        <button id="settings-close" aria-label="Close">✕</button>
+      </div>
+      <p class="settings-note">
+        Stored only in this browser tab (sessionStorage) and sent directly to
+        this server with each request — never written to disk or shared.
+        Leave blank to use the server's defaults (if any).
+      </p>
+      <label for="settings-odds-key">The Odds API key</label>
+      <input type="password" id="settings-odds-key" autocomplete="off" placeholder="ODDS_API_KEY" />
+      <label for="settings-anthropic-key">Anthropic API key (AI narratives)</label>
+      <input type="password" id="settings-anthropic-key" autocomplete="off" placeholder="ANTHROPIC_API_KEY" />
+      <div class="settings-actions">
+        <button id="settings-save">Save</button>
+        <button id="settings-clear">Clear</button>
+      </div>
+    </div>
+  </div>
 
   <div class="disclaimer">
     Sharp Slate estimates strikeout-prop probabilities from free MLB data and,

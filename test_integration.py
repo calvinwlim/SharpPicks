@@ -97,7 +97,7 @@ def patch_data(monkeyless=True):
     async def get_pitcher_skill(pid, season): return None
     async def get_lineup_batters(game_pk, team_id): return None
     async def get_batter_gamelog(pid, season): return []
-    async def get_player_props(client, event_id, market_key): return {}
+    async def get_player_props(client, event_id, market_key, api_key=None): return {}
     mlb.get_umpire = get_umpire
     mlb.get_lineup = get_lineup
     mlb.get_bullpen = get_bullpen
@@ -109,20 +109,20 @@ def patch_data(monkeyless=True):
 
 def enable_market():
     norm = lambda s: "".join(c for c in s.lower() if c.isalnum())
-    odds.has_key = lambda: True
+    odds.has_key = lambda *a, **k: True
     odds.player_props_enabled = lambda: True
-    async def get_game_markets(client): return [{"id": "evt1"}]
+    async def get_game_markets(client, api_key=None): return [{"id": "evt1"}]
     odds.get_game_markets = get_game_markets
     odds.match_event = lambda events, home, away: {"id": "evt1"}
     odds.best_moneyline = lambda event, team: -120 if "Red Sox" in team else 130
-    async def props(client, event_id):
+    async def props(client, event_id, api_key=None):
         # Offer a soft line below the projection so the model likes the OVER.
         return {norm("Test Ace"): {"line": 5.5, "over": -115, "under": -105}}
     odds.get_pitcher_strikeout_props = props
 
 
 def disable_market():
-    odds.has_key = lambda: False
+    odds.has_key = lambda *a, **k: False
     odds.player_props_enabled = lambda: False
 
 

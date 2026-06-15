@@ -38,6 +38,12 @@ WIN_PROB_FLOOR, WIN_PROB_CEIL = 0.12, 0.88  # MMA upsets are common — don't ov
 WIN_DIFF_SCALE = 6.0   # logistic scale on the hand-tuned differential (fallback when no learned model)
 SIG_STD_FRAC = 0.30    # std of a sig-strike projection as a fraction of the mean
 FINISH_MID_FRAC = 0.45  # finishes land ~45% of the way through the scheduled time
+ENSEMBLE_COMP_WEIGHT = 0.0   # weight on the k-NN comps lens when blending the win prob.
+                             # build_mma_comps._validate found the learned parametric model
+                             # (Brier ~0.220) cleanly beats the comps lens (~0.240) and every
+                             # nonzero blend weight is worse — so comps stay a *separate* lens
+                             # (shown as aWinProbComps) rather than diluting the headline prob.
+                             # Raise this only if a future comps build closes that gap.
 
 # Learned winner model (coefficients fit by scripts/build_mma_winmodel.py on
 # point-in-time bouts). When present we use it; otherwise the hand-tuned formula
@@ -142,6 +148,9 @@ def _skill_score(f: Dict[str, Any], opp: Dict[str, Any]) -> float:
 
 # Canonical learned-model feature order. scripts/build_mma_winmodel.py imports
 # this and _win_features, so the trained coefficients always line up.
+# NOTE: recent form (momentum) was tested as a learned feature but did not
+# improve out-of-sample calibration (career rates already price it in), so it is
+# surfaced as a UI signal only, not a probability input. See _momentum / signals.
 WIN_FEATURE_NAMES = [
     "d_striking_net", "d_slpm", "d_strDef", "d_tdAvg", "d_tdDef", "d_ctrl",
     "d_sub", "d_kd", "d_finish", "d_durability", "d_winpct", "d_reach", "d_age",
@@ -166,6 +175,13 @@ def _stance_edge(a: Dict[str, Any], b: Dict[str, Any]) -> float:
 def _age_cliff(age: Optional[float]) -> float:
     """Years past 35 (the rough decline cliff); 0 below it or when unknown."""
     return max(age - 35.0, 0.0) if age is not None else 0.0
+
+
+def _momentum(f: Dict[str, Any]) -> float:
+    """Trajectory: recent (last-5) win rate minus career win rate. Positive = on
+    the rise. 0 when no recent-form data (so it falls back to career)."""
+    rwr = f.get("recentWinRate")
+    return (rwr - _winpct(f)) if rwr is not None else 0.0
 
 
 def rust_value(layoff_years: Optional[float]) -> float:
@@ -273,16 +289,27 @@ def _sig(label: str, detail: str, lean: str) -> Dict[str, str]:
 def analyze_fight(
     a: Dict[str, Any], b: Dict[str, Any], a_name: str, b_name: str,
     rounds: int = 3, fight_date: Optional[str] = None,
+    comp_win_prob: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Full fight model + prop picks. ``a`` is treated as the first-listed corner."""
+    """Full fight model + prop picks. ``a`` is treated as the first-listed corner.
+
+    ``comp_win_prob`` is P(a wins) from the historical k-NN comps lens; when
+    supplied the reported win prob is an ensemble of the parametric model and the
+    comps (two partly-decorrelated estimators usually calibrate better together).
+    """
     a_age, b_age = _age(a.get("dob"), fight_date), _age(b.get("dob"), fight_date)
     a_layoff = layoff_years(a.get("lastFightDate"), fight_date)
     b_layoff = layoff_years(b.get("lastFightDate"), fight_date)
     a_rust, b_rust = rust_value(a_layoff), rust_value(b_layoff)
 
-    # ---- winner ----
+    # ---- winner (parametric model, optionally ensembled with the comps lens) ----
     win_diff = _win_diff(a, b, a_age, b_age, a_rust, b_rust)
-    a_win = _win_prob(a, b, a_age, b_age, a_rust, b_rust)
+    a_win_model = _win_prob(a, b, a_age, b_age, a_rust, b_rust)
+    if comp_win_prob is not None:
+        a_win = _clamp((1 - ENSEMBLE_COMP_WEIGHT) * a_win_model + ENSEMBLE_COMP_WEIGHT * comp_win_prob,
+                       WIN_PROB_FLOOR, WIN_PROB_CEIL)
+    else:
+        a_win = a_win_model
 
     # ---- distance / method / rounds ----
     pa_fin = _p_finish(a, b)
@@ -349,10 +376,17 @@ def analyze_fight(
     if (a_layoff and a_layoff >= 1.0) or (b_layoff and b_layoff >= 1.0):
         signals.append(_sig("Layoff", f"{a_name} {a_layoff or 0:.1f}y vs {b_name} {b_layoff or 0:.1f}y since last bout "
                             f"(ring rust)", "a" if a_rust <= b_rust else "b"))
+    ma, mb = _momentum(a), _momentum(b)
+    if (a.get("recentWinRate") is not None or b.get("recentWinRate") is not None) and abs(ma - mb) > 0.05:
+        signals.append(_sig("Momentum", f"{a_name} {(a.get('recentWinRate') or _winpct(a))*100:.0f}% vs "
+                            f"{b_name} {(b.get('recentWinRate') or _winpct(b))*100:.0f}% recent (last 5 vs career)",
+                            "a" if ma >= mb else "b"))
 
     fight_model = {
         "aName": a_name, "bName": b_name, "rounds": rounds,
         "aWinProb": round(a_win, 4), "bWinProb": round(1 - a_win, 4),
+        "aWinProbModel": round(a_win_model, 4),
+        "aWinProbComps": round(comp_win_prob, 4) if comp_win_prob is not None else None,
         "winDiff": round(win_diff, 3),
         "distanceProb": round(distance_p, 4),
         "method": {"ko": round(p_ko, 4), "sub": round(p_sub, 4), "decision": round(distance_p, 4)},

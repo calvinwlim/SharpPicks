@@ -32,8 +32,12 @@ async def close() -> None:
         _client = None
 
 
-def has_key() -> bool:
-    return bool(os.environ.get("ODDS_API_KEY"))
+def has_key(api_key: Optional[str] = None) -> bool:
+    return bool(api_key or os.environ.get("ODDS_API_KEY"))
+
+
+def _key(api_key: Optional[str] = None) -> str:
+    return api_key or os.environ.get("ODDS_API_KEY", "")
 
 
 def player_props_enabled() -> bool:
@@ -47,16 +51,16 @@ def norm(name: str) -> str:
 
 # --------------------------------------------------------------------------- fetches
 
-async def get_game_markets(c: httpx.AsyncClient) -> List[Dict[str, Any]]:
+async def get_game_markets(c: httpx.AsyncClient, api_key: Optional[str] = None) -> List[Dict[str, Any]]:
     """All of today's MLB events with moneyline (h2h) and totals odds."""
-    if not has_key():
+    if not has_key(api_key):
         return []
 
     async def fetch() -> List[Dict[str, Any]]:
         r = await c.get(
             f"{ODDS_BASE}/sports/{SPORT_KEY}/odds",
             params={
-                "apiKey": os.environ["ODDS_API_KEY"],
+                "apiKey": _key(api_key),
                 "regions": "us",
                 "markets": "h2h,totals",
                 "oddsFormat": "american",
@@ -65,23 +69,25 @@ async def get_game_markets(c: httpx.AsyncClient) -> List[Dict[str, Any]]:
         r.raise_for_status()
         return r.json()
 
-    return await cache.get_or_set("odds:game_markets", 300, fetch)
+    cache_key = "odds:game_markets" if not api_key else f"odds:game_markets:{api_key[-6:]}"
+    return await cache.get_or_set(cache_key, 300, fetch)
 
 
-async def get_pitcher_props(c: httpx.AsyncClient, event_id: str, market_key: str) -> Dict[str, Dict[str, Any]]:
+async def get_pitcher_props(c: httpx.AsyncClient, event_id: str, market_key: str,
+                             api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
     """``{normalized_pitcher_name: {"line": float, "over": int, "under": int}}`` for ``market_key``.
 
     ``market_key`` is an Odds API player-prop market, e.g. ``"pitcher_strikeouts"``
     or ``"pitcher_walks"``.
     """
-    if not has_key() or not player_props_enabled():
+    if not has_key(api_key) or not player_props_enabled():
         return {}
 
     async def fetch() -> Dict[str, Dict[str, Any]]:
         r = await c.get(
             f"{ODDS_BASE}/sports/{SPORT_KEY}/events/{event_id}/odds",
             params={
-                "apiKey": os.environ["ODDS_API_KEY"],
+                "apiKey": _key(api_key),
                 "regions": "us",
                 "markets": market_key,
                 "oddsFormat": "american",
@@ -108,22 +114,26 @@ async def get_pitcher_props(c: httpx.AsyncClient, event_id: str, market_key: str
                 break
         return {k: v for k, v in out.items() if "over" in v and "under" in v and v.get("line") is not None}
 
-    return await cache.get_or_set(f"odds:props:{market_key}:{event_id}", 300, fetch)
+    cache_key = f"odds:props:{market_key}:{event_id}" if not api_key else f"odds:props:{market_key}:{event_id}:{api_key[-6:]}"
+    return await cache.get_or_set(cache_key, 300, fetch)
 
 
-async def get_pitcher_strikeout_props(c: httpx.AsyncClient, event_id: str) -> Dict[str, Dict[str, Any]]:
-    return await get_pitcher_props(c, event_id, "pitcher_strikeouts")
+async def get_pitcher_strikeout_props(c: httpx.AsyncClient, event_id: str,
+                                       api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    return await get_pitcher_props(c, event_id, "pitcher_strikeouts", api_key)
 
 
-async def get_pitcher_walks_props(c: httpx.AsyncClient, event_id: str) -> Dict[str, Dict[str, Any]]:
-    return await get_pitcher_props(c, event_id, "pitcher_walks")
+async def get_pitcher_walks_props(c: httpx.AsyncClient, event_id: str,
+                                   api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    return await get_pitcher_props(c, event_id, "pitcher_walks", api_key)
 
 
-async def get_player_props(c: httpx.AsyncClient, event_id: str, market_key: str) -> Dict[str, Dict[str, Any]]:
+async def get_player_props(c: httpx.AsyncClient, event_id: str, market_key: str,
+                            api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
     """Batter (or any player) prop market keyed by player name. ``get_pitcher_props``
     is already position-agnostic — this is just the honest name for batter markets
     like ``batter_hits`` / ``batter_total_bases`` / ``batter_home_runs``."""
-    return await get_pitcher_props(c, event_id, market_key)
+    return await get_pitcher_props(c, event_id, market_key, api_key)
 
 
 def game_total(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:

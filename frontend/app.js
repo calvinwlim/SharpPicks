@@ -1,5 +1,54 @@
 // Sharp Slate frontend — fetches the API, renders game cards, picks, and the
-// Top Board. No framework, no build step, no browser storage.
+// Top Board. No framework, no build step.
+
+// ---- API keys (sessionStorage only — cleared when the tab closes) ----------
+function apiHeaders() {
+  const headers = {};
+  const oddsKey = sessionStorage.getItem("oddsApiKey");
+  const anthropicKey = sessionStorage.getItem("anthropicApiKey");
+  if (oddsKey) headers["X-Odds-Api-Key"] = oddsKey;
+  if (anthropicKey) headers["X-Anthropic-Api-Key"] = anthropicKey;
+  return headers;
+}
+
+function hasAnthropicKey() {
+  return !!sessionStorage.getItem("anthropicApiKey");
+}
+
+const settingsOverlay = document.getElementById("settings-overlay");
+const settingsToggle = document.getElementById("settings-toggle");
+const settingsClose = document.getElementById("settings-close");
+const settingsSave = document.getElementById("settings-save");
+const settingsClear = document.getElementById("settings-clear");
+const settingsOddsKey = document.getElementById("settings-odds-key");
+const settingsAnthropicKey = document.getElementById("settings-anthropic-key");
+
+settingsToggle.addEventListener("click", () => {
+  settingsOddsKey.value = sessionStorage.getItem("oddsApiKey") || "";
+  settingsAnthropicKey.value = sessionStorage.getItem("anthropicApiKey") || "";
+  settingsOverlay.classList.add("open");
+});
+settingsClose.addEventListener("click", () => settingsOverlay.classList.remove("open"));
+settingsOverlay.addEventListener("click", (e) => {
+  if (e.target === settingsOverlay) settingsOverlay.classList.remove("open");
+});
+settingsSave.addEventListener("click", () => {
+  const odds = settingsOddsKey.value.trim();
+  const anthropic = settingsAnthropicKey.value.trim();
+  if (odds) sessionStorage.setItem("oddsApiKey", odds); else sessionStorage.removeItem("oddsApiKey");
+  if (anthropic) sessionStorage.setItem("anthropicApiKey", anthropic); else sessionStorage.removeItem("anthropicApiKey");
+  settingsOverlay.classList.remove("open");
+  fetch("/api/health", { headers: apiHeaders() })
+    .then((r) => r.json())
+    .then((d) => setFlags(d.flags || {}))
+    .catch(() => {});
+});
+settingsClear.addEventListener("click", () => {
+  sessionStorage.removeItem("oddsApiKey");
+  sessionStorage.removeItem("anthropicApiKey");
+  settingsOddsKey.value = "";
+  settingsAnthropicKey.value = "";
+});
 
 const dateInput = document.getElementById("date-input");
 const loadBtn = document.getElementById("load-btn");
@@ -76,7 +125,8 @@ async function loadSlate(date) {
 
   let data;
   try {
-    const res = await fetch(`/api/slate?date=${encodeURIComponent(date)}&sport=${currentSport}`);
+    const res = await fetch(`/api/slate?date=${encodeURIComponent(date)}&sport=${currentSport}`,
+      { headers: apiHeaders() });
     data = await res.json();
     setFlags(data.flags || {});
   } catch (e) {
@@ -159,8 +209,10 @@ function fillTeam(el, team) {
 async function loadAnalysis(game, date, container, btn) {
   container.innerHTML = '<div class="loading">Crunching the numbers…</div>';
   try {
+    const ai = hasAnthropicKey() ? 1 : 0;
     const res = await fetch(
-      `/api/analyze/${gameKey(game)}?date=${encodeURIComponent(date)}&sport=${currentSport}&ai=0`);
+      `/api/analyze/${gameKey(game)}?date=${encodeURIComponent(date)}&sport=${currentSport}&ai=${ai}`,
+      { headers: apiHeaders() });
     if (!res.ok) throw new Error("bad response");
     const data = await res.json();
     container.dataset.loaded = "1";
@@ -929,7 +981,7 @@ document.querySelectorAll(".sport-tab").forEach((tab) => {
 });
 
 // Pull flags on load so the pills reflect server config even before a search.
-fetch("/api/health")
+fetch("/api/health", { headers: apiHeaders() })
   .then((r) => r.json())
   .then((d) => setFlags(d.flags || {}))
   .catch(() => {});

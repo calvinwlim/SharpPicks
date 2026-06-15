@@ -51,12 +51,12 @@ def template_narrative(pick: Dict[str, Any]) -> str:
     return " ".join(parts)
 
 
-async def generate_narrative(pick: Dict[str, Any], use_ai: bool) -> str:
+async def generate_narrative(pick: Dict[str, Any], use_ai: bool, api_key: str | None = None) -> str:
     base = template_narrative(pick)
     if not use_ai:
         return base
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         return base
 

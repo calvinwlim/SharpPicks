@@ -103,7 +103,13 @@ def _collect(bouts, box, phys):
     """Replay point-in-time, returning (rows[(date, feats, a_won)])."""
     running: Dict[str, Dict[str, float]] = {}
     last_date: Dict[str, Any] = {}  # most recent prior bout date per fighter (for layoff)
+    recent: Dict[str, List[int]] = {}  # last results (1=win) per fighter (for momentum)
     rows: List[Tuple[str, List[float], float]] = []
+
+    def rwr(name: str) -> Optional[float]:
+        r = recent.get(name)
+        return (sum(r[-5:]) / len(r[-5:])) if r else None
+
     for bt in bouts:
         a, b = bt["names"]
         na, nb = B.norm(a), B.norm(b)
@@ -112,6 +118,7 @@ def _collect(bouts, box, phys):
         if acc_a and acc_b and acc_a["fights"] >= B.MIN_PRIOR and acc_b["fights"] >= B.MIN_PRIOR and sa and sb:
             fa = B.rates(acc_a, phys.get(na, {}))
             fb = B.rates(acc_b, phys.get(nb, {}))
+            fa["recentWinRate"], fb["recentWinRate"] = rwr(na), rwr(nb)
             ds = bt["date"].isoformat()
             aa = M._age(fa.get("dob"), ds)
             ab = M._age(fb.get("dob"), ds)
@@ -123,6 +130,8 @@ def _collect(bouts, box, phys):
 
         last_date[na] = bt["date"]
         last_date[nb] = bt["date"]
+        recent.setdefault(na, []).append(1 if bt["winner"] == a else 0)
+        recent.setdefault(nb, []).append(1 if bt["winner"] == b else 0)
         if sa and sb:  # advance accumulators (same pairing as the other builders)
             for me, opp, ms, os in ((a, b, sa, sb), (b, a, sb, sa)):
                 g = running.setdefault(B.norm(me), B.fresh())

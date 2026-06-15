@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import mma_backtest as B
+from backend import mma_analysis as M
 from backend import mma_comps as C
 
 OUT = ROOT / "backend" / "data" / "ufc_fight_vectors.json"
@@ -55,7 +56,13 @@ async def main_async() -> None:
     bouts.sort(key=lambda x: x["date"])
 
     running: Dict[str, Dict[str, float]] = {}
+    last_date: Dict[str, Any] = {}      # prior bout date per fighter (rust)
+    recent: Dict[str, List[int]] = {}   # recent results per fighter (unused by model, kept for parity)
     vectors: List[Dict[str, Any]] = []
+
+    def rwr(name):
+        r = recent.get(name)
+        return (sum(r[-5:]) / len(r[-5:])) if r else None
 
     for bt in bouts:
         a, b = bt["names"]
@@ -66,18 +73,28 @@ async def main_async() -> None:
             fa = B.rates(acc_a, phys.get(na, {}))
             fb = B.rates(acc_b, phys.get(nb, {}))
             fa["weightClass"] = bt["wc"]; fb["weightClass"] = bt["wc"]  # division from the bout
-            vec, fav_is_a = C.build_vector(fa, fb, bt["rounds"], bt["date"].isoformat())
+            fa["recentWinRate"], fb["recentWinRate"] = rwr(na), rwr(nb)
+            ds = bt["date"].isoformat()
+            vec, fav_is_a = C.build_vector(fa, fb, bt["rounds"], ds)
             fav = a if fav_is_a else b
             dog = b if fav_is_a else a
+            # parametric model's P(favorite wins), point-in-time, for the ensemble eval
+            aa, ab = M._age(fa.get("dob"), ds), M._age(fb.get("dob"), ds)
+            ar = M.rust_value(M.layoff_years(last_date[na].isoformat() if na in last_date else None, ds))
+            br = M.rust_value(M.layoff_years(last_date[nb].isoformat() if nb in last_date else None, ds))
+            p_a = M._win_prob(fa, fb, aa, ab, ar, br)
             total_sig = sa["sigL"] + sb["sigL"]
             vectors.append({
                 "vec": [round(x, 4) for x in vec],
                 "out": {"favWon": int(bt["winner"] == fav), "method": bt["method"],
                         "distance": int(bt["method"] == "dec"), "totalSig": total_sig,
-                        "endRound": bt["endRound"]},
-                "meta": {"fav": fav, "dog": dog, "event": bt["event"], "date": bt["date"].isoformat()},
+                        "endRound": bt["endRound"], "modelFavWin": round(p_a if fav_is_a else 1 - p_a, 4)},
+                "meta": {"fav": fav, "dog": dog, "event": bt["event"], "date": ds},
             })
 
+        last_date[na] = bt["date"]; last_date[nb] = bt["date"]
+        recent.setdefault(na, []).append(1 if bt["winner"] == a else 0)
+        recent.setdefault(nb, []).append(1 if bt["winner"] == b else 0)
         # advance the running accumulators (same pairing as the backtest)
         if sa and sb:
             for me, opp, ms, os in ((a, b, sa, sb), (b, a, sb, sa)):
@@ -115,6 +132,7 @@ def _validate(vectors, mean_v, std_v, k=60, since="2023-01-01"):
     z = [[(v["vec"][i] - mean_v[i]) / std_v[i] for i in range(dim)] for v in vectors]
     since_d = since
     fav_p, fav_o, dist_p, dist_o, method_correct, method_n = [], [], [], [], 0, 0
+    model_p: List[Any] = []
     for i, v in enumerate(vectors):
         if v["meta"]["date"] < since_d or i < 200:
             continue
@@ -125,6 +143,7 @@ def _validate(vectors, mean_v, std_v, k=60, since="2023-01-01"):
         comps = [vectors[j] for _, j in scored]
         p = sum(c["out"]["favWon"] for c in comps) / len(comps)
         fav_p.append(p); fav_o.append(v["out"]["favWon"])
+        model_p.append(v["out"].get("modelFavWin"))
         dp = sum(c["out"]["distance"] for c in comps) / len(comps)
         dist_p.append(dp); dist_o.append(v["out"]["distance"])
         mc = {"ko": 0, "sub": 0, "dec": 0}
@@ -145,6 +164,24 @@ def _validate(vectors, mean_v, std_v, k=60, since="2023-01-01"):
     print(f"  distance                 Brier {brier(dist_p, dist_o):.4f} "
           f"(base {brier([mean(dist_o)]*n, dist_o):.4f}); comp avg {mean(dist_p):.1%} vs actual {mean(dist_o):.1%}")
     print(f"  method (argmax of comps) {method_correct / method_n:.1%} acc (n={method_n})")
+
+    # --- ensemble: parametric model vs comps vs blend (leakage-free, point-in-time) ---
+    paired = [(m, c, o) for m, c, o in zip(model_p, fav_p, fav_o) if m is not None]
+    if paired:
+        mp = [m for m, _, _ in paired]; cp = [c for _, c, _ in paired]; oo = [o for _, _, o in paired]
+        print(f"\n=== Winner ensemble (model vs comps vs blend, n={len(paired)}) ===")
+        print(f"  parametric model   Brier {brier(mp, oo):.4f}   acc {mean(int((p>=0.5)==bool(o)) for p,o in zip(mp,oo)):.1%}")
+        print(f"  comps (k-NN)       Brier {brier(cp, oo):.4f}   acc {mean(int((p>=0.5)==bool(o)) for p,o in zip(cp,oo)):.1%}")
+        best = None
+        for cw in (0.0, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6):
+            blended = [(1 - cw) * m + cw * c for m, c in zip(mp, cp)]
+            br = brier(blended, oo)
+            if best is None or br < best[1]:
+                best = (cw, br)
+            print(f"    comps weight {cw:.2f}: Brier {br:.4f}")
+        print(f"  -> best comps weight {best[0]:.2f} (Brier {best[1]:.4f}); "
+              f"current ENSEMBLE_COMP_WEIGHT={M.ENSEMBLE_COMP_WEIGHT}")
+
     print("\n(comps are case-based, not betting ROI)")
 
 

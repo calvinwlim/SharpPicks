@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from . import ai as ai_module
@@ -37,29 +37,40 @@ BATTER_PICK_CAP = 8       # most batter props to surface per game (keeps the boa
 BATTER_PER_TYPE_CAP = 3   # max analysis-only picks of one prop type (variety on the board)
 
 
-def _flags(ai_requested: bool = False) -> Dict[str, Any]:
+# Optional per-request key overrides, sent from the frontend's settings panel
+# (header names chosen to match what app.js sends). Falls back to env vars.
+OddsKeyHeader = Header(None, alias="X-Odds-Api-Key")
+AnthropicKeyHeader = Header(None, alias="X-Anthropic-Api-Key")
+
+
+def _flags(ai_requested: bool = False, odds_key: Optional[str] = None,
+           anthropic_key: Optional[str] = None) -> Dict[str, Any]:
     return {
-        "hasOdds": odds.has_key(),
+        "hasOdds": odds.has_key(odds_key),
         "playerProps": odds.player_props_enabled(),
-        "hasAI": ai_requested and bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "hasAI": ai_requested and bool(anthropic_key or os.environ.get("ANTHROPIC_API_KEY")),
     }
 
 
 @app.get("/api/health")
-async def health() -> Dict[str, Any]:
-    return {"ok": True, "flags": _flags()}
+async def health(x_odds_api_key: Optional[str] = OddsKeyHeader,
+                  x_anthropic_api_key: Optional[str] = AnthropicKeyHeader) -> Dict[str, Any]:
+    return {"ok": True, "flags": _flags(odds_key=x_odds_api_key, anthropic_key=x_anthropic_api_key)}
 
 
 @app.get("/api/slate")
-async def slate(date: str, sport: str = "mlb") -> Dict[str, Any]:
+async def slate(date: str, sport: str = "mlb",
+                 x_odds_api_key: Optional[str] = OddsKeyHeader,
+                 x_anthropic_api_key: Optional[str] = AnthropicKeyHeader) -> Dict[str, Any]:
+    flags = _flags(odds_key=x_odds_api_key, anthropic_key=x_anthropic_api_key)
     if sport == "nba":
         games = await nba.get_schedule(date)
-        return {"date": date, "sport": "nba", "count": len(games), "games": games, "flags": _flags()}
+        return {"date": date, "sport": "nba", "count": len(games), "games": games, "flags": flags}
     if sport == "mma":
         games = await mma.get_schedule(date)
-        return {"date": date, "sport": "mma", "count": len(games), "games": games, "flags": _flags()}
+        return {"date": date, "sport": "mma", "count": len(games), "games": games, "flags": flags}
     games = await mlb.get_schedule(date)
-    return {"date": date, "sport": "mlb", "count": len(games), "games": games, "flags": _flags()}
+    return {"date": date, "sport": "mlb", "count": len(games), "games": games, "flags": flags}
 
 
 def _team_rates_or_default(team_rates: Dict[str, Any], team_id: int) -> Dict[str, Any]:
@@ -76,15 +87,18 @@ def _days(iso: str) -> int:
 
 
 @app.get("/api/analyze/{game_id}")
-async def analyze(game_id: str, date: str, seasons: int = 4, ai: int = 0, sport: str = "mlb") -> Dict[str, Any]:
+async def analyze(game_id: str, date: str, seasons: int = 4, ai: int = 0, sport: str = "mlb",
+                   x_odds_api_key: Optional[str] = OddsKeyHeader,
+                   x_anthropic_api_key: Optional[str] = AnthropicKeyHeader) -> Dict[str, Any]:
     if sport == "nba":
-        return await _analyze_nba(game_id, date)
+        return await _analyze_nba(game_id, date, x_odds_api_key, x_anthropic_api_key)
     if sport == "mma":
-        return await _analyze_mma(game_id, date)
-    return await _analyze_mlb(int(game_id), date, seasons, ai)
+        return await _analyze_mma(game_id, date, x_odds_api_key, x_anthropic_api_key)
+    return await _analyze_mlb(int(game_id), date, seasons, ai, x_odds_api_key, x_anthropic_api_key)
 
 
-async def _analyze_mma(game_id: str, date: str) -> Dict[str, Any]:
+async def _analyze_mma(game_id: str, date: str, odds_key: Optional[str] = None,
+                        anthropic_key: Optional[str] = None) -> Dict[str, Any]:
     fights = await mma.get_schedule(date)
     fight = next((f for f in fights if f["gameId"] == game_id), None)
     if fight is None:
@@ -96,18 +110,23 @@ async def _analyze_mma(game_id: str, date: str) -> Dict[str, Any]:
         missing = a_name if not a else b_name
         return {"gameId": game_id, "sport": "mma", "fight": fight, "fightModel": None,
                 "picks": [], "note": f"No rate-stat data for {missing} — run scripts/build_ufc_dataset.py to refresh.",
-                "flags": _flags()}
+                "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
 
-    model = mma_analysis.analyze_fight(a, b, a_name, b_name, rounds=fight.get("rounds", 3), fight_date=date)
+    rounds = fight.get("rounds", 3)
     try:
-        comps = mma_comps.find_comps(a, b, a_name, b_name, rounds=fight.get("rounds", 3), fight_date=date)
+        comps = mma_comps.find_comps(a, b, a_name, b_name, rounds=rounds, fight_date=date)
     except Exception:
         comps = None
+    # Ensemble the parametric model with the historical comps lens (when present).
+    comp_p = mma_comps.comp_win_prob_for(comps, a_name)
+    model = mma_analysis.analyze_fight(a, b, a_name, b_name, rounds=rounds, fight_date=date,
+                                       comp_win_prob=comp_p)
     return {"gameId": game_id, "sport": "mma", "fight": fight, "fightModel": model["fightModel"],
-            "picks": model["picks"], "comps": comps, "flags": _flags()}
+            "picks": model["picks"], "comps": comps, "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
 
 
-async def _analyze_nba(game_id: str, date: str) -> Dict[str, Any]:
+async def _analyze_nba(game_id: str, date: str, odds_key: Optional[str] = None,
+                        anthropic_key: Optional[str] = None) -> Dict[str, Any]:
     games = await nba.get_schedule(date)
     game = next((g for g in games if g["gameId"] == game_id), None)
     if game is None:
@@ -164,7 +183,7 @@ async def _analyze_nba(game_id: str, date: str) -> Dict[str, Any]:
         picks = await _nba_player_picks(home, away, season, ratings, opp_stats, players, game_model["pace"])
 
     return {"gameId": game_id, "sport": "nba", "game": game, "gameModel": game_model,
-            "picks": picks, "flags": _flags()}
+            "picks": picks, "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
 
 
 async def _nba_h2h(home_id: int, away_id: int, season: str, before_date: str):
@@ -247,7 +266,8 @@ async def _nba_player_picks(home, away, season, ratings, opp_stats, players, exp
     return selected[:NBA_PLAYER_PICK_CAP]
 
 
-async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -> Dict[str, Any]:
+async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
+                        odds_key: Optional[str] = None, anthropic_key: Optional[str] = None) -> Dict[str, Any]:
     games = await mlb.get_schedule(date)
     game = next((g for g in games if g["gamePk"] == game_pk), None)
     if game is None:
@@ -292,10 +312,10 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -
     total_market: Optional[Dict[str, Any]] = None
     k_props_by_pitcher: Dict[str, Dict[str, Any]] = {}
     bb_props_by_pitcher: Dict[str, Dict[str, Any]] = {}
-    if odds.has_key():
+    if odds.has_key(odds_key):
         try:
             c = odds.client()
-            events = await odds.get_game_markets(c)
+            events = await odds.get_game_markets(c, odds_key)
             market_event = odds.match_event(events, home["name"], away["name"])
         except Exception:
             market_event = None
@@ -308,11 +328,11 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -
 
             if odds.player_props_enabled():
                 try:
-                    k_props_by_pitcher = await odds.get_pitcher_strikeout_props(c, market_event["id"])
+                    k_props_by_pitcher = await odds.get_pitcher_strikeout_props(c, market_event["id"], odds_key)
                 except Exception:
                     k_props_by_pitcher = {}
                 try:
-                    bb_props_by_pitcher = await odds.get_pitcher_walks_props(c, market_event["id"])
+                    bb_props_by_pitcher = await odds.get_pitcher_walks_props(c, market_event["id"], odds_key)
                 except Exception:
                     bb_props_by_pitcher = {}
 
@@ -377,7 +397,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -
             pitcher_skill=pitcher_skill,
         )
         if k_pick is not None:
-            k_pick["narrative"] = await ai_module.generate_narrative(k_pick, use_ai)
+            k_pick["narrative"] = await ai_module.generate_narrative(k_pick, use_ai, anthropic_key)
             picks.append(k_pick)
 
         bb_pick = analysis.analyze_walks(
@@ -395,7 +415,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -
             opp_lineup=opp_lineup,
         )
         if bb_pick is not None:
-            bb_pick["narrative"] = await ai_module.generate_narrative(bb_pick, use_ai)
+            bb_pick["narrative"] = await ai_module.generate_narrative(bb_pick, use_ai, anthropic_key)
             picks.append(bb_pick)
 
     # ---- game model ----------------------------------------------------------------------
@@ -443,7 +463,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -
     if market_event and odds.player_props_enabled():
         for _, _, _, _, mkey, _, _, _ in BATTER_PROPS:
             try:
-                batter_markets[mkey] = await odds.get_player_props(odds.client(), market_event["id"], mkey)
+                batter_markets[mkey] = await odds.get_player_props(odds.client(), market_event["id"], mkey, odds_key)
             except Exception:
                 batter_markets[mkey] = {}
 
@@ -518,7 +538,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -
         varied.append(p)
 
     for bp in (market_picks + varied)[:BATTER_PICK_CAP]:
-        bp["narrative"] = await ai_module.generate_narrative(bp, use_ai)
+        bp["narrative"] = await ai_module.generate_narrative(bp, use_ai, anthropic_key)
         picks.append(bp)
 
     return {
@@ -529,7 +549,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0) -
         "gameModel": game_model,
         "weather": weather,
         "umpire": umpire,
-        "flags": _flags(use_ai),
+        "flags": _flags(use_ai, odds_key, anthropic_key),
     }
 
 

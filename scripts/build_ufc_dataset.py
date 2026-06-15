@@ -139,6 +139,7 @@ async def main() -> None:
     # Aggregate per fighter, pairing opponents within each bout.
     agg: Dict[str, Dict[str, Any]] = {}
     last_date: Dict[str, datetime.date] = {}  # most recent bout per fighter (for layoff)
+    results_by_fighter: Dict[str, list] = {}   # (date, won) per fighter (for recent form)
     for (event, bout), meta in bouts.items():
         a, bb = meta["names"]
         sa, sb = box.get((event, bout, a)), box.get((event, bout, bb))
@@ -151,6 +152,7 @@ async def main() -> None:
                 key = _norm(nm)
                 if key not in last_date or d > last_date[key]:
                     last_date[key] = d
+                results_by_fighter.setdefault(key, []).append((d, 1 if meta["winner"] == nm else 0))
         for me, opp, ms, os in ((a, bb, sa, sb), (bb, a, sb, sa)):
             g = agg.setdefault(_norm(me), _fresh())
             g["name"] = me
@@ -186,6 +188,14 @@ async def main() -> None:
     def rate(n: float, d: float, default: float = 0.0) -> float:
         return round(n / d, 4) if d else default
 
+    def recent_win_rate(key: str) -> Optional[float]:
+        """Win rate over the fighter's most recent (up to 5) bouts, by date."""
+        res = results_by_fighter.get(key)
+        if not res:
+            return None
+        last5 = [w for _, w in sorted(res, key=lambda x: x[0])[-5:]]
+        return round(sum(last5) / len(last5), 4) if last5 else None
+
     out: Dict[str, Any] = {}
     for key, g in agg.items():
         m = g["minutes"] or 1.0
@@ -206,6 +216,7 @@ async def main() -> None:
             "finishedRate": rate(g["koL"] + g["subL"], losses),
             "weightClass": max(g["wc"], key=g["wc"].get) if g["wc"] else None,
             "lastFightDate": last_date[key].isoformat() if key in last_date else None,
+            "recentWinRate": recent_win_rate(key),
         }
         rec.update(phys.get(key, {}))
         out[key] = rec

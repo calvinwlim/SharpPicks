@@ -34,9 +34,22 @@ there is no live free rate-stat API). (Re)build it by aggregating the public
 ufcstats mirror — run after new events:
 
 ```bash
-python3 scripts/build_ufc_dataset.py    # fighter rate stats -> backend/data/ufc_fighters.json
-python3 scripts/build_mma_comps.py      # matchup vectors -> backend/data/ufc_fight_vectors.json (+ holdout validation)
+python3 scripts/build_ufc_dataset.py    # fighter rate stats (+ lastFightDate, recentWinRate) -> backend/data/ufc_fighters.json
+python3 scripts/build_mma_winmodel.py   # fit the winner logistic -> backend/data/ufc_winmodel.json
+python3 scripts/build_mma_comps.py      # matchup vectors -> backend/data/ufc_fight_vectors.json (+ holdout + ensemble validation)
 ```
+
+Run them in that order after new events: the dataset feeds the win-model fit,
+and the comps validation reads the winner model. The **winner is a learned
+logistic** — `build_mma_winmodel.py` replays every bout point-in-time, fits
+`a − b` differential coefficients (striking/grappling/defense/finishing plus
+stance, an age cliff, and ring-rust/layoff), and writes `ufc_winmodel.json`,
+which `mma_analysis` loads (falling back to the hand-tuned `_skill_score` formula
+if the file is absent). `WIN_FEATURE_NAMES`/`_win_features` in `mma_analysis` own
+the feature order; the builder imports them so the two never drift. Recent form
+(momentum) and the k-NN comps lens were both measured and **left out of the win
+probability** (they didn't improve out-of-sample) — momentum shows as a signal,
+comps as a separate `aWinProbComps` number (`ENSEMBLE_COMP_WEIGHT=0`).
 
 Backtests (live data, measure model accuracy — needs network):
 
@@ -154,7 +167,11 @@ rule) — see `drawChip()` in `app.js`.
   unreachable. Develop the engine against `test_integration.py`'s synthetic data.
 - Be honest in copy and output: surface where the model disagrees with the
   market, never promise winners. Flag low samples (`lowSample`, `split--thin`).
-- No browser storage in the frontend (it isn't available in all embeds).
+- The only browser storage used is `sessionStorage` for optional user-supplied
+  API keys (Odds API / Anthropic), entered via the "⚙️ Keys" panel and sent as
+  `X-Odds-Api-Key` / `X-Anthropic-Api-Key` headers; they override the server's
+  env vars for that request and are never persisted server-side. Don't add
+  other browser storage (not available in all embeds).
 
 ## Honest-modeling notes
 
