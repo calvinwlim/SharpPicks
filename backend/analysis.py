@@ -20,7 +20,9 @@ OPP_FACTOR_CEIL = 1.15
 TOP_BUCKET = 10             # top-N teams by K%/BB% rank counts as "elite" for splits
 SHRINK_PSEUDO = 8           # pseudo-observations pulling small samples to 0.5
 MIN_STARTS = 3              # fewer starts than this -> no pick
-HOME_FIELD_RUNS = 0.20      # home-field advantage, expressed as extra projected runs for the home team
+HOME_FIELD_RUNS = 0.35      # home-field advantage, expressed as extra projected runs for the home team
+# 200-game backtest showed home field was underweighted at 0.20 (25-50% home bucket: pred 41%, actual 55%)
+ML_SHRINK = 0.25            # pulls moneyline probs toward 0.5; fixes 75%+ overconfidence in backtest
                             # (feeds the Skellam win prob so it scales correctly with the run environment)
 
 # Count-prop distributions (None = Poisson; a number = negative-binomial dispersion).
@@ -1359,6 +1361,8 @@ def game_model(
     p_home, p_away, p_tie = _poisson_win_prob(home_proj, away_proj)
     decisive = p_home + p_away
     home_win = _clamp(p_home + (p_tie * p_home / decisive if decisive > 0 else 0.5), 0.02, 0.98)
+    # Shrink toward 0.5 to correct overconfidence at extremes (backtest: 75%+ bucket pred 78%, actual 45%)
+    home_win = 0.5 + (home_win - 0.5) * (1.0 - ML_SHRINK)
 
     result: Dict[str, Any] = {
         "homeWinProb": round(home_win, 4),

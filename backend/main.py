@@ -30,7 +30,8 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 # at-most-one-per-AB stats (hits/HR -> binomial); total bases stays Poisson.
 BATTER_PROPS = [
     ("hits", "hits", "Hits", "hits", "batter_hits", lambda hrf: 1.0, 0.5, True),
-    ("totalBases", "totalBases", "TB", "total bases", "batter_total_bases", lambda hrf: hrf ** 0.5, 1.5, False),
+    # totalBases suppressed: backtest (2725 samples) showed Brier 0.269 vs 0.247 base-rate —
+    # Poisson gives zero discriminative power on TB; model can't beat coin-flip here.
     ("homeRuns", "homeRuns", "HR", "home runs", "batter_home_runs", lambda hrf: hrf, 0.5, True),
 ]
 BATTER_PICK_CAP = 8       # most batter props to surface per game (keeps the board readable)
@@ -435,23 +436,9 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
             k_pick["narrative"] = await ai_module.generate_narrative(k_pick, use_ai, anthropic_key)
             picks.append(k_pick)
 
-        bb_pick = analysis.analyze_walks(
-            pitcher_name=pitcher["name"],
-            gamelog=gamelog,
-            opponent_id=opponent["id"],
-            opponent_name=opponent["name"],
-            is_home=is_home,
-            team_rates_by_season=team_rates_by_season,
-            current_season=season,
-            market=bb_market,
-            platoon_splits=platoon_splits,
-            opp_handedness=opp_handedness,
-            umpire=umpire,
-            opp_lineup=opp_lineup,
-        )
-        if bb_pick is not None:
-            bb_pick["narrative"] = await ai_module.generate_narrative(bb_pick, use_ai, anthropic_key)
-            picks.append(bb_pick)
+        # Walk picks suppressed: 1743-sample backtest showed MAE worse than naive (1.06 vs 1.03)
+        # and Brier worse than base rate — walk count has too much game-to-game variance to model.
+        # bb_pick = analysis.analyze_walks(...)
 
     # ---- game model ----------------------------------------------------------------------
     home_ml = away_ml = None

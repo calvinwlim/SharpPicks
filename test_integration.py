@@ -306,9 +306,10 @@ def main():
 
     print("\n[analyze — analysis only]")
     a = client.get(f"/api/analyze/{GAME['gamePk']}?date={DATE}&ai=0").json()
-    check(len(a["picks"]) == 2, "two graded picks for Test Ace (K's + walks; away SP has no logs)")
+    # Walk picks suppressed (backtest: MAE/Brier both worse than naive); only K pick expected.
+    check(len(a["picks"]) == 1, "one graded pick for Test Ace (K only; walks suppressed; away SP has no logs)")
     picks_by_type = {pk["propType"]: pk for pk in a["picks"]}
-    check("strikeouts" in picks_by_type and "walks" in picks_by_type, "both prop types present")
+    check("strikeouts" in picks_by_type, "strikeouts prop type present")
 
     p = picks_by_type["strikeouts"]
     check(p["player"] == "Test Ace", "pick is for Test Ace")
@@ -324,11 +325,6 @@ def main():
     check(all({"date", "opp", "k", "home"} <= set(x) for x in p["spark"]), "spark rows shaped for chart")
     check(p["edge"] is None and p["hasMarket"] is False, "no edge without odds")
     check(isinstance(p.get("narrative"), str) and p["narrative"], "template narrative present")
-
-    bb = picks_by_type["walks"]
-    check(bb["pick"].endswith("BB"), f"walks pick label: {bb['pick']}")
-    check(bb["side"] in ("over", "under"), f"walks model picked a side: {bb['side']}")
-    check(isinstance(bb["splits"], list) and len(bb["splits"]) >= 4, "walks splits present")
 
     check(a["gameModel"] is not None, "game model present")
     gm = a["gameModel"]
