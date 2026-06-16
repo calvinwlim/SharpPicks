@@ -174,14 +174,9 @@ async function loadHistory() {
     for (const e of data.entries || []) {
       calHistory[e.date] = e;
     }
-    if (Object.keys(calHistory).length) {
-      calSection.style.display = "block";
-      renderCalendar();
-    } else {
-      calSection.style.display = "none";
-    }
+    renderCalendar();
   } catch (e) {
-    calSection.style.display = "none";
+    // leave calendar empty on error
   }
 }
 
@@ -248,8 +243,12 @@ function renderCalendar() {
         calSelectedDate = dateStr;
         renderCalendar();
         showCalTooltip(entry);
-        // navigate the date picker and load that day's slate
+        // switch to slate view for that day
         dateInput.value = dateStr;
+        currentSport = "mlb";
+        document.querySelectorAll(".sport-tab").forEach((t) =>
+          t.classList.toggle("active", t.dataset.sport === "mlb"));
+        showSlateView();
         loadSlate(dateStr);
       });
     }
@@ -301,7 +300,6 @@ document.getElementById("cal-next").addEventListener("click", () => {
 async function loadSlate(date) {
   slateContainer.innerHTML = '<div class="loading">Loading slate…</div>';
   loadYesterdayStrip(date);
-  if (currentSport === "mlb") loadHistory(); else calSection.style.display = "none";
   topBoardSection.style.display = "none";
   topBoardList.innerHTML = "";
   betItems = [];
@@ -1174,10 +1172,39 @@ function renderBetBoard() {
 dateInput.value = todayISO();
 loadBtn.addEventListener("click", () => loadSlate(dateInput.value));
 
-// Sport tabs (MLB / NBA): switch the active sport and reload the slate.
+const slateView = document.getElementById("slate-view");
+const historyView = document.getElementById("history-view");
+const historyTab = document.getElementById("history-tab");
+let historyMode = false;
+
+function showSlateView() {
+  historyMode = false;
+  slateView.style.display = "";
+  historyView.style.display = "none";
+  dateInput.style.display = "";
+  loadBtn.style.display = "";
+}
+
+function showHistoryView() {
+  historyMode = true;
+  slateView.style.display = "none";
+  historyView.style.display = "";
+  dateInput.style.display = "none";
+  loadBtn.style.display = "none";
+  document.querySelectorAll(".sport-tab").forEach((t) => t.classList.remove("active"));
+  historyTab.classList.add("active");
+  loadHistory();
+}
+
+// Sport tabs (MLB / NBA / UFC / History): switch view or sport.
 document.querySelectorAll(".sport-tab").forEach((tab) => {
   tab.addEventListener("click", () => {
-    if (tab.dataset.sport === currentSport) return;
+    if (tab === historyTab) {
+      if (!historyMode) showHistoryView();
+      return;
+    }
+    if (tab.dataset.sport === currentSport && !historyMode) return;
+    showSlateView();
     currentSport = tab.dataset.sport;
     document.querySelectorAll(".sport-tab").forEach((t) => t.classList.toggle("active", t === tab));
     loadSlate(dateInput.value);
@@ -1204,4 +1231,3 @@ document.addEventListener("click", (e) => {
 betEvOnly.addEventListener("change", renderBetBoard);
 
 loadSlate(dateInput.value);
-loadHistory();
