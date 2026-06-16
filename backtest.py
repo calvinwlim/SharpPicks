@@ -10,7 +10,7 @@ No look-ahead / data leakage:
 
 What it measures (per market): projection MAE & bias, and probability
 calibration (Brier score + a reliability table). It is NOT a betting-ROI
-backtest — that needs historical closing lines (a paid odds feed).
+backtest — that needs historical closing lines (a paid odds feed). 
 
 Usage:
     python backtest.py --season 2025 --pitchers 25
