@@ -73,13 +73,16 @@ async def slate(date: str, sport: str = "mlb",
     return {"date": date, "sport": "mlb", "count": len(games), "games": games, "flags": flags}
 
 
+_REPO_ROOT = Path(__file__).parent.parent
+_TRACK_DIR = _REPO_ROOT / "tracking"
+
+
 @app.get("/api/track/history")
 async def track_history() -> Dict[str, Any]:
     import json as _json
-    track_dir = Path("tracking")
     entries = []
-    if track_dir.exists():
-        for p in sorted(track_dir.glob("*.graded.json")):
+    if _TRACK_DIR.exists():
+        for p in sorted(_TRACK_DIR.glob("*.graded.json")):
             try:
                 data = _json.loads(p.read_text(encoding="utf-8"))
                 data["graded"] = True
@@ -91,7 +94,7 @@ async def track_history() -> Dict[str, Any]:
 
 @app.get("/api/track/{date}")
 async def track_summary(date: str) -> Dict[str, Any]:
-    path = Path("tracking") / f"{date}.graded.json"
+    path = _TRACK_DIR / f"{date}.graded.json"
     if not path.exists():
         return {"date": date, "graded": False}
     import json as _json
