@@ -44,6 +44,10 @@ def _path(date: str) -> str:
     return os.path.join(TRACK_DIR, f"{date}.json")
 
 
+def _graded_path(date: str) -> str:
+    return os.path.join(TRACK_DIR, f"{date}.graded.json")
+
+
 # --------------------------------------------------------------------------- snapshot
 
 def _extract_predictions(res: Dict[str, Any], game: Dict[str, Any]) -> Dict[str, Any]:
@@ -188,6 +192,12 @@ class Tally:
         if model_prob is not None and won is not None:
             self.briers.append((model_prob - (1.0 if won else 0.0)) ** 2)
 
+    def summary(self) -> Dict[str, Any]:
+        return {
+            "w": self.w, "l": self.l, "p": self.p,
+            "brier": round(mean(self.briers), 4) if self.briers else None,
+        }
+
     def line(self, label: str) -> str:
         graded = self.w + self.l
         wr = f"{self.w / graded:.0%}" if graded else "—"
@@ -265,6 +275,21 @@ async def grade(date: str) -> None:
     if pending:
         print(f"\n  {pending} game(s) still pending — re-run grade later.")
     print("\nMeasures model accuracy, not betting ROI (needs paid closing lines).")
+
+    summary = {
+        "date": date,
+        "generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
+        "strikeouts": k_tally.summary(),
+        "total": total_tally.summary(),
+        "moneyline": ml_tally.summary(),
+        "totalBias": round(mean(total_proj) - mean(total_actual), 2) if total_actual else None,
+        "pending": pending,
+        "games": len(snap["games"]),
+    }
+    os.makedirs(TRACK_DIR, exist_ok=True)
+    with open(_graded_path(date), "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
     await mlb.close()
 
 

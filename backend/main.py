@@ -73,6 +73,33 @@ async def slate(date: str, sport: str = "mlb",
     return {"date": date, "sport": "mlb", "count": len(games), "games": games, "flags": flags}
 
 
+@app.get("/api/track/history")
+async def track_history() -> Dict[str, Any]:
+    import json as _json
+    track_dir = Path("tracking")
+    entries = []
+    if track_dir.exists():
+        for p in sorted(track_dir.glob("*.graded.json")):
+            try:
+                data = _json.loads(p.read_text(encoding="utf-8"))
+                data["graded"] = True
+                entries.append(data)
+            except Exception:
+                pass
+    return {"entries": entries}
+
+
+@app.get("/api/track/{date}")
+async def track_summary(date: str) -> Dict[str, Any]:
+    path = Path("tracking") / f"{date}.graded.json"
+    if not path.exists():
+        return {"date": date, "graded": False}
+    import json as _json
+    summary = _json.loads(path.read_text(encoding="utf-8"))
+    summary["graded"] = True
+    return summary
+
+
 def _team_rates_or_default(team_rates: Dict[str, Any], team_id: int) -> Dict[str, Any]:
     return team_rates.get("teams", {}).get(team_id, {"runsPerGame": analysis.DEFAULT_RUNS_PER_GAME})
 
@@ -346,11 +373,16 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
     team_rates_by_season: Dict[int, Dict[str, Any]] = {season: team_rates}
     starter_ra9: Dict[str, Optional[float]] = {"home": None, "away": None}
 
+    pitchers_announced = any(p for p, _, _ in matchups)
+    short_sample_pitchers = 0  # probable pitchers with < MIN_STARTS gamelog rows so far
+
     for pitcher, opponent, is_home in matchups:
         if not pitcher:
             continue
 
         gamelog = await mlb.get_pitcher_gamelog(pitcher["id"], season)
+        if len(gamelog) < analysis.MIN_STARTS:
+            short_sample_pitchers += 1
         if not gamelog:
             continue
 
@@ -473,6 +505,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         (True, home, away.get("probablePitcher"), away["id"], starter_ra9["away"]),
         (False, away, home.get("probablePitcher"), home["id"], starter_ra9["home"]),
     ]
+    any_lineup_found = False
     for is_home_bat, team, opp_pitcher, opp_team_id, opp_ra9 in sides:
         lineup_confirmed = True
         try:
@@ -490,6 +523,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
                 batters = None
         if not batters:
             continue
+        any_lineup_found = True
 
         opp_factor = analysis.batter_opp_factor(opp_ra9)
         opp_pitcher_name = opp_pitcher["name"] if opp_pitcher else "TBD"
@@ -552,11 +586,23 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         bp["narrative"] = await ai_module.generate_narrative(bp, use_ai, anthropic_key)
         picks.append(bp)
 
+    pick_note = None
+    if not picks:
+        if not pitchers_announced:
+            pick_note = "Probable pitchers haven't been announced for this game yet — check back closer to first pitch."
+        elif short_sample_pitchers:
+            pick_note = "The starting pitcher(s) don't have enough starts yet this season to grade strikeout/walk props."
+        elif not any_lineup_found:
+            pick_note = "No lineup data available yet (neither today's nor a recent game's) — check back closer to first pitch."
+        else:
+            pick_note = "Not enough data to grade this matchup yet."
+
     return {
         "gamePk": game_pk,
         "game": game,
         "seasons": seasons,
         "picks": picks,
+        "pickNote": pick_note,
         "gameModel": game_model,
         "weather": weather,
         "umpire": umpire,

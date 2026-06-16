@@ -112,8 +112,196 @@ function fmtTime(iso) {
 
 // ---- slate ----------------------------------------------------------------
 
+async function loadYesterdayStrip(date) {
+  const strip = document.getElementById("yesterday-strip");
+  if (currentSport !== "mlb") {
+    strip.style.display = "none";
+    return;
+  }
+  const d = new Date(date + "T00:00:00");
+  d.setDate(d.getDate() - 1);
+  const yDate = d.toISOString().slice(0, 10);
+
+  try {
+    const res = await fetch(`/api/track/${yDate}`);
+    const data = await res.json();
+    if (!data.graded) {
+      strip.style.display = "none";
+      return;
+    }
+    const fmt = (m, label) => {
+      const graded = m.w + m.l;
+      if (!graded && !m.p) return null;
+      const brier = m.brier !== null ? `, Brier ${m.brier.toFixed(3)}` : "";
+      const push = m.p ? `-${m.p}p` : "";
+      return `${label} ${m.w}-${m.l}${push}${brier}`;
+    };
+    const parts = [fmt(data.strikeouts, "K"), fmt(data.total, "Total"), fmt(data.moneyline, "ML")]
+      .filter(Boolean);
+    if (!parts.length) {
+      strip.style.display = "none";
+      return;
+    }
+    let text = `Yesterday (${yDate}): ${parts.join(" · ")}`;
+    if (data.totalBias !== null && data.totalBias !== undefined) {
+      text += ` · total bias ${data.totalBias > 0 ? "+" : ""}${data.totalBias} runs`;
+    }
+    if (data.pending) text += ` · ${data.pending} pending`;
+    strip.textContent = text;
+    strip.style.display = "block";
+  } catch (e) {
+    strip.style.display = "none";
+  }
+}
+
+// ---- history calendar -------------------------------------------------------
+
+let calHistory = {};       // date string -> graded summary object
+let calViewYear = 0;
+let calViewMonth = 0;      // 0-based
+let calSelectedDate = "";
+
+const calSection = document.getElementById("history-calendar");
+const calGrid = document.getElementById("history-cal-grid");
+const calMonthLabel = document.getElementById("cal-month-label");
+const calTooltip = document.getElementById("history-cal-tooltip");
+
+async function loadHistory() {
+  try {
+    const res = await fetch("/api/track/history");
+    const data = await res.json();
+    calHistory = {};
+    for (const e of data.entries || []) {
+      calHistory[e.date] = e;
+    }
+    if (Object.keys(calHistory).length) {
+      calSection.style.display = "block";
+      renderCalendar();
+    } else {
+      calSection.style.display = "none";
+    }
+  } catch (e) {
+    calSection.style.display = "none";
+  }
+}
+
+function renderCalendar() {
+  const today = new Date();
+  if (!calViewYear) {
+    calViewYear = today.getFullYear();
+    calViewMonth = today.getMonth();
+  }
+
+  const MONTH_NAMES = ["January","February","March","April","May","June",
+    "July","August","September","October","November","December"];
+  calMonthLabel.textContent = `${MONTH_NAMES[calViewMonth]} ${calViewYear}`;
+
+  const DAY_LABELS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+  calGrid.innerHTML = "";
+
+  // weekday header
+  for (const d of DAY_LABELS) {
+    const el = document.createElement("div");
+    el.className = "cal-day-label";
+    el.textContent = d;
+    calGrid.appendChild(el);
+  }
+
+  const firstDay = new Date(calViewYear, calViewMonth, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+  const todayStr = today.toISOString().slice(0, 10);
+
+  // blank cells before month start
+  for (let i = 0; i < firstDay; i++) {
+    calGrid.appendChild(document.createElement("div"));
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calViewYear}-${String(calViewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const entry = calHistory[dateStr];
+
+    const cell = document.createElement("div");
+    cell.className = "cal-day";
+    if (dateStr === todayStr) cell.classList.add("today");
+    if (dateStr === calSelectedDate) cell.classList.add("selected");
+
+    const num = document.createElement("div");
+    num.className = "cal-day-num";
+    num.textContent = d;
+    cell.appendChild(num);
+
+    if (entry) {
+      cell.classList.add("has-data");
+      const k = entry.strikeouts || {};
+      const graded = (k.w || 0) + (k.l || 0);
+      if (graded > 0) {
+        const rec = document.createElement("div");
+        rec.className = "cal-day-record";
+        rec.textContent = `${k.w}-${k.l}`;
+        cell.appendChild(rec);
+        cell.classList.add(k.w > k.l ? "winning" : k.l > k.w ? "losing" : "even");
+      } else {
+        cell.classList.add("even");
+      }
+
+      cell.addEventListener("click", () => {
+        calSelectedDate = dateStr;
+        renderCalendar();
+        showCalTooltip(entry);
+        // navigate the date picker and load that day's slate
+        dateInput.value = dateStr;
+        loadSlate(dateStr);
+      });
+    }
+
+    calGrid.appendChild(cell);
+  }
+}
+
+function showCalTooltip(entry) {
+  const fmt = (m, label) => {
+    if (!m) return null;
+    const graded = (m.w || 0) + (m.l || 0);
+    if (!graded && !m.p) return null;
+    const push = m.p ? `-${m.p}p` : "";
+    const brier = m.brier !== null && m.brier !== undefined ? ` (Brier ${m.brier.toFixed(3)})` : "";
+    return `${label}: ${m.w}-${m.l}${push}${brier}`;
+  };
+  const parts = [
+    fmt(entry.strikeouts, "Strikeouts"),
+    fmt(entry.total, "Total"),
+    fmt(entry.moneyline, "Moneyline"),
+  ].filter(Boolean);
+
+  let html = `<strong>${entry.date}</strong> &nbsp;·&nbsp; ${entry.games} game${entry.games !== 1 ? "s" : ""}`;
+  if (parts.length) html += "<br>" + parts.join(" &nbsp;·&nbsp; ");
+  if (entry.totalBias !== null && entry.totalBias !== undefined) {
+    html += `<br>Total bias: ${entry.totalBias > 0 ? "+" : ""}${entry.totalBias} runs`;
+  }
+  if (entry.pending) html += `<br>${entry.pending} game(s) pending`;
+  calTooltip.innerHTML = html;
+  calTooltip.style.display = "block";
+}
+
+document.getElementById("cal-prev").addEventListener("click", () => {
+  calViewMonth--;
+  if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; }
+  renderCalendar();
+  calTooltip.style.display = "none";
+});
+document.getElementById("cal-next").addEventListener("click", () => {
+  calViewMonth++;
+  if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; }
+  renderCalendar();
+  calTooltip.style.display = "none";
+});
+
+// ---- slate loading ----------------------------------------------------------
+
 async function loadSlate(date) {
   slateContainer.innerHTML = '<div class="loading">Loading slate…</div>';
+  loadYesterdayStrip(date);
+  if (currentSport === "mlb") loadHistory(); else calSection.style.display = "none";
   topBoardSection.style.display = "none";
   topBoardList.innerHTML = "";
   betItems = [];
@@ -175,17 +363,24 @@ function renderGameCard(game, date) {
 
   const analysisEl = card.querySelector(".analysis");
   const btn = card.querySelector(".analyze-btn");
+  const refreshBtn = card.querySelector(".refresh-btn");
   btn.addEventListener("click", () => {
     if (analysisEl.classList.contains("open")) {
       analysisEl.classList.remove("open");
       btn.textContent = "Analyze";
+      refreshBtn.style.display = "none";
       return;
     }
     btn.textContent = "Hide";
     analysisEl.classList.add("open");
+    refreshBtn.style.display = "inline-block";
     if (!analysisEl.dataset.loaded) {
       loadAnalysis(game, date, analysisEl, btn);
     }
+  });
+  refreshBtn.addEventListener("click", () => {
+    delete analysisEl.dataset.loaded;
+    loadAnalysis(game, date, analysisEl, btn);
   });
 
   return node;
@@ -277,7 +472,7 @@ function renderAnalysis(data, game, container) {
   if (!data.picks || !data.picks.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "No graded picks for this game (not enough recent starts).";
+    empty.textContent = data.pickNote || "No graded picks for this game (not enough recent starts).";
     container.appendChild(empty);
     return;
   }
@@ -788,6 +983,10 @@ function drawChip(canvas, pick) {
 // ---- top board ----------------------------------------------------------------
 
 function addToTopBoard(data, game) {
+  // On refresh, drop this game's previous entries before re-adding.
+  for (const el of Array.from(topBoardList.children)) {
+    if (el.dataset.gamePk === String(game.gamePk)) el.remove();
+  }
   if (!data.picks || !data.picks.length) return;
   topBoardSection.style.display = "block";
 
@@ -799,6 +998,7 @@ function addToTopBoard(data, game) {
     const sortKey = evPct !== null ? evPct : pick.confidence;
 
     item.dataset.sortKey = sortKey;
+    item.dataset.gamePk = game.gamePk;
     const evLabel =
       evPct !== null
         ? `<span class="${evPct > 0 ? "ev-pos" : "ev-neg"}">${evPct > 0 ? "+" : ""}${evPct.toFixed(1)}% EV</span>`
@@ -829,6 +1029,9 @@ function addToTopBoard(data, game) {
 // ---- bet board sidebar ------------------------------------------------------
 
 function addToBetBoard(data, game) {
+  // On refresh, drop this game's previous entries before re-adding.
+  betItems = betItems.filter((it) => it.game.gamePk !== game.gamePk);
+
   const added = [];
 
   for (const pick of data.picks || []) {
@@ -874,7 +1077,6 @@ function addToBetBoard(data, game) {
     }
   }
 
-  if (!added.length) return;
   betItems.push(...added);
 
   for (const item of added) {
@@ -1002,3 +1204,4 @@ document.addEventListener("click", (e) => {
 betEvOnly.addEventListener("change", renderBetBoard);
 
 loadSlate(dateInput.value);
+loadHistory();

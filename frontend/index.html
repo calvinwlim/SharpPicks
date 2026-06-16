@@ -57,6 +57,18 @@
     </div>
   </div>
 
+  <div class="yesterday-strip" id="yesterday-strip" style="display: none;"></div>
+
+  <section class="history-calendar" id="history-calendar" style="display: none;">
+    <div class="history-cal-header">
+      <button id="cal-prev" title="Previous month">‹</button>
+      <span id="cal-month-label"></span>
+      <button id="cal-next" title="Next month">›</button>
+    </div>
+    <div class="history-cal-grid" id="history-cal-grid"></div>
+    <div class="history-cal-tooltip" id="history-cal-tooltip" style="display: none;"></div>
+  </section>
+
   <div class="disclaimer">
     Sharp Slate estimates strikeout-prop probabilities from free MLB data and,
     when a real betting line is supplied, compares them to the vig-removed
@@ -119,7 +131,10 @@
         <div class="pitcher"></div>
       </div>
     </div>
-    <button class="analyze-btn">Analyze</button>
+    <div class="analyze-row">
+      <button class="analyze-btn">Analyze</button>
+      <button class="refresh-btn" title="Refresh analysis" style="display: none;">↻</button>
+    </div>
     <div class="analysis"></div>
   </div>
 </template>
