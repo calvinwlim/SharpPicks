@@ -24,6 +24,10 @@ HOME_FIELD_RUNS = 0.35      # home-field advantage, expressed as extra projected
 # 200-game backtest showed home field was underweighted at 0.20 (25-50% home bucket: pred 41%, actual 55%)
 ML_SHRINK = 0.25            # pulls moneyline probs toward 0.5; fixes 75%+ overconfidence in backtest
                             # (feeds the Skellam win prob so it scales correctly with the run environment)
+TEAM_RECENT_WEIGHT = 0.25   # weight on last-15-game RPG vs full-season average in the game model
+K_TREND_WINDOW = 4          # recent starts (within the projection window) used for K trend
+STREAK_THRESHOLD = 3        # consecutive hits/misses before confidence is adjusted
+STREAK_CONFIDENCE_STEP = 0.03  # confidence shift per start beyond STREAK_THRESHOLD (capped at 3)
 
 # Count-prop distributions (None = Poisson; a number = negative-binomial dispersion).
 # Tuned on the backtest: walks are over-dispersed (Poisson overstated the over),
@@ -78,6 +82,13 @@ PARK_RUN_FACTOR_CEIL = 1.18
 WIND_RUNS_PER_MPH = 0.006      # each mph of "out" wind nudges the run total ~0.6%
 WIND_RUN_FACTOR_FLOOR = 0.94
 WIND_RUN_FACTOR_CEIL = 1.06
+
+# Combined environmental cap: prevents multiple factors pointing the same direction
+# from producing unrealistic projections. Each individual factor is already conservative,
+# but their product can still reach +30% in extreme cases (Coors + hot + out-wind + wide ump).
+# A ±22% cap covers realistic extremes while blocking corner-case stacking.
+ENV_COMBINED_FLOOR = 0.78
+ENV_COMBINED_CEIL = 1.22
 
 
 # --------------------------------------------------------------------------- Poisson helpers (no SciPy)
@@ -601,6 +612,14 @@ def analyze_strikeouts(
     # _skill_projection blends K% + whiff rate from Savant into the baseline
     baseline, skill_info = _skill_projection(results_baseline, recent, pitcher_skill)
 
+    # K-rate trend: compare last K_TREND_WINDOW starts vs earlier starts in the window
+    k_trend = 0.0
+    k_recent_avg = k_earlier_avg = None
+    if len(recent) > K_TREND_WINDOW:
+        k_recent_avg = sum(r["strikeOuts"] for r in recent[-K_TREND_WINDOW:]) / K_TREND_WINDOW
+        k_earlier_avg = sum(r["strikeOuts"] for r in recent[:-K_TREND_WINDOW]) / (len(recent) - K_TREND_WINDOW)
+        k_trend = k_recent_avg - k_earlier_avg
+
     current_rates = team_rates_by_season.get(current_season, {})
     league_avg_k = current_rates.get("leagueAvgK", 0.225) or 0.225
     opp_team = current_rates.get("teams", {}).get(opponent_id, {})
@@ -687,6 +706,19 @@ def analyze_strikeouts(
         shrunk_avg = 0.5
     blended = 0.5 * model_prob + 0.5 * shrunk_avg
 
+    # Streak adjustment: sustained runs ≥ STREAK_THRESHOLD shift confidence
+    n_streak = abs(streak)
+    if n_streak >= STREAK_THRESHOLD:
+        extra = min(n_streak - STREAK_THRESHOLD + 1, 3) * STREAK_CONFIDENCE_STEP
+        blended = blended + extra if streak > 0 else blended - extra
+
+    # K trend nudge: a persistent directional trend adds a small signal
+    if abs(k_trend) >= 1.0:
+        trend_aligns = (k_trend > 0 and side == "over") or (k_trend < 0 and side == "under")
+        blended = blended + 0.02 if trend_aligns else blended - 0.02
+
+    blended = _clamp(blended, 0.05, 0.95)
+
     confidence = round(blended * 100)
     if len(gamelog) < PROJECTION_WINDOW:
         confidence = min(confidence, 70)
@@ -717,6 +749,15 @@ def analyze_strikeouts(
         skill_info=skill_info,
         edge=edge,
     )
+
+    if abs(k_trend) >= 0.5 and k_recent_avg is not None:
+        sign = "+" if k_trend > 0 else ""
+        lean = "over" if k_trend > 0 else "under"
+        signals.append({
+            "label": f"K trend ({sign}{k_trend:.1f} last {K_TREND_WINDOW})",
+            "detail": f"{k_recent_avg:.1f} K avg in last {K_TREND_WINDOW} starts vs {k_earlier_avg:.1f} prior in window",
+            "lean": lean,
+        })
 
     side_label = "Over" if side == "over" else "Under"
 
@@ -1164,7 +1205,9 @@ def analyze_game_total(
     park_factor, park_info = _park_factor(park)
     wind_factor, wind_info = _wind_factor(weather, park)
 
-    projection *= weather_factor * ump_factor * park_factor * wind_factor
+    raw_env = weather_factor * ump_factor * park_factor * wind_factor
+    env = _clamp(raw_env, ENV_COMBINED_FLOOR, ENV_COMBINED_CEIL)
+    projection *= env
 
     side, line, model_prob = _select_line_and_prob(projection, market, dispersion=TOTAL_DISPERSION)
     edge = _build_edge(side, model_prob, market)
@@ -1186,6 +1229,8 @@ def analyze_game_total(
         "park": park_info,
         "windFactor": round(wind_factor, 4),
         "wind": wind_info,
+        "envCombined": round(env, 4),
+        "envClamped": env != raw_env,
     }
 
 
@@ -1247,6 +1292,8 @@ def analyze_f5(
     home_starter_ra9: Optional[float],
     away_starter_ra9: Optional[float],
     market: Optional[Dict[str, Any]] = None,
+    umpire: Optional[Dict[str, Any]] = None,
+    park: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """First-5-innings total + win probabilities, driven by the two starters.
 
@@ -1256,8 +1303,12 @@ def analyze_f5(
     Poisson; the win probabilities come from the Skellam of the two run counts
     (ties are a real F5 outcome and reported alongside).
     """
-    home_f5 = _half_inning_runs(home_rpg, away_starter_ra9) * F5_INNINGS
-    away_f5 = _half_inning_runs(away_rpg, home_starter_ra9) * F5_INNINGS
+    ump_factor, _ = _umpire_factor(umpire, "run")
+    park_factor, _ = _park_factor(park)
+    env_factor = ump_factor * park_factor
+
+    home_f5 = _half_inning_runs(home_rpg, away_starter_ra9) * F5_INNINGS * env_factor
+    away_f5 = _half_inning_runs(away_rpg, home_starter_ra9) * F5_INNINGS * env_factor
     total = home_f5 + away_f5
 
     side, line, model_prob = _select_line_and_prob(total, market, dispersion=TOTAL_DISPERSION)
@@ -1280,6 +1331,7 @@ def analyze_f5(
         "tieProb": round(p_tie, 4),
         "edge": edge,
         "hasMarket": edge is not None,
+        "envFactor": round(env_factor, 4),
     }
 
 
@@ -1300,16 +1352,24 @@ def analyze_nrfi(
     home_starter_ra9: Optional[float],
     away_starter_ra9: Optional[float],
     market: Optional[Dict[str, Any]] = None,
+    umpire: Optional[Dict[str, Any]] = None,
+    park: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """No-Runs-First-Inning vs Yes-Runs-First-Inning.
 
     Models each team's chance of scoring in the top/bottom of the first from its
     offense and the opposing starter's run rate (calibrated to the league NRFI
     baseline, since per-inning runs are too zero-inflated for a raw Poisson).
-    NRFI is the joint no-score of both halves.
+    NRFI is the joint no-score of both halves. Umpire zone and park factor are
+    applied symmetrically: a hitter-friendly park or wide-zone ump lifts both
+    teams' first-inning scoring probabilities equally.
     """
-    p_home = _p_score_first(home_rpg, away_starter_ra9)
-    p_away = _p_score_first(away_rpg, home_starter_ra9)
+    ump_factor, _ = _umpire_factor(umpire, "run")
+    park_factor, _ = _park_factor(park)
+    env_factor = ump_factor * park_factor
+
+    p_home = _clamp(_p_score_first(home_rpg, away_starter_ra9) * env_factor, NRFI_P_FLOOR, NRFI_P_CEIL)
+    p_away = _clamp(_p_score_first(away_rpg, home_starter_ra9) * env_factor, NRFI_P_FLOOR, NRFI_P_CEIL)
 
     nrfi = (1.0 - p_home) * (1.0 - p_away)
     yrfi = 1.0 - nrfi
@@ -1334,6 +1394,7 @@ def analyze_nrfi(
         "modelProb": round(model_prob, 4),
         "edge": edge,
         "hasMarket": edge is not None,
+        "envFactor": round(env_factor, 4),
     }
 
 
@@ -1350,6 +1411,10 @@ def game_model(
     away_bullpen: Optional[Dict[str, Any]] = None,
     home_moneyline: Optional[int] = None,
     away_moneyline: Optional[int] = None,
+    home_recent_form: Optional[Dict[str, Any]] = None,
+    away_recent_form: Optional[Dict[str, Any]] = None,
+    umpire: Optional[Dict[str, Any]] = None,
+    park: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Pitcher-aware matchup model: each team's projected runs come from its
     offense facing the *opposing* pitching staff for this game (the listed
@@ -1365,6 +1430,24 @@ def game_model(
     away_rs = away_rates.get("runsPerGame", DEFAULT_RUNS_PER_GAME)
     home_ra = home_run_prevention.get("runsAllowedPerGame", DEFAULT_RUNS_PER_GAME)
     away_ra = away_run_prevention.get("runsAllowedPerGame", DEFAULT_RUNS_PER_GAME)
+
+    # Blend season RPG and RA with recent rolling form (25% weight on last-15-game sample).
+    # Blending RA alongside RPG means a team whose staff has recently allowed more runs
+    # sees that reflected in both the staff_ra9 fallback and the full-game projections.
+    home_recent_rpg = (home_recent_form or {}).get("recentRPG")
+    away_recent_rpg = (away_recent_form or {}).get("recentRPG")
+    home_recent_ra = (home_recent_form or {}).get("recentRA")
+    away_recent_ra = (away_recent_form or {}).get("recentRA")
+    if home_recent_rpg is not None:
+        home_rs = (1.0 - TEAM_RECENT_WEIGHT) * home_rs + TEAM_RECENT_WEIGHT * home_recent_rpg
+    if away_recent_rpg is not None:
+        away_rs = (1.0 - TEAM_RECENT_WEIGHT) * away_rs + TEAM_RECENT_WEIGHT * away_recent_rpg
+    if home_recent_ra is not None:
+        home_ra = (1.0 - TEAM_RECENT_WEIGHT) * home_ra + TEAM_RECENT_WEIGHT * home_recent_ra
+    if away_recent_ra is not None:
+        away_ra = (1.0 - TEAM_RECENT_WEIGHT) * away_ra + TEAM_RECENT_WEIGHT * away_recent_ra
+    home_streak = (home_recent_form or {}).get("streak", 0)
+    away_streak = (away_recent_form or {}).get("streak", 0)
 
     def staff_ra9(starter_ra9: Optional[float], bullpen: Optional[Dict[str, Any]], team_full_ra: float) -> float:
         # Blend the listed starter's RA/9 with the bullpen ERA over a 9-inning
@@ -1385,9 +1468,21 @@ def game_model(
     home_proj = TOTAL_CALIBRATION * (0.5 * home_rs + 0.5 * away_staff) + HOME_FIELD_RUNS / 2
     away_proj = TOTAL_CALIBRATION * (0.5 * away_rs + 0.5 * home_staff) - HOME_FIELD_RUNS / 2
 
+    # Apply umpire zone and park factor to run projections for win-probability only.
+    # Both are symmetric (same park, same ump for both teams), so they raise/lower the
+    # run environment without biasing one side. Raw proj values are returned unchanged
+    # so analyze_game_total() applies the full env stack (weather + wind + ump + park)
+    # without double-counting.
+    ump_factor, _ = _umpire_factor(umpire, "run")
+    env_park_factor, _ = _park_factor(park)
+    env_factor = ump_factor * env_park_factor
+
     # Single-game win prob from two independent Poisson run counts; ties (extra
     # innings) are split proportionally to each side's regulation win chance.
-    p_home, p_away, p_tie = _poisson_win_prob(home_proj, away_proj)
+    p_home, p_away, p_tie = _poisson_win_prob(
+        max(0.1, home_proj * env_factor),
+        max(0.1, away_proj * env_factor),
+    )
     decisive = p_home + p_away
     home_win = _clamp(p_home + (p_tie * p_home / decisive if decisive > 0 else 0.5), 0.02, 0.98)
     # Shrink toward 0.5 to correct overconfidence at extremes (backtest: 75%+ bucket pred 78%, actual 45%)
@@ -1400,6 +1495,17 @@ def game_model(
         "awayProjRuns": round(away_proj, 2),
         "homeStarterRA9": round(home_starter_ra9, 2) if home_starter_ra9 is not None else None,
         "awayStarterRA9": round(away_starter_ra9, 2) if away_starter_ra9 is not None else None,
+        "homeOffenseRPG": round(home_rs, 2),
+        "awayOffenseRPG": round(away_rs, 2),
+        "homeStaffRA9": round(home_staff, 2),
+        "awayStaffRA9": round(away_staff, 2),
+        "homeRecentRPG": round(home_recent_rpg, 2) if home_recent_rpg is not None else None,
+        "awayRecentRPG": round(away_recent_rpg, 2) if away_recent_rpg is not None else None,
+        "homeRecentRA": round(home_recent_ra, 2) if home_recent_ra is not None else None,
+        "awayRecentRA": round(away_recent_ra, 2) if away_recent_ra is not None else None,
+        "homeStreak": home_streak,
+        "awayStreak": away_streak,
+        "envFactor": round(env_factor, 4),
     }
 
     if home_moneyline is not None and away_moneyline is not None:

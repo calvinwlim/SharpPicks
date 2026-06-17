@@ -42,6 +42,17 @@ settingsSave.addEventListener("click", () => {
     .then((r) => r.json())
     .then((d) => setFlags(d.flags || {}))
     .catch(() => {});
+  // Re-fetch any open analysis panels so the new key takes effect immediately.
+  document.querySelectorAll(".analysis.open").forEach((el) => {
+    try {
+      const game = JSON.parse(el.dataset.gameJson || "null");
+      const date = el.dataset.gameDate;
+      if (!game || !date) return;
+      const btn = el.closest(".game-card")?.querySelector(".analyze-btn");
+      delete el.dataset.loaded;
+      loadAnalysis(game, date, el, btn);
+    } catch (_) {}
+  });
 });
 settingsClear.addEventListener("click", () => {
   sessionStorage.removeItem("oddsApiKey");
@@ -161,10 +172,9 @@ let calViewYear = 0;
 let calViewMonth = 0;      // 0-based
 let calSelectedDate = "";
 
-const calSection = document.getElementById("history-calendar");
 const calGrid = document.getElementById("history-cal-grid");
 const calMonthLabel = document.getElementById("cal-month-label");
-const calTooltip = document.getElementById("history-cal-tooltip");
+const historyDayDetail = document.getElementById("history-day-detail");
 
 async function loadHistory() {
   try {
@@ -174,10 +184,76 @@ async function loadHistory() {
     for (const e of data.entries || []) {
       calHistory[e.date] = e;
     }
+    renderStatsBar();
     renderCalendar();
   } catch (e) {
     // leave calendar empty on error
   }
+}
+
+function renderStatsBar() {
+  const statsEl = document.getElementById("history-stats");
+  const metaEl = document.getElementById("history-stats-meta");
+  const marketsEl = document.getElementById("history-stats-markets");
+  const entries = Object.values(calHistory);
+  if (!entries.length) { statsEl.style.display = "none"; return; }
+
+  const agg = {
+    strikeouts: { w: 0, l: 0, p: 0, briers: [], label: "Strikeouts" },
+    total:      { w: 0, l: 0, p: 0, briers: [], label: "Totals" },
+    moneyline:  { w: 0, l: 0, p: 0, briers: [], label: "Moneyline" },
+  };
+  let totalGames = 0, totalDays = entries.length, biasSum = 0, biasCount = 0;
+
+  for (const e of entries) {
+    totalGames += e.games || 0;
+    if (e.totalBias != null) { biasSum += e.totalBias; biasCount++; }
+    for (const key of ["strikeouts", "total", "moneyline"]) {
+      const m = e[key];
+      if (m) {
+        agg[key].w += m.w || 0;
+        agg[key].l += m.l || 0;
+        agg[key].p += m.p || 0;
+        if (m.brier != null) agg[key].briers.push(m.brier);
+      }
+    }
+  }
+
+  metaEl.textContent = `${totalDays} day${totalDays !== 1 ? "s" : ""} · ${totalGames} games`;
+
+  marketsEl.innerHTML = "";
+  for (const key of ["strikeouts", "total", "moneyline"]) {
+    const m = agg[key];
+    const tot = m.w + m.l;
+    const pct = tot > 0 ? ((m.w / tot) * 100).toFixed(1) : null;
+    const avgBrier = m.briers.length
+      ? (m.briers.reduce((a, b) => a + b, 0) / m.briers.length).toFixed(3)
+      : null;
+    const winCls = tot > 0 ? (m.w > m.l ? "win" : m.l > m.w ? "loss" : "even") : "even";
+
+    const card = document.createElement("div");
+    card.className = `history-stats-card ${winCls}`;
+    card.innerHTML = `
+      <div class="hsc-label">${m.label}</div>
+      <div class="hsc-record">${m.w}-${m.l}${m.p ? `<span class="hsc-push"> · ${m.p}P</span>` : ""}</div>
+      <div class="hsc-sub">${pct !== null ? `${pct}% win` : "—"}${avgBrier !== null ? ` · Brier&nbsp;${avgBrier}` : ""}</div>
+    `;
+    marketsEl.appendChild(card);
+  }
+
+  if (biasCount > 0) {
+    const avgBias = (biasSum / biasCount).toFixed(2);
+    const biasCard = document.createElement("div");
+    biasCard.className = "history-stats-card even history-stats-bias";
+    biasCard.innerHTML = `
+      <div class="hsc-label">Avg Run Bias</div>
+      <div class="hsc-record ${parseFloat(avgBias) > 0 ? "win" : parseFloat(avgBias) < 0 ? "loss" : ""}">${avgBias > 0 ? "+" : ""}${avgBias}</div>
+      <div class="hsc-sub">proj − actual runs</div>
+    `;
+    marketsEl.appendChild(biasCard);
+  }
+
+  statsEl.style.display = "block";
 }
 
 function renderCalendar() {
@@ -194,7 +270,6 @@ function renderCalendar() {
   const DAY_LABELS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
   calGrid.innerHTML = "";
 
-  // weekday header
   for (const d of DAY_LABELS) {
     const el = document.createElement("div");
     el.className = "cal-day-label";
@@ -202,11 +277,10 @@ function renderCalendar() {
     calGrid.appendChild(el);
   }
 
-  const firstDay = new Date(calViewYear, calViewMonth, 1).getDay(); // 0=Sun
+  const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
   const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
   const todayStr = today.toISOString().slice(0, 10);
 
-  // blank cells before month start
   for (let i = 0; i < firstDay; i++) {
     calGrid.appendChild(document.createElement("div"));
   }
@@ -228,8 +302,9 @@ function renderCalendar() {
     if (entry) {
       cell.classList.add("has-data");
       const k = entry.strikeouts || {};
-      const graded = (k.w || 0) + (k.l || 0);
-      if (graded > 0) {
+      const kGraded = (k.w || 0) + (k.l || 0);
+
+      if (kGraded > 0) {
         const rec = document.createElement("div");
         rec.className = "cal-day-record";
         rec.textContent = `${k.w}-${k.l}`;
@@ -239,17 +314,23 @@ function renderCalendar() {
         cell.classList.add("even");
       }
 
+      // three-market dot row
+      const dots = document.createElement("div");
+      dots.className = "cal-day-dots";
+      for (const key of ["strikeouts", "total", "moneyline"]) {
+        const m = entry[key] || {};
+        const tot = (m.w || 0) + (m.l || 0);
+        const cls = tot > 0 ? (m.w > m.l ? "win" : m.l > m.w ? "loss" : "even") : "none";
+        const dot = document.createElement("span");
+        dot.className = `cal-dot ${cls}`;
+        dots.appendChild(dot);
+      }
+      cell.appendChild(dots);
+
       cell.addEventListener("click", () => {
         calSelectedDate = dateStr;
         renderCalendar();
-        showCalTooltip(entry);
-        // switch to slate view for that day
-        dateInput.value = dateStr;
-        currentSport = "mlb";
-        document.querySelectorAll(".sport-tab").forEach((t) =>
-          t.classList.toggle("active", t.dataset.sport === "mlb"));
-        showSlateView();
-        loadSlate(dateStr);
+        showDayDetail(entry);
       });
     }
 
@@ -257,42 +338,72 @@ function renderCalendar() {
   }
 }
 
-function showCalTooltip(entry) {
-  const fmt = (m, label) => {
-    if (!m) return null;
-    const graded = (m.w || 0) + (m.l || 0);
-    if (!graded && !m.p) return null;
-    const push = m.p ? `-${m.p}p` : "";
-    const brier = m.brier !== null && m.brier !== undefined ? ` (Brier ${m.brier.toFixed(3)})` : "";
-    return `${label}: ${m.w}-${m.l}${push}${brier}`;
+function showDayDetail(entry) {
+  const fmtMarket = (m, label) => {
+    if (!m) return "";
+    const tot = (m.w || 0) + (m.l || 0);
+    if (!tot && !m.p) return "";
+    const pct = tot > 0 ? `${((m.w / tot) * 100).toFixed(1)}%` : "—";
+    const push = m.p ? `<span class="ddm-push">${m.p}P</span>` : "";
+    const brier = m.brier != null ? `<span class="ddm-brier">Brier ${m.brier.toFixed(3)}</span>` : "";
+    const winCls = tot > 0 ? (m.w > m.l ? "win" : m.l > m.w ? "loss" : "even") : "even";
+    return `
+      <div class="dd-market">
+        <span class="ddm-label">${label}</span>
+        <span class="ddm-record ${winCls}">${m.w}-${m.l}${push ? " " + push : ""}</span>
+        <span class="ddm-pct">${pct}</span>
+        ${brier}
+      </div>`;
   };
-  const parts = [
-    fmt(entry.strikeouts, "Strikeouts"),
-    fmt(entry.total, "Total"),
-    fmt(entry.moneyline, "Moneyline"),
-  ].filter(Boolean);
 
-  let html = `<strong>${entry.date}</strong> &nbsp;·&nbsp; ${entry.games} game${entry.games !== 1 ? "s" : ""}`;
-  if (parts.length) html += "<br>" + parts.join(" &nbsp;·&nbsp; ");
-  if (entry.totalBias !== null && entry.totalBias !== undefined) {
-    html += `<br>Total bias: ${entry.totalBias > 0 ? "+" : ""}${entry.totalBias} runs`;
-  }
-  if (entry.pending) html += `<br>${entry.pending} game(s) pending`;
-  calTooltip.innerHTML = html;
-  calTooltip.style.display = "block";
+  const biasSign = entry.totalBias > 0 ? "+" : "";
+  const biasCls = entry.totalBias > 0 ? "pos" : entry.totalBias < 0 ? "neg" : "";
+  const biasHtml = entry.totalBias != null
+    ? `<div class="dd-bias">Run bias: <span class="${biasCls}">${biasSign}${entry.totalBias} runs</span> <span class="dd-bias-hint">(model proj − actual)</span></div>`
+    : "";
+  const pendHtml = entry.pending
+    ? `<div class="dd-pending">${entry.pending} game${entry.pending !== 1 ? "s" : ""} still pending</div>`
+    : "";
+
+  historyDayDetail.innerHTML = `
+    <div class="dd-header">
+      <div class="dd-date">${entry.date}</div>
+      <div class="dd-games">${entry.games} game${entry.games !== 1 ? "s" : ""}</div>
+    </div>
+    <div class="dd-markets">
+      ${fmtMarket(entry.strikeouts, "Strikeouts")}
+      ${fmtMarket(entry.total, "Totals")}
+      ${fmtMarket(entry.moneyline, "Moneyline")}
+    </div>
+    ${biasHtml}
+    ${pendHtml}
+    <button class="dd-view-btn" id="dd-view-btn">View full slate →</button>
+  `;
+
+  document.getElementById("dd-view-btn").addEventListener("click", () => {
+    dateInput.value = entry.date;
+    currentSport = "mlb";
+    document.querySelectorAll(".sport-tab").forEach((t) =>
+      t.classList.toggle("active", t.dataset.sport === "mlb"));
+    showSlateView();
+    loadSlate(entry.date);
+  });
+
+  historyDayDetail.style.display = "block";
+  historyDayDetail.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 document.getElementById("cal-prev").addEventListener("click", () => {
   calViewMonth--;
   if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; }
   renderCalendar();
-  calTooltip.style.display = "none";
+  historyDayDetail.style.display = "none";
 });
 document.getElementById("cal-next").addEventListener("click", () => {
   calViewMonth++;
   if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; }
   renderCalendar();
-  calTooltip.style.display = "none";
+  historyDayDetail.style.display = "none";
 });
 
 // ---- slate loading ----------------------------------------------------------
@@ -360,6 +471,8 @@ function renderGameCard(game, date) {
   fillTeam(card.querySelector(".team.home"), game.home);
 
   const analysisEl = card.querySelector(".analysis");
+  analysisEl.dataset.gameJson = JSON.stringify(game);
+  analysisEl.dataset.gameDate = date;
   const btn = card.querySelector(".analyze-btn");
   const refreshBtn = card.querySelector(".refresh-btn");
   btn.addEventListener("click", () => {
@@ -452,6 +565,7 @@ function renderAnalysis(data, game, container) {
     homeWp.querySelector(".bar > span").style.width = `${(gm.homeWinProb * 100).toFixed(0)}%`;
 
     container.appendChild(node);
+    container.appendChild(renderWinProbBreakdown(gm, game));
 
     if (gm.total) {
       container.appendChild(renderTotalCard(gm.total));
@@ -561,11 +675,12 @@ function renderTotalCard(total) {
   const windNote = total.wind
     ? ` Wind ${Math.abs(total.wind.outMph)} mph ${total.wind.blowing} (${total.windFactor > 1 ? "+" : ""}${((total.windFactor - 1) * 100).toFixed(1)}%).`
     : "";
+  const capNote = total.envClamped ? " (env factors capped at ±22% combined)." : "";
   card.innerHTML = `
     <div class="pick-header">
       <div class="pick-title">Game Total — ${sideLabel} ${total.line}</div>
     </div>
-    <div class="narrative">Model projects ${total.projection} combined runs (${(total.modelProb * 100).toFixed(0)}% on ${sideLabel.toLowerCase()}); starters + bullpens already baked in.${weatherNote}${parkNote}${windNote}${umpNote}</div>
+    <div class="narrative">Model projects ${total.projection} combined runs (${(total.modelProb * 100).toFixed(0)}% on ${sideLabel.toLowerCase()}); starters + bullpens already baked in.${weatherNote}${parkNote}${windNote}${umpNote}${capNote}</div>
     ${edgeHtml}
   `;
   return card;
@@ -590,6 +705,67 @@ function renderMoneylineCard(moneyline, game) {
   return card;
 }
 
+function renderWinProbBreakdown(gm, game) {
+  const away = game.away, home = game.home;
+  const f1 = v => v != null ? v.toFixed(1) : "—";
+
+  const recentTag = (season, recent) => {
+    if (recent == null) return "";
+    const diff = recent - season;
+    const sign = diff > 0 ? "+" : "";
+    const cls = Math.abs(diff) > 0.3 ? (diff > 0 ? "wpb-hot" : "wpb-cold") : "wpb-neutral";
+    return ` <span class="wpb-recent ${cls}">${recent.toFixed(1)} rec</span>`;
+  };
+
+  const streakTag = (streak, abbr) => {
+    if (!streak || Math.abs(streak) < 2) return "";
+    const label = streak > 0 ? `W${streak}` : `L${Math.abs(streak)}`;
+    const cls = streak > 0 ? "wpb-streak-w" : "wpb-streak-l";
+    return `<span class="wpb-streak ${cls}">${abbr} ${label}</span>`;
+  };
+
+  // recentRaTag shows a badge on the opposing staff column when recent RA diverges from season
+  const recentRaTag = (staff, recentRa) => {
+    if (recentRa == null) return "";
+    const diff = recentRa - staff;
+    // Higher RA = worse defense, so hot/cold reversed vs offense
+    const cls = Math.abs(diff) > 0.3 ? (diff > 0 ? "wpb-cold" : "wpb-hot") : "wpb-neutral";
+    return ` <span class="wpb-recent ${cls}">${recentRa.toFixed(1)} rec</span>`;
+  };
+
+  const rows = [
+    { team: away.abbr, off: gm.awayOffenseRPG, recentOff: gm.awayRecentRPG, staff: gm.homeStaffRA9, recentRa: gm.homeRecentRA, proj: gm.awayProjRuns, hf: false },
+    { team: home.abbr, off: gm.homeOffenseRPG, recentOff: gm.homeRecentRPG, staff: gm.awayStaffRA9, recentRa: gm.awayRecentRA, proj: gm.homeProjRuns, hf: true },
+  ].map(r => `
+    <div class="wpb-row">
+      <span class="wpb-team">${r.team}</span>
+      <span class="wpb-off">${f1(r.off)} R/G${recentTag(r.off, r.recentOff)}</span>
+      <span class="wpb-vs">vs</span>
+      <span class="wpb-staff">opp staff ${f1(r.staff)} RA/9${recentRaTag(r.staff, r.recentRa)}</span>
+      <span class="wpb-arrow">→</span>
+      <span class="wpb-proj">${f1(r.proj)} proj${r.hf ? " <span class='wpb-hf'>+HF</span>" : ""}</span>
+    </div>`).join("");
+
+  const awayStreakHtml = streakTag(gm.awayStreak, away.abbr);
+  const homeStreakHtml = streakTag(gm.homeStreak, home.abbr);
+  const streakRow = (awayStreakHtml || homeStreakHtml)
+    ? `<div class="wpb-streaks">${awayStreakHtml}${homeStreakHtml}</div>`
+    : "";
+
+  const envNote = gm.envFactor != null && Math.abs(gm.envFactor - 1.0) > 0.01
+    ? ` · park/ump ×${gm.envFactor.toFixed(2)}`
+    : "";
+
+  const div = document.createElement("div");
+  div.className = "win-prob-breakdown";
+  div.innerHTML = `
+    ${rows}
+    ${streakRow}
+    <div class="wpb-note">Poisson model · 25% recent/75% season blend (offense &amp; defense) · +0.35 home-field · probs shrunk 25% toward 50%${envNote}</div>
+  `;
+  return div;
+}
+
 function renderF5Card(f5, game) {
   const card = document.createElement("div");
   card.className = "pick-card";
@@ -597,11 +773,14 @@ function renderF5Card(f5, game) {
   const edgeHtml = f5.hasMarket && f5.edge
     ? `<div class="edge-box">${edgeLine(f5.edge)}</div>`
     : `<div class="edge-box"><span>Analysis only — projected first-5 total ${f5.projection} runs.</span></div>`;
+  const envNote = f5.envFactor != null && Math.abs(f5.envFactor - 1.0) > 0.01
+    ? ` Park/ump ×${f5.envFactor.toFixed(2)} applied.`
+    : "";
   card.innerHTML = `
     <div class="pick-header">
       <div class="pick-title">First 5 Innings — ${sideLabel} ${f5.line}</div>
     </div>
-    <div class="narrative">Starters-only model: ${f5.projection} runs through 5 (${f5.awayRuns} ${game.away.abbr} / ${f5.homeRuns} ${game.home.abbr}). F5 win: ${game.away.abbr} ${(f5.awayWinProb * 100).toFixed(0)}%, ${game.home.abbr} ${(f5.homeWinProb * 100).toFixed(0)}%, tie ${(f5.tieProb * 100).toFixed(0)}%.</div>
+    <div class="narrative">Starters-only model: ${f5.projection} runs through 5 (${f5.awayRuns} ${game.away.abbr} / ${f5.homeRuns} ${game.home.abbr}). F5 win: ${game.away.abbr} ${(f5.awayWinProb * 100).toFixed(0)}%, ${game.home.abbr} ${(f5.homeWinProb * 100).toFixed(0)}%, tie ${(f5.tieProb * 100).toFixed(0)}%.${envNote}</div>
     ${edgeHtml}
   `;
   return card;
@@ -613,11 +792,14 @@ function renderNrfiCard(nrfi) {
   const edgeHtml = nrfi.hasMarket && nrfi.edge
     ? `<div class="edge-box">${edgeLine(nrfi.edge)}</div>`
     : `<div class="edge-box"><span>Analysis only — no live NRFI line matched.</span></div>`;
+  const envNote = nrfi.envFactor != null && Math.abs(nrfi.envFactor - 1.0) > 0.01
+    ? ` Park/ump ×${nrfi.envFactor.toFixed(2)} applied.`
+    : "";
   card.innerHTML = `
     <div class="pick-header">
       <div class="pick-title">${nrfi.pick}</div>
     </div>
-    <div class="narrative">NRFI ${(nrfi.nrfiProb * 100).toFixed(0)}% / YRFI ${(nrfi.yrfiProb * 100).toFixed(0)}%. First-inning scoring chance: away ${(nrfi.pScoreAway * 100).toFixed(0)}%, home ${(nrfi.pScoreHome * 100).toFixed(0)}%.</div>
+    <div class="narrative">NRFI ${(nrfi.nrfiProb * 100).toFixed(0)}% / YRFI ${(nrfi.yrfiProb * 100).toFixed(0)}%. First-inning scoring chance: away ${(nrfi.pScoreAway * 100).toFixed(0)}%, home ${(nrfi.pScoreHome * 100).toFixed(0)}%.${envNote}</div>
     ${edgeHtml}
   `;
   return card;
