@@ -772,11 +772,14 @@ function renderF5Card(f5, game) {
   const edgeHtml = f5.hasMarket && f5.edge
     ? `<div class="edge-box">${edgeLine(f5.edge)}</div>`
     : `<div class="edge-box"><span>Analysis only — projected first-5 total ${f5.projection} runs.</span></div>`;
+  const envNote = f5.envFactor != null && Math.abs(f5.envFactor - 1.0) > 0.01
+    ? ` Park/ump ×${f5.envFactor.toFixed(2)} applied.`
+    : "";
   card.innerHTML = `
     <div class="pick-header">
       <div class="pick-title">First 5 Innings — ${sideLabel} ${f5.line}</div>
     </div>
-    <div class="narrative">Starters-only model: ${f5.projection} runs through 5 (${f5.awayRuns} ${game.away.abbr} / ${f5.homeRuns} ${game.home.abbr}). F5 win: ${game.away.abbr} ${(f5.awayWinProb * 100).toFixed(0)}%, ${game.home.abbr} ${(f5.homeWinProb * 100).toFixed(0)}%, tie ${(f5.tieProb * 100).toFixed(0)}%.</div>
+    <div class="narrative">Starters-only model: ${f5.projection} runs through 5 (${f5.awayRuns} ${game.away.abbr} / ${f5.homeRuns} ${game.home.abbr}). F5 win: ${game.away.abbr} ${(f5.awayWinProb * 100).toFixed(0)}%, ${game.home.abbr} ${(f5.homeWinProb * 100).toFixed(0)}%, tie ${(f5.tieProb * 100).toFixed(0)}%.${envNote}</div>
     ${edgeHtml}
   `;
   return card;
@@ -788,11 +791,14 @@ function renderNrfiCard(nrfi) {
   const edgeHtml = nrfi.hasMarket && nrfi.edge
     ? `<div class="edge-box">${edgeLine(nrfi.edge)}</div>`
     : `<div class="edge-box"><span>Analysis only — no live NRFI line matched.</span></div>`;
+  const envNote = nrfi.envFactor != null && Math.abs(nrfi.envFactor - 1.0) > 0.01
+    ? ` Park/ump ×${nrfi.envFactor.toFixed(2)} applied.`
+    : "";
   card.innerHTML = `
     <div class="pick-header">
       <div class="pick-title">${nrfi.pick}</div>
     </div>
-    <div class="narrative">NRFI ${(nrfi.nrfiProb * 100).toFixed(0)}% / YRFI ${(nrfi.yrfiProb * 100).toFixed(0)}%. First-inning scoring chance: away ${(nrfi.pScoreAway * 100).toFixed(0)}%, home ${(nrfi.pScoreHome * 100).toFixed(0)}%.</div>
+    <div class="narrative">NRFI ${(nrfi.nrfiProb * 100).toFixed(0)}% / YRFI ${(nrfi.yrfiProb * 100).toFixed(0)}%. First-inning scoring chance: away ${(nrfi.pScoreAway * 100).toFixed(0)}%, home ${(nrfi.pScoreHome * 100).toFixed(0)}%.${envNote}</div>
     ${edgeHtml}
   `;
   return card;

@@ -30,7 +30,7 @@ NEUTRAL: Dict[str, Any] = {"runFactor": 1.0, "hrFactor": 1.0, "cfAzimuth": None}
 
 # venue name -> (runFactor, hrFactor, cfAzimuth degrees or None)
 _PARKS: Dict[str, tuple] = {
-    "Coors Field": (1.15, 1.12, None),
+    "Coors Field": (1.15, 1.12, 0),             # north-facing (unusual); azimuth approx from public park-orientation data
     "Fenway Park": (1.06, 0.97, 47),
     "Great American Ball Park": (1.05, 1.16, 60),
     "Citizens Bank Park": (1.03, 1.08, 15),
@@ -50,8 +50,8 @@ _PARKS: Dict[str, tuple] = {
     "Angel Stadium": (0.99, 1.01, 50),
     "Dodger Stadium": (0.98, 1.05, 25),
     "Citi Field": (0.98, 0.97, 30),
-    "Progressive Field": (0.98, 0.99, None),
-    "PNC Park": (0.98, 0.95, None),
+    "Progressive Field": (0.98, 0.99, 60),       # ENE-facing; azimuth approx from public park-orientation data
+    "PNC Park": (0.98, 0.95, 25),                # NNE-facing; azimuth approx from public park-orientation data
     "Comerica Park": (0.98, 0.93, 60),
     "Busch Stadium": (0.97, 0.93, 60),
     "loanDepot park": (0.97, 0.95, None),      # retractable; treated as dome

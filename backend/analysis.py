@@ -1320,6 +1320,7 @@ def analyze_f5(
         "tieProb": round(p_tie, 4),
         "edge": edge,
         "hasMarket": edge is not None,
+        "envFactor": round(env_factor, 4),
     }
 
 
@@ -1382,6 +1383,7 @@ def analyze_nrfi(
         "modelProb": round(model_prob, 4),
         "edge": edge,
         "hasMarket": edge is not None,
+        "envFactor": round(env_factor, 4),
     }
 
 
