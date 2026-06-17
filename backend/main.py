@@ -386,6 +386,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
 
     team_rates_by_season: Dict[int, Dict[str, Any]] = {season: team_rates}
     starter_ra9: Dict[str, Optional[float]] = {"home": None, "away": None}
+    starter_h9: Dict[str, Optional[float]] = {"home": None, "away": None}
 
     pitchers_announced = any(p for p, _, _ in matchups)
     short_sample_pitchers = 0  # probable pitchers with < MIN_STARTS gamelog rows so far
@@ -400,7 +401,9 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         if not gamelog:
             continue
 
-        starter_ra9["home" if is_home else "away"] = analysis._starter_ra9(gamelog)
+        side_key = "home" if is_home else "away"
+        starter_ra9[side_key] = analysis._starter_ra9(gamelog)
+        starter_h9[side_key] = analysis._pitcher_h9(gamelog)
 
         seasons_seen = {r["season"] for r in gamelog}
         for s in seasons_seen:
@@ -517,11 +520,11 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
     hr_factor = parks.get_park(game["venue"]).get("hrFactor", 1.0)
     batter_candidates: List[Dict[str, Any]] = []
     sides = [
-        (True, home, away.get("probablePitcher"), away["id"], starter_ra9["away"]),
-        (False, away, home.get("probablePitcher"), home["id"], starter_ra9["home"]),
+        (True, home, away.get("probablePitcher"), away["id"], starter_ra9["away"], starter_h9["away"]),
+        (False, away, home.get("probablePitcher"), home["id"], starter_ra9["home"], starter_h9["home"]),
     ]
     any_lineup_found = False
-    for is_home_bat, team, opp_pitcher, opp_team_id, opp_ra9 in sides:
+    for is_home_bat, team, opp_pitcher, opp_team_id, opp_ra9, opp_h9 in sides:
         lineup_confirmed = True
         try:
             batters = await mlb.get_lineup_batters(game_pk, team["id"])
@@ -540,8 +543,19 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
             continue
         any_lineup_found = True
 
-        opp_factor = analysis.batter_opp_factor(opp_ra9)
+        # H/9 is a more direct hit-suppression signal than RA9; fall back to RA9 only
+        # when H/9 isn't available (pitcher gamelog too short to compute).
+        opp_factor = (analysis.batter_opp_factor_h9(opp_h9) if opp_h9 is not None
+                      else analysis.batter_opp_factor(opp_ra9))
         opp_pitcher_name = opp_pitcher["name"] if opp_pitcher else "TBD"
+
+        # Pitcher hand — fetched once per side, cached a full day.
+        opp_pitcher_hand: Optional[str] = None
+        if opp_pitcher:
+            try:
+                opp_pitcher_hand = await mlb.get_pitcher_hand(opp_pitcher["id"])
+            except Exception:
+                pass
 
         for b in batters:
             specs = []
@@ -560,6 +574,12 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
             if not blog:
                 continue
 
+            batter_platoon: Optional[Dict[str, Any]] = None
+            try:
+                batter_platoon = await mlb.get_batter_platoon_splits(b["id"], season)
+            except Exception:
+                pass
+
             for prop_type, stat_key, stat_label, stat_noun, mkt, park_fn, default_line, bern in specs:
                 bp = analysis.analyze_batter_prop(
                     prop_type=prop_type,
@@ -576,6 +596,8 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
                     park_factor=park_fn(hr_factor),
                     default_line=default_line,
                     bernoulli=bern,
+                    batter_platoon=batter_platoon,
+                    opp_pitcher_hand=opp_pitcher_hand,
                 )
                 if bp is not None:
                     bp["lineupConfirmed"] = lineup_confirmed

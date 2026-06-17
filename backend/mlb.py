@@ -511,6 +511,48 @@ async def get_batter_gamelog(person_id: int, season: int) -> List[Dict[str, Any]
     return await cache.get_or_set(f"batterlog:{person_id}:{season}", 3600, fetch)
 
 
+async def get_batter_platoon_splits(person_id: int, season: int) -> Dict[str, Any]:
+    """Season-to-date batting stats vs LHP / RHP: ``{"vsLHP": {...}, "vsRHP": {...}}``."""
+
+    async def fetch() -> Dict[str, Any]:
+        c = client()
+        r = await c.get(
+            f"/people/{person_id}/stats",
+            params={"stats": "statSplits", "group": "hitting", "season": season,
+                    "sitCodes": "vl,vr", "sportId": SPORT_ID},
+        )
+        r.raise_for_status()
+        data = r.json()
+        out: Dict[str, Any] = {}
+        code_map = {"vl": "vsLHP", "vr": "vsRHP"}
+        for split in data.get("stats", [{}])[0].get("splits", []):
+            code = split.get("split", {}).get("code")
+            key = code_map.get(code)
+            if not key:
+                continue
+            stat = split.get("stat", {})
+            ab = int(stat.get("atBats", 0) or 0)
+            h = int(stat.get("hits", 0) or 0)
+            out[key] = {"hits": h, "atBats": ab, "avg": h / ab if ab else None}
+        return out
+
+    return await cache.get_or_set(f"batter_platoon:{person_id}:{season}", 6 * 3600, fetch)
+
+
+async def get_pitcher_hand(person_id: int) -> Optional[str]:
+    """Returns 'L' or 'R' for the pitcher's throwing hand (cached a full day — never changes)."""
+
+    async def fetch() -> Optional[str]:
+        c = client()
+        r = await c.get(f"/people/{person_id}")
+        r.raise_for_status()
+        data = r.json()
+        people = data.get("people", [{}])
+        return people[0].get("pitchHand", {}).get("code") if people else None
+
+    return await cache.get_or_set(f"pitcher_hand:{person_id}", 86400, fetch)
+
+
 # --------------------------------------------------------------------------- bullpen
 
 async def get_bullpen(team_id: int, season: int) -> Dict[str, Any]:
@@ -579,6 +621,7 @@ async def get_pitcher_gamelog(person_id: int, season: int) -> List[Dict[str, Any
                     "opponentName": opp.get("name", ""),
                     "strikeOuts": int(stat.get("strikeOuts", 0) or 0),
                     "baseOnBalls": int(stat.get("baseOnBalls", 0) or 0),
+                    "hitsAllowed": int(stat.get("hits", 0) or 0),
                     "inningsPitched": parse_ip(stat.get("inningsPitched", 0)),
                     "battersFaced": int(stat.get("battersFaced", 0) or 0),
                     "earnedRuns": int(stat.get("earnedRuns", 0) or 0),

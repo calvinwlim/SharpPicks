@@ -994,12 +994,33 @@ BATTER_WINDOW = 15            # recent games for a batter's baseline
 BATTER_MIN_GAMES = 8          # fewer logged games than this -> no pick
 BATTER_OPP_FACTOR_FLOOR = 0.90
 BATTER_OPP_FACTOR_CEIL = 1.10
+LEAGUE_AVG_H9 = 8.8           # MLB average hits allowed per 9 IP (~recent seasons)
+PLATOON_MIN_AB = 30           # minimum AB vs a hand before trusting the platoon split
 
 
 def batter_opp_factor(opp_starter_ra9: Optional[float]) -> float:
     """How hittable the opposing starter is: >1 inflates batter projections."""
     ra9 = opp_starter_ra9 if opp_starter_ra9 is not None else STARTER_RA9_DEFAULT
     return _clamp((ra9 / STARTER_RA9_DEFAULT) ** 0.5, BATTER_OPP_FACTOR_FLOOR, BATTER_OPP_FACTOR_CEIL)
+
+
+def _pitcher_h9(gamelog: List[Dict[str, Any]], window: int = 10) -> Optional[float]:
+    """Hits allowed per 9 innings (H/9) from the pitcher's recent starts."""
+    recent = gamelog[-window:]
+    total_h = sum(r.get("hitsAllowed", 0) for r in recent)
+    total_ip = sum(r.get("inningsPitched", 0.0) for r in recent)
+    return (9.0 * total_h / total_ip) if total_ip >= 3.0 else None
+
+
+def batter_opp_factor_h9(pitcher_h9: Optional[float]) -> float:
+    """Opp-quality factor for hit props using H/9 — more direct than RA9.
+
+    H/9 measures actual hits surrendered, so a ground-ball pitcher who gives up
+    few singles but has a high RA9 from solo HRs won't be mistakenly flagged as
+    hittable. RA9-based factor kept as fallback when H/9 isn't available.
+    """
+    h9 = pitcher_h9 if pitcher_h9 is not None else LEAGUE_AVG_H9
+    return _clamp((h9 / LEAGUE_AVG_H9) ** 0.5, BATTER_OPP_FACTOR_FLOOR, BATTER_OPP_FACTOR_CEIL)
 
 
 def analyze_batter_prop(
@@ -1017,6 +1038,8 @@ def analyze_batter_prop(
     park_factor: float = 1.0,
     default_line: float = 0.5,
     bernoulli: bool = True,
+    batter_platoon: Optional[Dict[str, Any]] = None,
+    opp_pitcher_hand: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Grade a batter counting prop (hits / total bases / home runs).
 
@@ -1040,7 +1063,31 @@ def analyze_batter_prop(
 
     recent = gamelog[-BATTER_WINDOW:]
     baseline = sum(r.get(stat_key, 0) for r in recent) / len(recent)
-    projection = baseline * opp_factor * park_factor
+
+    # Platoon factor: how this batter performs vs the specific pitcher hand (hits only —
+    # season PA splits are large enough to be meaningful; HR sample is too small per hand).
+    platoon_factor = 1.0
+    platoon_signal: Optional[Dict[str, Any]] = None
+    if prop_type == "hits" and batter_platoon and opp_pitcher_hand in ("L", "R"):
+        pkey = "vsLHP" if opp_pitcher_hand == "L" else "vsRHP"
+        pd = batter_platoon.get(pkey, {})
+        platoon_avg = pd.get("avg")
+        platoon_ab = pd.get("atBats", 0)
+        if platoon_avg is not None and platoon_ab >= PLATOON_MIN_AB:
+            season_ab = sum(r.get("atBats", 0) for r in gamelog)
+            season_h = sum(r.get("hits", 0) for r in gamelog)
+            season_avg = season_h / season_ab if season_ab > 0 else None
+            if season_avg and season_avg > 0.01:
+                platoon_factor = _clamp(platoon_avg / season_avg, 0.75, 1.30)
+                platoon_signal = {
+                    "label": "Platoon split",
+                    "detail": (f"vs {'L' if opp_pitcher_hand == 'L' else 'R'}HP: "
+                               f".{int(platoon_avg * 1000):03d} avg vs "
+                               f".{int(season_avg * 1000):03d} overall → ×{platoon_factor:.2f}"),
+                    "lean": _lean_factor(platoon_factor),
+                }
+
+    projection = baseline * opp_factor * park_factor * platoon_factor
 
     recent_ab = sum(r.get("atBats", 0) for r in recent) / len(recent)
     n_ab = max(int(round(recent_ab)), 1)
@@ -1130,6 +1177,8 @@ def analyze_batter_prop(
             "lean": _lean_factor(opp_factor),
         },
     ]
+    if platoon_signal:
+        signals.append(platoon_signal)
     if park_factor != 1.0:
         signals.append({
             "label": "Park",
