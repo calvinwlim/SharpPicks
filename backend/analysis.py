@@ -1281,6 +1281,8 @@ def analyze_f5(
     home_starter_ra9: Optional[float],
     away_starter_ra9: Optional[float],
     market: Optional[Dict[str, Any]] = None,
+    umpire: Optional[Dict[str, Any]] = None,
+    park: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """First-5-innings total + win probabilities, driven by the two starters.
 
@@ -1290,8 +1292,12 @@ def analyze_f5(
     Poisson; the win probabilities come from the Skellam of the two run counts
     (ties are a real F5 outcome and reported alongside).
     """
-    home_f5 = _half_inning_runs(home_rpg, away_starter_ra9) * F5_INNINGS
-    away_f5 = _half_inning_runs(away_rpg, home_starter_ra9) * F5_INNINGS
+    ump_factor, _ = _umpire_factor(umpire, "run")
+    park_factor, _ = _park_factor(park)
+    env_factor = ump_factor * park_factor
+
+    home_f5 = _half_inning_runs(home_rpg, away_starter_ra9) * F5_INNINGS * env_factor
+    away_f5 = _half_inning_runs(away_rpg, home_starter_ra9) * F5_INNINGS * env_factor
     total = home_f5 + away_f5
 
     side, line, model_prob = _select_line_and_prob(total, market, dispersion=TOTAL_DISPERSION)
@@ -1334,16 +1340,24 @@ def analyze_nrfi(
     home_starter_ra9: Optional[float],
     away_starter_ra9: Optional[float],
     market: Optional[Dict[str, Any]] = None,
+    umpire: Optional[Dict[str, Any]] = None,
+    park: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """No-Runs-First-Inning vs Yes-Runs-First-Inning.
 
     Models each team's chance of scoring in the top/bottom of the first from its
     offense and the opposing starter's run rate (calibrated to the league NRFI
     baseline, since per-inning runs are too zero-inflated for a raw Poisson).
-    NRFI is the joint no-score of both halves.
+    NRFI is the joint no-score of both halves. Umpire zone and park factor are
+    applied symmetrically: a hitter-friendly park or wide-zone ump lifts both
+    teams' first-inning scoring probabilities equally.
     """
-    p_home = _p_score_first(home_rpg, away_starter_ra9)
-    p_away = _p_score_first(away_rpg, home_starter_ra9)
+    ump_factor, _ = _umpire_factor(umpire, "run")
+    park_factor, _ = _park_factor(park)
+    env_factor = ump_factor * park_factor
+
+    p_home = _clamp(_p_score_first(home_rpg, away_starter_ra9) * env_factor, NRFI_P_FLOOR, NRFI_P_CEIL)
+    p_away = _clamp(_p_score_first(away_rpg, home_starter_ra9) * env_factor, NRFI_P_FLOOR, NRFI_P_CEIL)
 
     nrfi = (1.0 - p_home) * (1.0 - p_away)
     yrfi = 1.0 - nrfi
@@ -1386,6 +1400,8 @@ def game_model(
     away_moneyline: Optional[int] = None,
     home_recent_form: Optional[Dict[str, Any]] = None,
     away_recent_form: Optional[Dict[str, Any]] = None,
+    umpire: Optional[Dict[str, Any]] = None,
+    park: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Pitcher-aware matchup model: each team's projected runs come from its
     offense facing the *opposing* pitching staff for this game (the listed
@@ -1402,13 +1418,21 @@ def game_model(
     home_ra = home_run_prevention.get("runsAllowedPerGame", DEFAULT_RUNS_PER_GAME)
     away_ra = away_run_prevention.get("runsAllowedPerGame", DEFAULT_RUNS_PER_GAME)
 
-    # Blend season RPG with recent rolling form
+    # Blend season RPG and RA with recent rolling form (25% weight on last-15-game sample).
+    # Blending RA alongside RPG means a team whose staff has recently allowed more runs
+    # sees that reflected in both the staff_ra9 fallback and the full-game projections.
     home_recent_rpg = (home_recent_form or {}).get("recentRPG")
     away_recent_rpg = (away_recent_form or {}).get("recentRPG")
+    home_recent_ra = (home_recent_form or {}).get("recentRA")
+    away_recent_ra = (away_recent_form or {}).get("recentRA")
     if home_recent_rpg is not None:
         home_rs = (1.0 - TEAM_RECENT_WEIGHT) * home_rs + TEAM_RECENT_WEIGHT * home_recent_rpg
     if away_recent_rpg is not None:
         away_rs = (1.0 - TEAM_RECENT_WEIGHT) * away_rs + TEAM_RECENT_WEIGHT * away_recent_rpg
+    if home_recent_ra is not None:
+        home_ra = (1.0 - TEAM_RECENT_WEIGHT) * home_ra + TEAM_RECENT_WEIGHT * home_recent_ra
+    if away_recent_ra is not None:
+        away_ra = (1.0 - TEAM_RECENT_WEIGHT) * away_ra + TEAM_RECENT_WEIGHT * away_recent_ra
     home_streak = (home_recent_form or {}).get("streak", 0)
     away_streak = (away_recent_form or {}).get("streak", 0)
 
@@ -1431,9 +1455,21 @@ def game_model(
     home_proj = TOTAL_CALIBRATION * (0.5 * home_rs + 0.5 * away_staff) + HOME_FIELD_RUNS / 2
     away_proj = TOTAL_CALIBRATION * (0.5 * away_rs + 0.5 * home_staff) - HOME_FIELD_RUNS / 2
 
+    # Apply umpire zone and park factor to run projections for win-probability only.
+    # Both are symmetric (same park, same ump for both teams), so they raise/lower the
+    # run environment without biasing one side. Raw proj values are returned unchanged
+    # so analyze_game_total() applies the full env stack (weather + wind + ump + park)
+    # without double-counting.
+    ump_factor, _ = _umpire_factor(umpire, "run")
+    env_park_factor, _ = _park_factor(park)
+    env_factor = ump_factor * env_park_factor
+
     # Single-game win prob from two independent Poisson run counts; ties (extra
     # innings) are split proportionally to each side's regulation win chance.
-    p_home, p_away, p_tie = _poisson_win_prob(home_proj, away_proj)
+    p_home, p_away, p_tie = _poisson_win_prob(
+        max(0.1, home_proj * env_factor),
+        max(0.1, away_proj * env_factor),
+    )
     decisive = p_home + p_away
     home_win = _clamp(p_home + (p_tie * p_home / decisive if decisive > 0 else 0.5), 0.02, 0.98)
     # Shrink toward 0.5 to correct overconfidence at extremes (backtest: 75%+ bucket pred 78%, actual 45%)
@@ -1452,8 +1488,11 @@ def game_model(
         "awayStaffRA9": round(away_staff, 2),
         "homeRecentRPG": round(home_recent_rpg, 2) if home_recent_rpg is not None else None,
         "awayRecentRPG": round(away_recent_rpg, 2) if away_recent_rpg is not None else None,
+        "homeRecentRA": round(home_recent_ra, 2) if home_recent_ra is not None else None,
+        "awayRecentRA": round(away_recent_ra, 2) if away_recent_ra is not None else None,
         "homeStreak": home_streak,
         "awayStreak": away_streak,
+        "envFactor": round(env_factor, 4),
     }
 
     if home_moneyline is not None and away_moneyline is not None:

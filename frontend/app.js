@@ -723,15 +723,24 @@ function renderWinProbBreakdown(gm, game) {
     return `<span class="wpb-streak ${cls}">${abbr} ${label}</span>`;
   };
 
+  // recentRaTag shows a badge on the opposing staff column when recent RA diverges from season
+  const recentRaTag = (staff, recentRa) => {
+    if (recentRa == null) return "";
+    const diff = recentRa - staff;
+    // Higher RA = worse defense, so hot/cold reversed vs offense
+    const cls = Math.abs(diff) > 0.3 ? (diff > 0 ? "wpb-cold" : "wpb-hot") : "wpb-neutral";
+    return ` <span class="wpb-recent ${cls}">${recentRa.toFixed(1)} rec</span>`;
+  };
+
   const rows = [
-    { team: away.abbr, off: gm.awayOffenseRPG, recent: gm.awayRecentRPG, staff: gm.homeStaffRA9, proj: gm.awayProjRuns, hf: false },
-    { team: home.abbr, off: gm.homeOffenseRPG, recent: gm.homeRecentRPG, staff: gm.awayStaffRA9, proj: gm.homeProjRuns, hf: true },
+    { team: away.abbr, off: gm.awayOffenseRPG, recentOff: gm.awayRecentRPG, staff: gm.homeStaffRA9, recentRa: gm.homeRecentRA, proj: gm.awayProjRuns, hf: false },
+    { team: home.abbr, off: gm.homeOffenseRPG, recentOff: gm.homeRecentRPG, staff: gm.awayStaffRA9, recentRa: gm.awayRecentRA, proj: gm.homeProjRuns, hf: true },
   ].map(r => `
     <div class="wpb-row">
       <span class="wpb-team">${r.team}</span>
-      <span class="wpb-off">${f1(r.off)} R/G${recentTag(r.off, r.recent)}</span>
+      <span class="wpb-off">${f1(r.off)} R/G${recentTag(r.off, r.recentOff)}</span>
       <span class="wpb-vs">vs</span>
-      <span class="wpb-staff">opp staff ${f1(r.staff)} RA/9</span>
+      <span class="wpb-staff">opp staff ${f1(r.staff)} RA/9${recentRaTag(r.staff, r.recentRa)}</span>
       <span class="wpb-arrow">→</span>
       <span class="wpb-proj">${f1(r.proj)} proj${r.hf ? " <span class='wpb-hf'>+HF</span>" : ""}</span>
     </div>`).join("");
@@ -742,12 +751,16 @@ function renderWinProbBreakdown(gm, game) {
     ? `<div class="wpb-streaks">${awayStreakHtml}${homeStreakHtml}</div>`
     : "";
 
+  const envNote = gm.envFactor != null && Math.abs(gm.envFactor - 1.0) > 0.01
+    ? ` · park/ump ×${gm.envFactor.toFixed(2)}`
+    : "";
+
   const div = document.createElement("div");
   div.className = "win-prob-breakdown";
   div.innerHTML = `
     ${rows}
     ${streakRow}
-    <div class="wpb-note">Poisson model · 25% recent/75% season blend · +0.35 home-field · probs shrunk 25% toward 50%</div>
+    <div class="wpb-note">Poisson model · 25% recent/75% season blend (offense &amp; defense) · +0.35 home-field · probs shrunk 25% toward 50%${envNote}</div>
   `;
   return div;
 }

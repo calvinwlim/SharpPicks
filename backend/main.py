@@ -456,6 +456,8 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         home_ml = odds.best_moneyline(market_event, home["name"])
         away_ml = odds.best_moneyline(market_event, away["name"])
 
+    park_data = parks.get_park(game["venue"])
+
     game_model = analysis.game_model(
         _team_rates_or_default(team_rates, home["id"]),
         _team_rates_or_default(team_rates, away["id"]),
@@ -469,6 +471,8 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         away_moneyline=away_ml,
         home_recent_form=home_recent_form,
         away_recent_form=away_recent_form,
+        umpire=umpire,
+        park=park_data,
     )
     game_model["total"] = analysis.analyze_game_total(
         game_model["homeProjRuns"],
@@ -476,16 +480,25 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         market=total_market,
         weather=weather,
         umpire=umpire,
-        park=parks.get_park(game["venue"]),
+        park=park_data,
     )
-
-    home_rpg = _team_rates_or_default(team_rates, home["id"]).get("runsPerGame", analysis.DEFAULT_RUNS_PER_GAME)
-    away_rpg = _team_rates_or_default(team_rates, away["id"]).get("runsPerGame", analysis.DEFAULT_RUNS_PER_GAME)
+    # F5 and NRFI use the blended (recent-form-aware) RPG from game_model rather
+    # than re-reading the raw season rate, so recent hot/cold streaks flow through.
     game_model["f5"] = analysis.analyze_f5(
-        home_rpg, away_rpg, starter_ra9["home"], starter_ra9["away"]
+        game_model["homeOffenseRPG"],
+        game_model["awayOffenseRPG"],
+        starter_ra9["home"],
+        starter_ra9["away"],
+        umpire=umpire,
+        park=park_data,
     )
     game_model["nrfi"] = analysis.analyze_nrfi(
-        home_rpg, away_rpg, starter_ra9["home"], starter_ra9["away"]
+        game_model["homeOffenseRPG"],
+        game_model["awayOffenseRPG"],
+        starter_ra9["home"],
+        starter_ra9["away"],
+        umpire=umpire,
+        park=park_data,
     )
 
     # ---- batter props (hits / total bases / HR) ----------------------------------------
