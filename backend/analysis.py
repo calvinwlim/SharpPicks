@@ -14,6 +14,12 @@ from . import odds
 
 # --------------------------------------------------------------------------- tunables
 
+# Statcast / FanGraphs discipline blend (see fangraphs.py)
+SWSTR_LEAGUE_AVG = 0.105    # MLB starter swinging-strike rate baseline (~10.5%)
+SWSTR_WEIGHT = 0.25         # fraction of K projection coming from Statcast stuff vs historical count
+SWSTR_FLOOR = 0.70          # clamp on Statcast adjustment factor (±30% max)
+SWSTR_CEIL = 1.30
+
 PROJECTION_WINDOW = 10      # starts used for the baseline mean
 OPP_FACTOR_FLOOR = 0.85     # clamp on (opponent K rate / league avg K rate)
 OPP_FACTOR_CEIL = 1.15
@@ -562,6 +568,7 @@ def analyze_strikeouts(
     umpire: Optional[Dict[str, Any]] = None,
     opp_lineup: Optional[Dict[str, Any]] = None,
     pitcher_skill: Optional[Dict[str, Any]] = None,
+    discipline: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Grade a starter's strikeout prop. Returns ``None`` if there isn't enough history."""
 
@@ -582,6 +589,22 @@ def analyze_strikeouts(
     ump_factor, ump_info = _umpire_factor(umpire, "k")
 
     projection = baseline * opp_factor * platoon_factor * ump_factor
+
+    # Statcast stuff blend: swinging-strike rate above/below league avg nudges the
+    # projection up or down.  Historical K count already reflects the pitcher's
+    # command and stuff, so we keep SWSTR_WEIGHT small (25%) to avoid over-indexing
+    # on a single-season Statcast number.
+    discipline_info: Optional[Dict[str, Any]] = None
+    if discipline and discipline.get("swstr") is not None:
+        swstr = discipline["swstr"]
+        stuff_factor = _clamp(swstr / SWSTR_LEAGUE_AVG, SWSTR_FLOOR, SWSTR_CEIL)
+        projection = projection * (1.0 - SWSTR_WEIGHT + SWSTR_WEIGHT * stuff_factor)
+        discipline_info = {
+            "swstr": swstr,
+            "stuff_factor": round(stuff_factor, 3),
+            "csw": discipline.get("csw"),
+            "o_swing": discipline.get("o_swing"),
+        }
 
     # A K count is the sum of per-batter Bernoulli(K) trials, so it's binomial
     # (under-dispersed) rather than Poisson. Use Binomial(expected BF, implied
@@ -689,6 +712,19 @@ def analyze_strikeouts(
         edge=edge,
     )
 
+    if discipline_info:
+        swstr_pct = round(discipline_info["swstr"] * 100, 1)
+        sfactor = discipline_info["stuff_factor"]
+        lean = "over" if sfactor > 1.02 else "under" if sfactor < 0.98 else "neutral"
+        signals.append({
+            "label": f"SwStr% {swstr_pct}% (×{sfactor:.2f} vs avg)",
+            "detail": (
+                f"Statcast swinging-strike rate {swstr_pct}% vs {SWSTR_LEAGUE_AVG*100:.1f}% league avg"
+                + (f"; CSW {round(discipline_info['csw']*100,1)}%" if discipline_info.get("csw") else "")
+            ),
+            "lean": lean,
+        })
+
     side_label = "Over" if side == "over" else "Under"
 
     return {
@@ -712,6 +748,7 @@ def analyze_strikeouts(
         "umpire": ump_info,
         "skill": skill_info,
         "lineupConfirmed": used_lineup,
+        "discipline": discipline_info,
         "signals": signals,
     }
 

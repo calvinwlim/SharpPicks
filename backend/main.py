@@ -16,8 +16,8 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from . import ai as ai_module
-from . import (analysis, mlb, mma, mma_analysis, mma_comps, mma_data, nba, nba_analysis,
-               odds, parks, savant, umpires, weather as weather_module)
+from . import (analysis, fangraphs, mlb, mma, mma_analysis, mma_comps, mma_data, nba,
+               nba_analysis, odds, parks, savant, umpires, weather as weather_module)
 
 load_dotenv()
 
@@ -367,6 +367,12 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
                 except Exception:
                     bb_props_by_pitcher = {}
 
+    # ---- Statcast discipline (FanGraphs, cached 6h) ------------------------------------
+    try:
+        pitcher_discipline = await fangraphs.get_pitcher_discipline(season)
+    except Exception:
+        pitcher_discipline = {}
+
     # ---- per-pitcher strikeout picks ---------------------------------------------------
     picks: List[Dict[str, Any]] = []
     matchups = [
@@ -417,6 +423,8 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         except Exception:
             pitcher_skill = None
 
+        discipline = pitcher_discipline.get(pitcher["id"])
+
         k_pick = analysis.analyze_strikeouts(
             pitcher_name=pitcher["name"],
             gamelog=gamelog,
@@ -431,6 +439,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
             umpire=umpire,
             opp_lineup=opp_lineup,
             pitcher_skill=pitcher_skill,
+            discipline=discipline,
         )
         if k_pick is not None:
             k_pick["narrative"] = await ai_module.generate_narrative(k_pick, use_ai, anthropic_key)
