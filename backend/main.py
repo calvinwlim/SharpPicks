@@ -336,6 +336,16 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
     except Exception:
         away_bullpen = None
 
+    # ---- team recent form (rolling 15 games) --------------------------------------------
+    try:
+        home_recent_form = await mlb.get_team_recent_form(home["id"], season)
+    except Exception:
+        home_recent_form = None
+    try:
+        away_recent_form = await mlb.get_team_recent_form(away["id"], season)
+    except Exception:
+        away_recent_form = None
+
     # ---- live market (optional) -------------------------------------------------------
     # Network egress to The Odds API may be unavailable in some sandboxes; degrade to
     # "analysis only" rather than failing the whole request.
@@ -457,6 +467,8 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         away_bullpen=away_bullpen,
         home_moneyline=home_ml,
         away_moneyline=away_ml,
+        home_recent_form=home_recent_form,
+        away_recent_form=away_recent_form,
     )
     game_model["total"] = analysis.analyze_game_total(
         game_model["homeProjRuns"],

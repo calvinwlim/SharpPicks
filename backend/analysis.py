@@ -24,6 +24,10 @@ HOME_FIELD_RUNS = 0.35      # home-field advantage, expressed as extra projected
 # 200-game backtest showed home field was underweighted at 0.20 (25-50% home bucket: pred 41%, actual 55%)
 ML_SHRINK = 0.25            # pulls moneyline probs toward 0.5; fixes 75%+ overconfidence in backtest
                             # (feeds the Skellam win prob so it scales correctly with the run environment)
+TEAM_RECENT_WEIGHT = 0.25   # weight on last-15-game RPG vs full-season average in the game model
+K_TREND_WINDOW = 4          # recent starts (within the projection window) used for K trend
+STREAK_THRESHOLD = 3        # consecutive hits/misses before confidence is adjusted
+STREAK_CONFIDENCE_STEP = 0.03  # confidence shift per start beyond STREAK_THRESHOLD (capped at 3)
 
 # Count-prop distributions (None = Poisson; a number = negative-binomial dispersion).
 # Tuned on the backtest: walks are over-dispersed (Poisson overstated the over),
@@ -601,6 +605,14 @@ def analyze_strikeouts(
     # _skill_projection blends K% + whiff rate from Savant into the baseline
     baseline, skill_info = _skill_projection(results_baseline, recent, pitcher_skill)
 
+    # K-rate trend: compare last K_TREND_WINDOW starts vs earlier starts in the window
+    k_trend = 0.0
+    k_recent_avg = k_earlier_avg = None
+    if len(recent) > K_TREND_WINDOW:
+        k_recent_avg = sum(r["strikeOuts"] for r in recent[-K_TREND_WINDOW:]) / K_TREND_WINDOW
+        k_earlier_avg = sum(r["strikeOuts"] for r in recent[:-K_TREND_WINDOW]) / (len(recent) - K_TREND_WINDOW)
+        k_trend = k_recent_avg - k_earlier_avg
+
     current_rates = team_rates_by_season.get(current_season, {})
     league_avg_k = current_rates.get("leagueAvgK", 0.225) or 0.225
     opp_team = current_rates.get("teams", {}).get(opponent_id, {})
@@ -687,6 +699,19 @@ def analyze_strikeouts(
         shrunk_avg = 0.5
     blended = 0.5 * model_prob + 0.5 * shrunk_avg
 
+    # Streak adjustment: sustained runs ≥ STREAK_THRESHOLD shift confidence
+    n_streak = abs(streak)
+    if n_streak >= STREAK_THRESHOLD:
+        extra = min(n_streak - STREAK_THRESHOLD + 1, 3) * STREAK_CONFIDENCE_STEP
+        blended = blended + extra if streak > 0 else blended - extra
+
+    # K trend nudge: a persistent directional trend adds a small signal
+    if abs(k_trend) >= 1.0:
+        trend_aligns = (k_trend > 0 and side == "over") or (k_trend < 0 and side == "under")
+        blended = blended + 0.02 if trend_aligns else blended - 0.02
+
+    blended = _clamp(blended, 0.05, 0.95)
+
     confidence = round(blended * 100)
     if len(gamelog) < PROJECTION_WINDOW:
         confidence = min(confidence, 70)
@@ -717,6 +742,15 @@ def analyze_strikeouts(
         skill_info=skill_info,
         edge=edge,
     )
+
+    if abs(k_trend) >= 0.5 and k_recent_avg is not None:
+        sign = "+" if k_trend > 0 else ""
+        lean = "over" if k_trend > 0 else "under"
+        signals.append({
+            "label": f"K trend ({sign}{k_trend:.1f} last {K_TREND_WINDOW})",
+            "detail": f"{k_recent_avg:.1f} K avg in last {K_TREND_WINDOW} starts vs {k_earlier_avg:.1f} prior in window",
+            "lean": lean,
+        })
 
     side_label = "Over" if side == "over" else "Under"
 
@@ -1350,6 +1384,8 @@ def game_model(
     away_bullpen: Optional[Dict[str, Any]] = None,
     home_moneyline: Optional[int] = None,
     away_moneyline: Optional[int] = None,
+    home_recent_form: Optional[Dict[str, Any]] = None,
+    away_recent_form: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Pitcher-aware matchup model: each team's projected runs come from its
     offense facing the *opposing* pitching staff for this game (the listed
@@ -1365,6 +1401,16 @@ def game_model(
     away_rs = away_rates.get("runsPerGame", DEFAULT_RUNS_PER_GAME)
     home_ra = home_run_prevention.get("runsAllowedPerGame", DEFAULT_RUNS_PER_GAME)
     away_ra = away_run_prevention.get("runsAllowedPerGame", DEFAULT_RUNS_PER_GAME)
+
+    # Blend season RPG with recent rolling form
+    home_recent_rpg = (home_recent_form or {}).get("recentRPG")
+    away_recent_rpg = (away_recent_form or {}).get("recentRPG")
+    if home_recent_rpg is not None:
+        home_rs = (1.0 - TEAM_RECENT_WEIGHT) * home_rs + TEAM_RECENT_WEIGHT * home_recent_rpg
+    if away_recent_rpg is not None:
+        away_rs = (1.0 - TEAM_RECENT_WEIGHT) * away_rs + TEAM_RECENT_WEIGHT * away_recent_rpg
+    home_streak = (home_recent_form or {}).get("streak", 0)
+    away_streak = (away_recent_form or {}).get("streak", 0)
 
     def staff_ra9(starter_ra9: Optional[float], bullpen: Optional[Dict[str, Any]], team_full_ra: float) -> float:
         # Blend the listed starter's RA/9 with the bullpen ERA over a 9-inning
@@ -1404,6 +1450,10 @@ def game_model(
         "awayOffenseRPG": round(away_rs, 2),
         "homeStaffRA9": round(home_staff, 2),
         "awayStaffRA9": round(away_staff, 2),
+        "homeRecentRPG": round(home_recent_rpg, 2) if home_recent_rpg is not None else None,
+        "awayRecentRPG": round(away_recent_rpg, 2) if away_recent_rpg is not None else None,
+        "homeStreak": home_streak,
+        "awayStreak": away_streak,
     }
 
     if home_moneyline is not None and away_moneyline is not None:

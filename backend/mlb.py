@@ -405,6 +405,75 @@ async def get_team_hitting_log(team_id: int, season: int) -> List[Dict[str, Any]
     return await cache.get_or_set(f"teamhitlog:{team_id}:{season}", 12 * 3600, fetch)
 
 
+async def get_team_recent_form(team_id: int, season: int, n: int = 15) -> Dict[str, Any]:
+    """Last-N completed games: rolling run rates and W/L streak.
+
+    Returns ``{"recentRPG": float|None, "recentRA": float|None, "streak": int, "n": int}``.
+    Positive streak = wins (e.g. +4 = 4-game winning streak), negative = losses.
+    """
+    from datetime import date as _date, timedelta
+
+    today = _date.today()
+    start = today - timedelta(days=60)
+
+    async def fetch() -> Dict[str, Any]:
+        c = client()
+        r = await c.get(
+            "/schedule",
+            params={
+                "sportId": SPORT_ID,
+                "teamId": team_id,
+                "startDate": start.isoformat(),
+                "endDate": today.isoformat(),
+                "hydrate": "linescore",
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        games: List[Dict[str, Any]] = []
+        for d in data.get("dates", []):
+            for g in d.get("games", []):
+                if g.get("status", {}).get("abstractGameState") != "Final":
+                    continue
+                teams = g.get("teams", {})
+                for side in ("home", "away"):
+                    t = teams.get(side, {})
+                    if t.get("team", {}).get("id") != team_id:
+                        continue
+                    opp_side = "away" if side == "home" else "home"
+                    rs = int(t.get("score") or 0)
+                    ra = int((teams.get(opp_side) or {}).get("score") or 0)
+                    won = bool(t.get("isWinner", False))
+                    games.append({"won": won, "rs": rs, "ra": ra})
+
+        recent = games[-n:]
+        if not recent:
+            return {"recentRPG": None, "recentRA": None, "streak": 0, "n": 0}
+
+        recent_rpg = sum(g["rs"] for g in recent) / len(recent)
+        recent_ra = sum(g["ra"] for g in recent) / len(recent)
+
+        streak = 0
+        last_won = recent[-1]["won"]
+        for g in reversed(recent):
+            if g["won"] == last_won:
+                streak += 1
+            else:
+                break
+        if not last_won:
+            streak = -streak
+
+        return {
+            "recentRPG": round(recent_rpg, 2),
+            "recentRA": round(recent_ra, 2),
+            "streak": streak,
+            "n": len(recent),
+        }
+
+    return await cache.get_or_set(f"recent_form:{team_id}:{season}", 1800, fetch)
+
+
 async def get_batter_gamelog(person_id: int, season: int) -> List[Dict[str, Any]]:
     """A hitter's game log shaped for ``analysis.analyze_batter_prop``."""
 

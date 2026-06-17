@@ -860,6 +860,38 @@ header.app-header {
   padding-top: 7px;
 }
 
+.wpb-recent {
+  font-size: 10px;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-left: 3px;
+  vertical-align: middle;
+}
+
+.wpb-hot     { background: rgba(62, 207, 142, 0.15); color: var(--green); }
+.wpb-cold    { background: rgba(255, 107, 107, 0.15); color: var(--red); }
+.wpb-neutral { color: var(--text-faint); }
+
+.wpb-streaks {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.wpb-streak {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.wpb-streak-w { background: rgba(62, 207, 142, 0.15); color: var(--green); }
+.wpb-streak-l { background: rgba(255, 107, 107, 0.15); color: var(--red); }
+
 /* ---- pick card ------------------------------------------------------------ */
 
 .pick-card {
