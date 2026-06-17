@@ -541,6 +541,13 @@ async function loadAnalysis(game, date, container, btn) {
 function renderAnalysis(data, game, container) {
   container.innerHTML = "";
 
+  if (data.oddsNote) {
+    const note = document.createElement("div");
+    note.className = "odds-note";
+    note.textContent = `⚠ Odds: ${data.oddsNote}`;
+    container.appendChild(note);
+  }
+
   if (data.weather) {
     container.appendChild(renderWeatherBadge(data.weather));
   }
