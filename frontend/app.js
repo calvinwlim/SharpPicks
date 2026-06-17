@@ -42,6 +42,17 @@ settingsSave.addEventListener("click", () => {
     .then((r) => r.json())
     .then((d) => setFlags(d.flags || {}))
     .catch(() => {});
+  // Re-fetch any open analysis panels so the new key takes effect immediately.
+  document.querySelectorAll(".analysis.open").forEach((el) => {
+    try {
+      const game = JSON.parse(el.dataset.gameJson || "null");
+      const date = el.dataset.gameDate;
+      if (!game || !date) return;
+      const btn = el.closest(".game-card")?.querySelector(".analyze-btn");
+      delete el.dataset.loaded;
+      loadAnalysis(game, date, el, btn);
+    } catch (_) {}
+  });
 });
 settingsClear.addEventListener("click", () => {
   sessionStorage.removeItem("oddsApiKey");
@@ -460,6 +471,8 @@ function renderGameCard(game, date) {
   fillTeam(card.querySelector(".team.home"), game.home);
 
   const analysisEl = card.querySelector(".analysis");
+  analysisEl.dataset.gameJson = JSON.stringify(game);
+  analysisEl.dataset.gameDate = date;
   const btn = card.querySelector(".analyze-btn");
   const refreshBtn = card.querySelector(".refresh-btn");
   btn.addEventListener("click", () => {
