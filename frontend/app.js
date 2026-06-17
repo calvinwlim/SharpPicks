@@ -675,11 +675,12 @@ function renderTotalCard(total) {
   const windNote = total.wind
     ? ` Wind ${Math.abs(total.wind.outMph)} mph ${total.wind.blowing} (${total.windFactor > 1 ? "+" : ""}${((total.windFactor - 1) * 100).toFixed(1)}%).`
     : "";
+  const capNote = total.envClamped ? " (env factors capped at ±22% combined)." : "";
   card.innerHTML = `
     <div class="pick-header">
       <div class="pick-title">Game Total — ${sideLabel} ${total.line}</div>
     </div>
-    <div class="narrative">Model projects ${total.projection} combined runs (${(total.modelProb * 100).toFixed(0)}% on ${sideLabel.toLowerCase()}); starters + bullpens already baked in.${weatherNote}${parkNote}${windNote}${umpNote}</div>
+    <div class="narrative">Model projects ${total.projection} combined runs (${(total.modelProb * 100).toFixed(0)}% on ${sideLabel.toLowerCase()}); starters + bullpens already baked in.${weatherNote}${parkNote}${windNote}${umpNote}${capNote}</div>
     ${edgeHtml}
   `;
   return card;

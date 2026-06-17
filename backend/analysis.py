@@ -83,6 +83,13 @@ WIND_RUNS_PER_MPH = 0.006      # each mph of "out" wind nudges the run total ~0.
 WIND_RUN_FACTOR_FLOOR = 0.94
 WIND_RUN_FACTOR_CEIL = 1.06
 
+# Combined environmental cap: prevents multiple factors pointing the same direction
+# from producing unrealistic projections. Each individual factor is already conservative,
+# but their product can still reach +30% in extreme cases (Coors + hot + out-wind + wide ump).
+# A ±22% cap covers realistic extremes while blocking corner-case stacking.
+ENV_COMBINED_FLOOR = 0.78
+ENV_COMBINED_CEIL = 1.22
+
 
 # --------------------------------------------------------------------------- Poisson helpers (no SciPy)
 
@@ -1198,7 +1205,9 @@ def analyze_game_total(
     park_factor, park_info = _park_factor(park)
     wind_factor, wind_info = _wind_factor(weather, park)
 
-    projection *= weather_factor * ump_factor * park_factor * wind_factor
+    raw_env = weather_factor * ump_factor * park_factor * wind_factor
+    env = _clamp(raw_env, ENV_COMBINED_FLOOR, ENV_COMBINED_CEIL)
+    projection *= env
 
     side, line, model_prob = _select_line_and_prob(projection, market, dispersion=TOTAL_DISPERSION)
     edge = _build_edge(side, model_prob, market)
@@ -1220,6 +1229,8 @@ def analyze_game_total(
         "park": park_info,
         "windFactor": round(wind_factor, 4),
         "wind": wind_info,
+        "envCombined": round(env, 4),
+        "envClamped": env != raw_env,
     }
 
 
