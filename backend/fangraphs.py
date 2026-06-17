@@ -45,51 +45,47 @@ async def get_pitcher_discipline(season: int) -> Dict[int, Dict[str, float]]:
     All values are fractions (0–1). Returns an empty dict on any network error
     so callers degrade gracefully to the historical-only projection.
     """
-    cache_key = f"fangraphs:discipline:{season}"
-    hit = cache.get(cache_key)
-    if hit is not None:
-        return hit
+    async def _fetch() -> Dict[int, Dict[str, float]]:
+        url = _FG_URL.format(year=season)
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as c:
+                r = await c.get(url, headers=_FG_HEADERS)
+                r.raise_for_status()
+                payload = r.json()
+        except Exception:
+            return {}
 
-    url = _FG_URL.format(year=season)
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
-            r = await c.get(url, headers=_FG_HEADERS)
-            r.raise_for_status()
-            payload = r.json()
-    except Exception:
-        return {}
+        rows = payload.get("data", [])
+        out: Dict[int, Dict[str, float]] = {}
+        for row in rows:
+            mlbam = row.get("xMLBAMID")
+            if not mlbam:
+                continue
+            tbf = row.get("TBF") or 0
+            if tbf < _MIN_TBF:
+                continue
 
-    rows = payload.get("data", [])
-    out: Dict[int, Dict[str, float]] = {}
-    for row in rows:
-        mlbam = row.get("xMLBAMID")
-        if not mlbam:
-            continue
-        tbf = row.get("TBF") or 0
-        if tbf < _MIN_TBF:
-            continue
+            def _f(key: str) -> Optional[float]:
+                v = row.get(key)
+                return float(v) if v is not None else None
 
-        def _f(key: str) -> Optional[float]:
-            v = row.get(key)
-            return float(v) if v is not None else None
+            swstr = _f("SwStr%")
+            o_swing = _f("O-Swing%")
+            cstr = _f("CStr%")
+            csw = _f("C+SwStr%")
+            k_pct = _f("K%")
 
-        swstr = _f("SwStr%")
-        o_swing = _f("O-Swing%")
-        cstr = _f("CStr%")
-        csw = _f("C+SwStr%")
-        k_pct = _f("K%")
+            if swstr is None:
+                continue
 
-        if swstr is None:
-            continue
+            out[int(mlbam)] = {
+                "swstr": swstr,       # swinging strike rate (primary K predictor)
+                "o_swing": o_swing,   # chase rate
+                "cstr": cstr,         # called strike rate
+                "csw": csw,           # called strike + whiff (CSW rate)
+                "k_pct": k_pct,       # actual K% (validation)
+                "tbf": int(tbf),
+            }
+        return out
 
-        out[int(mlbam)] = {
-            "swstr": swstr,          # swinging strike rate (primary K predictor)
-            "o_swing": o_swing,      # chase rate
-            "cstr": cstr,            # called strike rate
-            "csw": csw,              # called strike + whiff (CSW rate)
-            "k_pct": k_pct,          # actual K% (validation)
-            "tbf": int(tbf),
-        }
-
-    cache.set(cache_key, out, ttl=21600)  # 6-hour cache
-    return out
+    return await cache.get_or_set(f"fangraphs:discipline:{season}", 21600, _fetch)
