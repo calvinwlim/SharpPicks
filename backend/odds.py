@@ -154,24 +154,34 @@ def game_total(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _team_matches(api_name: str, mlb_name: str) -> bool:
+    """Fuzzy match between Odds API team name and MLB Stats API team name.
+
+    Uses suffix matching to handle city-prefix differences caused by team
+    relocations (e.g. "Athletics" from MLB API vs "Oakland Athletics" from
+    Odds API — "athletics" is a suffix of "oaklandathletics").
+    """
+    a, b = norm(api_name), norm(mlb_name)
+    return a == b or a.endswith(b) or b.endswith(a)
+
+
 def match_event(events: List[Dict[str, Any]], home: str, away: str) -> Optional[Dict[str, Any]]:
-    h, a = norm(home), norm(away)
     for e in events:
-        if norm(e.get("home_team", "")) == h and norm(e.get("away_team", "")) == a:
+        if (_team_matches(e.get("home_team", ""), home) and
+                _team_matches(e.get("away_team", ""), away)):
             return e
     return None
 
 
 def best_moneyline(event: Dict[str, Any], team_name: str) -> Optional[int]:
     """The best (highest) American moneyline price for ``team_name`` across books."""
-    target = norm(team_name)
     best: Optional[int] = None
     for bm in event.get("bookmakers", []):
         for market in bm.get("markets", []):
             if market.get("key") != "h2h":
                 continue
             for outcome in market.get("outcomes", []):
-                if norm(outcome.get("name", "")) == target:
+                if _team_matches(outcome.get("name", ""), team_name):
                     price = outcome.get("price")
                     if price is not None and (best is None or price > best):
                         best = price
