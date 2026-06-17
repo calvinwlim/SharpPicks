@@ -353,13 +353,29 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
     total_market: Optional[Dict[str, Any]] = None
     k_props_by_pitcher: Dict[str, Dict[str, Any]] = {}
     bb_props_by_pitcher: Dict[str, Dict[str, Any]] = {}
+    odds_note: Optional[str] = None
     if odds.has_key(odds_key):
         try:
             c = odds.client()
             events = await odds.get_game_markets(c, odds_key)
-            market_event = odds.match_event(events, home["name"], away["name"])
-        except Exception:
+            if not events:
+                odds_note = "No upcoming MLB events returned from Odds API — the game may have already started or your quota is exhausted."
+            else:
+                market_event = odds.match_event(events, home["name"], away["name"])
+                if market_event is None:
+                    event_names = [f"{e.get('away_team')} @ {e.get('home_team')}" for e in events[:5]]
+                    odds_note = f"Game not found in Odds API ({len(events)} events available). First 5: {', '.join(event_names) or 'none'}."
+        except Exception as exc:
             market_event = None
+            err = str(exc)
+            if "401" in err or "Unauthorized" in err.lower():
+                odds_note = "Odds API key rejected (401 Unauthorized) — check that the key is correct."
+            elif "402" in err or "quota" in err.lower():
+                odds_note = "Odds API quota exceeded — your monthly request limit may be exhausted."
+            elif "429" in err:
+                odds_note = "Odds API rate limit hit — too many requests in a short period."
+            else:
+                odds_note = f"Odds API request failed: {err[:120]}"
 
         if market_event:
             try:
@@ -643,6 +659,7 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
         "gameModel": game_model,
         "weather": weather,
         "umpire": umpire,
+        "oddsNote": odds_note,
         "flags": _flags(use_ai, odds_key, anthropic_key),
     }
 
