@@ -1400,6 +1400,10 @@ def game_model(
         "awayProjRuns": round(away_proj, 2),
         "homeStarterRA9": round(home_starter_ra9, 2) if home_starter_ra9 is not None else None,
         "awayStarterRA9": round(away_starter_ra9, 2) if away_starter_ra9 is not None else None,
+        "homeOffenseRPG": round(home_rs, 2),
+        "awayOffenseRPG": round(away_rs, 2),
+        "homeStaffRA9": round(home_staff, 2),
+        "awayStaffRA9": round(away_staff, 2),
     }
 
     if home_moneyline is not None and away_moneyline is not None:

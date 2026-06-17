@@ -552,6 +552,7 @@ function renderAnalysis(data, game, container) {
     homeWp.querySelector(".bar > span").style.width = `${(gm.homeWinProb * 100).toFixed(0)}%`;
 
     container.appendChild(node);
+    container.appendChild(renderWinProbBreakdown(gm, game));
 
     if (gm.total) {
       container.appendChild(renderTotalCard(gm.total));
@@ -688,6 +689,32 @@ function renderMoneylineCard(moneyline, game) {
     </div>
   `;
   return card;
+}
+
+function renderWinProbBreakdown(gm, game) {
+  const away = game.away, home = game.home;
+  const f1 = v => v != null ? v.toFixed(1) : "—";
+
+  const rows = [
+    { team: away.abbr, off: gm.awayOffenseRPG, staff: gm.homeStaffRA9, proj: gm.awayProjRuns, hf: false },
+    { team: home.abbr, off: gm.homeOffenseRPG, staff: gm.awayStaffRA9, proj: gm.homeProjRuns, hf: true },
+  ].map(r => `
+    <div class="wpb-row">
+      <span class="wpb-team">${r.team}</span>
+      <span class="wpb-off">${f1(r.off)} R/G offense</span>
+      <span class="wpb-vs">vs</span>
+      <span class="wpb-staff">opp staff ${f1(r.staff)} RA/9</span>
+      <span class="wpb-arrow">→</span>
+      <span class="wpb-proj">${f1(r.proj)} proj${r.hf ? " <span class='wpb-hf'>+HF</span>" : ""}</span>
+    </div>`).join("");
+
+  const div = document.createElement("div");
+  div.className = "win-prob-breakdown";
+  div.innerHTML = `
+    ${rows}
+    <div class="wpb-note">Poisson single-game model · +0.35 run home-field edge · probabilities tightened 25% toward 50% per backtest calibration</div>
+  `;
+  return div;
 }
 
 function renderF5Card(f5, game) {
