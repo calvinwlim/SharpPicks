@@ -85,17 +85,30 @@
 
   <!-- ---- history view --------------------------------------------------- -->
   <div id="history-view" style="display: none;">
+
+    <!-- running stats bar -->
+    <div class="history-stats" id="history-stats" style="display:none;">
+      <div class="history-stats-heading">
+        <span class="history-stats-title">All-Time Record</span>
+        <span class="history-stats-meta" id="history-stats-meta"></span>
+      </div>
+      <div class="history-stats-markets" id="history-stats-markets"></div>
+    </div>
+
+    <!-- calendar -->
     <section class="history-calendar" id="history-calendar">
       <h2 class="section-title">Pick History</h2>
-      <p class="history-intro">Days graded via <code>track.py grade</code>. Click a date to load that day's slate.</p>
       <div class="history-cal-header">
         <button id="cal-prev" title="Previous month">‹</button>
         <span id="cal-month-label"></span>
         <button id="cal-next" title="Next month">›</button>
       </div>
       <div class="history-cal-grid" id="history-cal-grid"></div>
-      <div class="history-cal-tooltip" id="history-cal-tooltip" style="display: none;"></div>
     </section>
+
+    <!-- day detail panel -->
+    <div class="history-day-detail" id="history-day-detail" style="display:none;"></div>
+
   </div>
 
   <footer>

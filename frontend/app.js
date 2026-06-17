@@ -161,10 +161,9 @@ let calViewYear = 0;
 let calViewMonth = 0;      // 0-based
 let calSelectedDate = "";
 
-const calSection = document.getElementById("history-calendar");
 const calGrid = document.getElementById("history-cal-grid");
 const calMonthLabel = document.getElementById("cal-month-label");
-const calTooltip = document.getElementById("history-cal-tooltip");
+const historyDayDetail = document.getElementById("history-day-detail");
 
 async function loadHistory() {
   try {
@@ -174,10 +173,76 @@ async function loadHistory() {
     for (const e of data.entries || []) {
       calHistory[e.date] = e;
     }
+    renderStatsBar();
     renderCalendar();
   } catch (e) {
     // leave calendar empty on error
   }
+}
+
+function renderStatsBar() {
+  const statsEl = document.getElementById("history-stats");
+  const metaEl = document.getElementById("history-stats-meta");
+  const marketsEl = document.getElementById("history-stats-markets");
+  const entries = Object.values(calHistory);
+  if (!entries.length) { statsEl.style.display = "none"; return; }
+
+  const agg = {
+    strikeouts: { w: 0, l: 0, p: 0, briers: [], label: "Strikeouts" },
+    total:      { w: 0, l: 0, p: 0, briers: [], label: "Totals" },
+    moneyline:  { w: 0, l: 0, p: 0, briers: [], label: "Moneyline" },
+  };
+  let totalGames = 0, totalDays = entries.length, biasSum = 0, biasCount = 0;
+
+  for (const e of entries) {
+    totalGames += e.games || 0;
+    if (e.totalBias != null) { biasSum += e.totalBias; biasCount++; }
+    for (const key of ["strikeouts", "total", "moneyline"]) {
+      const m = e[key];
+      if (m) {
+        agg[key].w += m.w || 0;
+        agg[key].l += m.l || 0;
+        agg[key].p += m.p || 0;
+        if (m.brier != null) agg[key].briers.push(m.brier);
+      }
+    }
+  }
+
+  metaEl.textContent = `${totalDays} day${totalDays !== 1 ? "s" : ""} · ${totalGames} games`;
+
+  marketsEl.innerHTML = "";
+  for (const key of ["strikeouts", "total", "moneyline"]) {
+    const m = agg[key];
+    const tot = m.w + m.l;
+    const pct = tot > 0 ? ((m.w / tot) * 100).toFixed(1) : null;
+    const avgBrier = m.briers.length
+      ? (m.briers.reduce((a, b) => a + b, 0) / m.briers.length).toFixed(3)
+      : null;
+    const winCls = tot > 0 ? (m.w > m.l ? "win" : m.l > m.w ? "loss" : "even") : "even";
+
+    const card = document.createElement("div");
+    card.className = `history-stats-card ${winCls}`;
+    card.innerHTML = `
+      <div class="hsc-label">${m.label}</div>
+      <div class="hsc-record">${m.w}-${m.l}${m.p ? `<span class="hsc-push"> · ${m.p}P</span>` : ""}</div>
+      <div class="hsc-sub">${pct !== null ? `${pct}% win` : "—"}${avgBrier !== null ? ` · Brier&nbsp;${avgBrier}` : ""}</div>
+    `;
+    marketsEl.appendChild(card);
+  }
+
+  if (biasCount > 0) {
+    const avgBias = (biasSum / biasCount).toFixed(2);
+    const biasCard = document.createElement("div");
+    biasCard.className = "history-stats-card even history-stats-bias";
+    biasCard.innerHTML = `
+      <div class="hsc-label">Avg Run Bias</div>
+      <div class="hsc-record ${parseFloat(avgBias) > 0 ? "win" : parseFloat(avgBias) < 0 ? "loss" : ""}">${avgBias > 0 ? "+" : ""}${avgBias}</div>
+      <div class="hsc-sub">proj − actual runs</div>
+    `;
+    marketsEl.appendChild(biasCard);
+  }
+
+  statsEl.style.display = "block";
 }
 
 function renderCalendar() {
@@ -194,7 +259,6 @@ function renderCalendar() {
   const DAY_LABELS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
   calGrid.innerHTML = "";
 
-  // weekday header
   for (const d of DAY_LABELS) {
     const el = document.createElement("div");
     el.className = "cal-day-label";
@@ -202,11 +266,10 @@ function renderCalendar() {
     calGrid.appendChild(el);
   }
 
-  const firstDay = new Date(calViewYear, calViewMonth, 1).getDay(); // 0=Sun
+  const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
   const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
   const todayStr = today.toISOString().slice(0, 10);
 
-  // blank cells before month start
   for (let i = 0; i < firstDay; i++) {
     calGrid.appendChild(document.createElement("div"));
   }
@@ -228,8 +291,9 @@ function renderCalendar() {
     if (entry) {
       cell.classList.add("has-data");
       const k = entry.strikeouts || {};
-      const graded = (k.w || 0) + (k.l || 0);
-      if (graded > 0) {
+      const kGraded = (k.w || 0) + (k.l || 0);
+
+      if (kGraded > 0) {
         const rec = document.createElement("div");
         rec.className = "cal-day-record";
         rec.textContent = `${k.w}-${k.l}`;
@@ -239,17 +303,23 @@ function renderCalendar() {
         cell.classList.add("even");
       }
 
+      // three-market dot row
+      const dots = document.createElement("div");
+      dots.className = "cal-day-dots";
+      for (const key of ["strikeouts", "total", "moneyline"]) {
+        const m = entry[key] || {};
+        const tot = (m.w || 0) + (m.l || 0);
+        const cls = tot > 0 ? (m.w > m.l ? "win" : m.l > m.w ? "loss" : "even") : "none";
+        const dot = document.createElement("span");
+        dot.className = `cal-dot ${cls}`;
+        dots.appendChild(dot);
+      }
+      cell.appendChild(dots);
+
       cell.addEventListener("click", () => {
         calSelectedDate = dateStr;
         renderCalendar();
-        showCalTooltip(entry);
-        // switch to slate view for that day
-        dateInput.value = dateStr;
-        currentSport = "mlb";
-        document.querySelectorAll(".sport-tab").forEach((t) =>
-          t.classList.toggle("active", t.dataset.sport === "mlb"));
-        showSlateView();
-        loadSlate(dateStr);
+        showDayDetail(entry);
       });
     }
 
@@ -257,42 +327,72 @@ function renderCalendar() {
   }
 }
 
-function showCalTooltip(entry) {
-  const fmt = (m, label) => {
-    if (!m) return null;
-    const graded = (m.w || 0) + (m.l || 0);
-    if (!graded && !m.p) return null;
-    const push = m.p ? `-${m.p}p` : "";
-    const brier = m.brier !== null && m.brier !== undefined ? ` (Brier ${m.brier.toFixed(3)})` : "";
-    return `${label}: ${m.w}-${m.l}${push}${brier}`;
+function showDayDetail(entry) {
+  const fmtMarket = (m, label) => {
+    if (!m) return "";
+    const tot = (m.w || 0) + (m.l || 0);
+    if (!tot && !m.p) return "";
+    const pct = tot > 0 ? `${((m.w / tot) * 100).toFixed(1)}%` : "—";
+    const push = m.p ? `<span class="ddm-push">${m.p}P</span>` : "";
+    const brier = m.brier != null ? `<span class="ddm-brier">Brier ${m.brier.toFixed(3)}</span>` : "";
+    const winCls = tot > 0 ? (m.w > m.l ? "win" : m.l > m.w ? "loss" : "even") : "even";
+    return `
+      <div class="dd-market">
+        <span class="ddm-label">${label}</span>
+        <span class="ddm-record ${winCls}">${m.w}-${m.l}${push ? " " + push : ""}</span>
+        <span class="ddm-pct">${pct}</span>
+        ${brier}
+      </div>`;
   };
-  const parts = [
-    fmt(entry.strikeouts, "Strikeouts"),
-    fmt(entry.total, "Total"),
-    fmt(entry.moneyline, "Moneyline"),
-  ].filter(Boolean);
 
-  let html = `<strong>${entry.date}</strong> &nbsp;·&nbsp; ${entry.games} game${entry.games !== 1 ? "s" : ""}`;
-  if (parts.length) html += "<br>" + parts.join(" &nbsp;·&nbsp; ");
-  if (entry.totalBias !== null && entry.totalBias !== undefined) {
-    html += `<br>Total bias: ${entry.totalBias > 0 ? "+" : ""}${entry.totalBias} runs`;
-  }
-  if (entry.pending) html += `<br>${entry.pending} game(s) pending`;
-  calTooltip.innerHTML = html;
-  calTooltip.style.display = "block";
+  const biasSign = entry.totalBias > 0 ? "+" : "";
+  const biasCls = entry.totalBias > 0 ? "pos" : entry.totalBias < 0 ? "neg" : "";
+  const biasHtml = entry.totalBias != null
+    ? `<div class="dd-bias">Run bias: <span class="${biasCls}">${biasSign}${entry.totalBias} runs</span> <span class="dd-bias-hint">(model proj − actual)</span></div>`
+    : "";
+  const pendHtml = entry.pending
+    ? `<div class="dd-pending">${entry.pending} game${entry.pending !== 1 ? "s" : ""} still pending</div>`
+    : "";
+
+  historyDayDetail.innerHTML = `
+    <div class="dd-header">
+      <div class="dd-date">${entry.date}</div>
+      <div class="dd-games">${entry.games} game${entry.games !== 1 ? "s" : ""}</div>
+    </div>
+    <div class="dd-markets">
+      ${fmtMarket(entry.strikeouts, "Strikeouts")}
+      ${fmtMarket(entry.total, "Totals")}
+      ${fmtMarket(entry.moneyline, "Moneyline")}
+    </div>
+    ${biasHtml}
+    ${pendHtml}
+    <button class="dd-view-btn" id="dd-view-btn">View full slate →</button>
+  `;
+
+  document.getElementById("dd-view-btn").addEventListener("click", () => {
+    dateInput.value = entry.date;
+    currentSport = "mlb";
+    document.querySelectorAll(".sport-tab").forEach((t) =>
+      t.classList.toggle("active", t.dataset.sport === "mlb"));
+    showSlateView();
+    loadSlate(entry.date);
+  });
+
+  historyDayDetail.style.display = "block";
+  historyDayDetail.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 document.getElementById("cal-prev").addEventListener("click", () => {
   calViewMonth--;
   if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; }
   renderCalendar();
-  calTooltip.style.display = "none";
+  historyDayDetail.style.display = "none";
 });
 document.getElementById("cal-next").addEventListener("click", () => {
   calViewMonth++;
   if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; }
   renderCalendar();
-  calTooltip.style.display = "none";
+  historyDayDetail.style.display = "none";
 });
 
 // ---- slate loading ----------------------------------------------------------
