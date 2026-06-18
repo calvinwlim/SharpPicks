@@ -231,7 +231,7 @@ async def _starter_ra9_asof(pid: int, season: int, date: str) -> Optional[float]
     except Exception:
         return None
     before = [r for r in glog if (r.get("date") or "") < date]
-    return analysis._starter_ra9(before)
+    return analysis._starter_ra9_projection(before)
 
 
 async def replay_games(season: int, n_games: int) -> Tuple[List[Tuple[float, float]], List[Tuple[float, int]]]:

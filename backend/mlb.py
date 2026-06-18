@@ -622,6 +622,8 @@ async def get_pitcher_gamelog(person_id: int, season: int) -> List[Dict[str, Any
                     "strikeOuts": int(stat.get("strikeOuts", 0) or 0),
                     "baseOnBalls": int(stat.get("baseOnBalls", 0) or 0),
                     "hitsAllowed": int(stat.get("hits", 0) or 0),
+                    "homeRunsAllowed": int(stat.get("homeRuns", 0) or 0),
+                    "hitByPitch": int(stat.get("hitByPitch", 0) or 0),
                     "inningsPitched": parse_ip(stat.get("inningsPitched", 0)),
                     "battersFaced": int(stat.get("battersFaced", 0) or 0),
                     "earnedRuns": int(stat.get("earnedRuns", 0) or 0),

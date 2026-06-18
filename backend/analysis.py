@@ -38,7 +38,8 @@ K_DISPERSION = None       # strikeouts: fallback only — K_BINOMIAL takes prece
 K_BINOMIAL = True         # model Ks as Binomial(expected batters faced, implied K rate); tighter
                           # than Poisson, fixing the measured high-bucket under-confidence
 BB_DISPERSION = 2.5       # walks: backtest sweep minimized Brier near r=2-2.5
-TOTAL_DISPERSION = 12.0   # run totals: mildly over-dispersed; backtest sweep best near r=10-14
+TOTAL_DISPERSION = 8.0    # run totals: over-dispersed; backtest sweep (2026-06-17, FIP model)
+                          # favors r=6-8 (Brier ~0.252 vs ~0.262 Poisson / ~0.255 at r=12)
 TOTAL_CALIBRATION = 0.92  # multiplicative correction on projected runs — the raw model over-
                           # projected totals by ~+0.8 runs on the backtest. Applied to BOTH teams
                           # so the win model still sees the (better-calibrated) run estimates.
@@ -1307,6 +1308,58 @@ def _starter_ra9(gamelog: List[Dict[str, Any]], window: int = RA9_WINDOW) -> Opt
     if ip <= 0:
         return None
     return 9.0 * er / ip
+
+
+# ---- FIP-regressed starter projection ---------------------------------------
+# Recent ERA/RA9 is extremely noisy over a starter's ~8-start window (ERA doesn't
+# stabilize until ~150 IP), so using it raw injects noise into every run-based
+# market (total, F5, NRFI, moneyline). FIP — built only from the outcomes a
+# pitcher most controls (K, BB, HBP, HR) — is a much better *forward* estimator
+# of runs allowed. We compute the starter's recent FIP, regress it toward league
+# average by sample size (a Bayesian shrink: few innings -> pull to league), then
+# blend that skill estimate with the raw recent RA9. This mirrors what
+# _skill_projection already does for the strikeout prop.
+FIP_CONSTANT = 3.15            # maps the FIP kernel onto the ERA scale (league ERA - kernel)
+LEAGUE_FIP = 4.10              # league-average FIP/ERA the small-sample prior pulls toward
+FIP_REGRESS_IP = 45.0         # "strength" of the league prior, in IP (Bayesian pseudo-innings)
+STARTER_FIP_WEIGHT = 0.55     # weight on regressed-FIP vs raw recent RA9 in the blend
+
+
+def _starter_fip(recent: List[Dict[str, Any]]) -> Optional[float]:
+    """Recent FIP regressed toward league average by innings pitched.
+
+    FIP = (13*HR + 3*(BB+HBP) - 2*K) / IP + constant. Requires the HR/HBP fields
+    added to the pitcher gamelog; returns ``None`` if peripherals are unavailable.
+    """
+    ip = sum(r.get("inningsPitched", 0.0) for r in recent)
+    if ip <= 0:
+        return None
+    hr = sum(r.get("homeRunsAllowed", 0) for r in recent)
+    bb = sum(r.get("baseOnBalls", 0) for r in recent)
+    hbp = sum(r.get("hitByPitch", 0) for r in recent)
+    k = sum(r.get("strikeOuts", 0) for r in recent)
+    fip_raw = (13 * hr + 3 * (bb + hbp) - 2 * k) / ip + FIP_CONSTANT
+    # Regress toward league: weight grows with sample (IP / (IP + prior strength)).
+    w = ip / (ip + FIP_REGRESS_IP)
+    return w * fip_raw + (1.0 - w) * LEAGUE_FIP
+
+
+def _starter_ra9_projection(gamelog: List[Dict[str, Any]], window: int = RA9_WINDOW) -> Optional[float]:
+    """Forward-looking starter runs-allowed estimate: raw recent RA9 blended with
+    regressed FIP. Falls back to raw RA9 when peripherals are missing, and to
+    ``None`` only when there's no usable data at all.
+
+    This is what the run-based markets should consume (vs the noisier raw RA9).
+    """
+    if not gamelog:
+        return None
+    raw = _starter_ra9(gamelog, window)
+    if raw is None:
+        return None
+    fip = _starter_fip(gamelog[-window:])
+    if fip is None:
+        return raw
+    return (1.0 - STARTER_FIP_WEIGHT) * raw + STARTER_FIP_WEIGHT * fip
 
 
 def _poisson_win_prob(lam_a: float, lam_b: float, max_runs: int = 18) -> Tuple[float, float, float]:

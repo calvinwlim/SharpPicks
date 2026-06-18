@@ -418,7 +418,9 @@ async def _analyze_mlb(game_pk: int, date: str, seasons: int = 4, ai: int = 0,
             continue
 
         side_key = "home" if is_home else "away"
-        starter_ra9[side_key] = analysis._starter_ra9(gamelog)
+        # FIP-regressed forward estimate (less noisy than raw 8-start ERA) drives
+        # the run-based markets: total, F5, NRFI, moneyline.
+        starter_ra9[side_key] = analysis._starter_ra9_projection(gamelog)
         starter_h9[side_key] = analysis._pitcher_h9(gamelog)
 
         seasons_seen = {r["season"] for r in gamelog}
