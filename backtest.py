@@ -234,8 +234,15 @@ async def _starter_ra9_asof(pid: int, season: int, date: str) -> Optional[float]
     return analysis._starter_ra9_projection(before)
 
 
-async def replay_games(season: int, n_games: int) -> Tuple[List[Tuple[float, float]], List[Tuple[float, int]]]:
-    """Returns (total_records[(proj,actual)], ml_records[(home_win_prob, home_won)])."""
+async def replay_games(
+    season: int, n_games: int
+) -> Tuple[List[Tuple[float, float]], List[Tuple[float, int]], List[Tuple[float, float, int]]]:
+    """Returns (total_records[(proj,actual)], ml_records[(home_win_prob, home_won)],
+    ml_inputs[(home_lam, away_lam, home_won)]).
+
+    ``ml_inputs`` are the env-adjusted run-rate lambdas *before* the win-prob
+    transform, so ``--ml-sweep`` can re-derive the home win probability under
+    different (shrink, dispersion) settings without refetching."""
     prior_rates = await mlb.get_team_rates(season - 1)
     prior_prev = await mlb.get_team_run_prevention(season - 1)
     lg_k = prior_rates.get("leagueAvgK", 0.225) or 0.225
@@ -255,6 +262,7 @@ async def replay_games(season: int, n_games: int) -> Tuple[List[Tuple[float, flo
 
     totals: List[Tuple[float, float]] = []
     mls: List[Tuple[float, int]] = []
+    ml_inputs: List[Tuple[float, float, int]] = []
     for g in games:
         date = g["date"]
         home_off = await team_offense_asof(g["homeId"], season, date, prior_teams, lg_k, lg_bb)
@@ -270,9 +278,12 @@ async def replay_games(season: int, n_games: int) -> Tuple[List[Tuple[float, flo
             {"runsPerGame": home_off["runsPerGame"]}, {"runsPerGame": away_off["runsPerGame"]},
             home_prev, away_prev, home_starter_ra9=home_sra, away_starter_ra9=away_sra,
         )
+        home_won = 1 if g["homeScore"] > g["awayScore"] else 0
+        env = gm.get("envFactor", 1.0) or 1.0
         totals.append((gm["homeProjRuns"] + gm["awayProjRuns"], float(g["homeScore"] + g["awayScore"])))
-        mls.append((gm["homeWinProb"], 1 if g["homeScore"] > g["awayScore"] else 0))
-    return totals, mls
+        mls.append((gm["homeWinProb"], home_won))
+        ml_inputs.append((gm["homeProjRuns"] * env, gm["awayProjRuns"] * env, home_won))
+    return totals, mls, ml_inputs
 
 
 # --------------------------------------------------------------------------- metrics / reporting
@@ -373,6 +384,32 @@ def report_moneyline(mls: List[Tuple[float, int]]) -> None:
         print(f"     {row['range']:>9} n={row['n']:<4} pred {row['pred']:.0%} actual {row['actual']:.0%}{flag}")
 
 
+def report_ml_sweep(ml_inputs: List[Tuple[float, float, int]]) -> None:
+    """Sweep the win-prob (per-team dispersion) x (shrink) grid in-memory.
+
+    Re-derives the home win probability for every game from its stored run-rate
+    lambdas under each setting and reports Brier + the mean prediction, so the
+    moneyline transform can be tuned without refetching. Uses the exact
+    production helper (analysis._home_win_prob) so what wins here is what ships."""
+    if not ml_inputs:
+        print("\n=== Moneyline win-prob sweep ===\n  no games")
+        return
+    outs = [float(t[2]) for t in ml_inputs]
+    base = mean(outs)
+    base_brier = _brier([base] * len(outs), outs)
+    print(f"\n=== Moneyline win-prob sweep ({len(ml_inputs)} games; actual home {base:.1%}, "
+          f"base-rate Brier {base_brier:.4f}) ===")
+    print("  per-team law  shrink   meanPred   Brier")
+    for dispersion in (None, 6.0, 4.5, 3.5):
+        for shrink in (0.0, 0.10, 0.15, 0.25):
+            preds = [analysis._home_win_prob(h, a, shrink=shrink, dispersion=dispersion)
+                     for h, a, _ in ml_inputs]
+            brier = _brier(preds, outs)
+            law = "Poisson" if dispersion is None else f"NB r={dispersion}"
+            best = "  *" if brier < base_brier else ""
+            print(f"  {law:>11}  {shrink:>5.2f}   {mean(preds):>6.1%}   {brier:.4f}{best}")
+
+
 # --------------------------------------------------------------------------- main
 
 async def main_async(args: argparse.Namespace) -> None:
@@ -405,9 +442,11 @@ async def main_async(args: argparse.Namespace) -> None:
             report_count(labels[prop_type], bat_recs, line=line, dispersion=None, model_preds=bat_preds,
                           dist_label=dist_label)
 
-        totals, mls = await replay_games(season, args.games)
+        totals, mls, ml_inputs = await replay_games(season, args.games)
         report_total(totals)
         report_moneyline(mls)
+        if args.ml_sweep:
+            report_ml_sweep(ml_inputs)
 
     print("\nMeasures projection accuracy + calibration, not betting ROI (needs paid closing lines).")
     await mlb.close()
@@ -421,6 +460,8 @@ def main() -> None:
     ap.add_argument("--batters", type=int, default=15)
     ap.add_argument("--games", type=int, default=40)
     ap.add_argument("--sweep", action="store_true", help="sweep the walk negative-binomial dispersion")
+    ap.add_argument("--ml-sweep", action="store_true",
+                    help="sweep the moneyline win-prob (per-team dispersion x shrink) grid")
     ap.add_argument("--quick", action="store_true", help="pitcher props only (skip batter/game replays)")
     asyncio.run(main_async(ap.parse_args()))
 

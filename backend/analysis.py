@@ -22,8 +22,10 @@ SHRINK_PSEUDO = 8           # pseudo-observations pulling small samples to 0.5
 MIN_STARTS = 3              # fewer starts than this -> no pick
 HOME_FIELD_RUNS = 0.35      # home-field advantage, expressed as extra projected runs for the home team
 # 200-game backtest showed home field was underweighted at 0.20 (25-50% home bucket: pred 41%, actual 55%)
-ML_SHRINK = 0.25            # pulls moneyline probs toward 0.5; fixes 75%+ overconfidence in backtest
-                            # (feeds the Skellam win prob so it scales correctly with the run environment)
+ML_SHRINK = 0.15            # residual pull of moneyline probs toward 0.5. Lowered 0.25->0.15 once
+                            # WIN_PROB_DISPERSION (negative-binomial per-team runs) took over the bulk
+                            # of the overconfidence correction principledly — independent Poissons were
+                            # too narrow, which is what the larger 0.25 hand-shrink had been patching.
 TEAM_RECENT_WEIGHT = 0.25   # weight on last-15-game RPG vs full-season average in the game model
 K_TREND_WINDOW = 4          # recent starts (within the projection window) used for K trend
 STREAK_THRESHOLD = 3        # consecutive hits/misses before confidence is adjusted
@@ -38,8 +40,14 @@ K_DISPERSION = None       # strikeouts: fallback only — K_BINOMIAL takes prece
 K_BINOMIAL = True         # model Ks as Binomial(expected batters faced, implied K rate); tighter
                           # than Poisson, fixing the measured high-bucket under-confidence
 BB_DISPERSION = 2.5       # walks: backtest sweep minimized Brier near r=2-2.5
-TOTAL_DISPERSION = 8.0    # run totals: over-dispersed; backtest sweep (2026-06-17, FIP model)
-                          # favors r=6-8 (Brier ~0.252 vs ~0.262 Poisson / ~0.255 at r=12)
+TOTAL_DISPERSION = 12.0   # run totals: mildly over-dispersed; backtest sweep best near r=10-14.
+                          # (A 60-game sweep briefly favored r~6, but it did not replicate on
+                          # 120 games — total Brier is flat from Poisson to r=14 there.)
+WIN_PROB_DISPERSION = 6.0   # per-team game-run dispersion for the moneyline win-prob enumeration
+                            # (None = Poisson). A single team's runs are over-dispersed
+                            # (var/mean ~2), so a finite r widens each team's distribution and
+                            # reduces favorite overconfidence — a principled alternative to
+                            # ML_SHRINK. Tune with `backtest.py --ml-sweep`.
 TOTAL_CALIBRATION = 0.92  # multiplicative correction on projected runs — the raw model over-
                           # projected totals by ~+0.8 runs on the backtest. Applied to BOTH teams
                           # so the win model still sees the (better-calibrated) run estimates.
@@ -1322,7 +1330,10 @@ def _starter_ra9(gamelog: List[Dict[str, Any]], window: int = RA9_WINDOW) -> Opt
 FIP_CONSTANT = 3.15            # maps the FIP kernel onto the ERA scale (league ERA - kernel)
 LEAGUE_FIP = 4.10              # league-average FIP/ERA the small-sample prior pulls toward
 FIP_REGRESS_IP = 45.0         # "strength" of the league prior, in IP (Bayesian pseudo-innings)
-STARTER_FIP_WEIGHT = 0.55     # weight on regressed-FIP vs raw recent RA9 in the blend
+STARTER_FIP_WEIGHT = 0.55     # weight on regressed-FIP vs raw recent RA9 in the blend.
+                              # Controlled 120-game backtest (FIP off->on, same games):
+                              # total Brier 0.250->0.244, moneyline Brier 0.252->0.244
+                              # (worse-than-base -> beats-base). Set 0.0 to disable.
 
 
 def _starter_fip(recent: List[Dict[str, Any]]) -> Optional[float]:
@@ -1362,10 +1373,21 @@ def _starter_ra9_projection(gamelog: List[Dict[str, Any]], window: int = RA9_WIN
     return (1.0 - STARTER_FIP_WEIGHT) * raw + STARTER_FIP_WEIGHT * fip
 
 
-def _poisson_win_prob(lam_a: float, lam_b: float, max_runs: int = 18) -> Tuple[float, float, float]:
-    """``(P(A>B), P(B>A), P(tie))`` for two independent Poisson run counts."""
-    pa = [poisson_pmf(i, lam_a) for i in range(max_runs + 1)]
-    pb = [poisson_pmf(j, lam_b) for j in range(max_runs + 1)]
+def _poisson_win_prob(
+    lam_a: float, lam_b: float, max_runs: int = 18, dispersion: Optional[float] = None
+) -> Tuple[float, float, float]:
+    """``(P(A>B), P(B>A), P(tie))`` for two independent run counts.
+
+    ``dispersion`` selects the per-team law: ``None`` -> Poisson; a finite ``r``
+    -> negative binomial (over-dispersed, var = mean + mean^2/r), which better
+    matches the real spread of single-team game runs.
+    """
+    if dispersion is None:
+        pa = [poisson_pmf(i, lam_a) for i in range(max_runs + 1)]
+        pb = [poisson_pmf(j, lam_b) for j in range(max_runs + 1)]
+    else:
+        pa = [negbinom_pmf(i, lam_a, dispersion) for i in range(max_runs + 1)]
+        pb = [negbinom_pmf(j, lam_b, dispersion) for j in range(max_runs + 1)]
     p_a = p_b = p_tie = 0.0
     for i in range(max_runs + 1):
         for j in range(max_runs + 1):
@@ -1377,6 +1399,24 @@ def _poisson_win_prob(lam_a: float, lam_b: float, max_runs: int = 18) -> Tuple[f
             else:
                 p_tie += p
     return p_a, p_b, p_tie
+
+
+def _home_win_prob(
+    home_lam: float, away_lam: float, shrink: float = ML_SHRINK,
+    dispersion: Optional[float] = WIN_PROB_DISPERSION,
+) -> float:
+    """Home moneyline win probability from the two run-rate lambdas.
+
+    Enumerates the two independent run distributions, splits the tie mass (extra
+    innings) proportionally to each side's regulation win chance, then shrinks
+    toward 0.5 by ``shrink``. Shared by ``game_model`` and the ``--ml-sweep``
+    backtest so tuning and production never diverge.
+    """
+    p_home, p_away, p_tie = _poisson_win_prob(
+        max(0.1, home_lam), max(0.1, away_lam), dispersion=dispersion)
+    decisive = p_home + p_away
+    home_win = _clamp(p_home + (p_tie * p_home / decisive if decisive > 0 else 0.5), 0.02, 0.98)
+    return 0.5 + (home_win - 0.5) * (1.0 - shrink)
 
 
 def _half_inning_runs(offense_rpg: float, opp_starter_ra9: Optional[float]) -> float:
@@ -1579,16 +1619,10 @@ def game_model(
     env_park_factor, _ = _park_factor(park)
     env_factor = ump_factor * env_park_factor
 
-    # Single-game win prob from two independent Poisson run counts; ties (extra
-    # innings) are split proportionally to each side's regulation win chance.
-    p_home, p_away, p_tie = _poisson_win_prob(
-        max(0.1, home_proj * env_factor),
-        max(0.1, away_proj * env_factor),
-    )
-    decisive = p_home + p_away
-    home_win = _clamp(p_home + (p_tie * p_home / decisive if decisive > 0 else 0.5), 0.02, 0.98)
-    # Shrink toward 0.5 to correct overconfidence at extremes (backtest: 75%+ bucket pred 78%, actual 45%)
-    home_win = 0.5 + (home_win - 0.5) * (1.0 - ML_SHRINK)
+    # Single-game home win prob from the two run-rate lambdas (over-dispersed
+    # per-team law when WIN_PROB_DISPERSION is set), tie mass split proportionally,
+    # then shrunk toward 0.5. See _home_win_prob.
+    home_win = _home_win_prob(home_proj * env_factor, away_proj * env_factor)
 
     result: Dict[str, Any] = {
         "homeWinProb": round(home_win, 4),
