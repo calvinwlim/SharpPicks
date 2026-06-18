@@ -168,9 +168,11 @@ rule) — see `drawChip()` in `app.js`.
 - Be honest in copy and output: surface where the model disagrees with the
   market, never promise winners. Flag low samples (`lowSample`, `split--thin`).
 - The only browser storage used is `sessionStorage` for optional user-supplied
-  API keys (Odds API / Anthropic), entered via the "⚙️ Keys" panel and sent as
-  `X-Odds-Api-Key` / `X-Anthropic-Api-Key` headers; they override the server's
-  env vars for that request and are never persisted server-side. Don't add
+  API keys (Odds API / Anthropic) and the player-props toggle, entered via the
+  "⚙️ Keys" panel and sent as `X-Odds-Api-Key` / `X-Anthropic-Api-Key` /
+  `X-Odds-Player-Props` (`"1"`/`"0"`) headers; they override the server's env
+  vars for that request and are never persisted server-side. `player_props_enabled`
+  takes that per-request override, falling back to `ODDS_PLAYER_PROPS`. Don't add
   other browser storage (not available in all embeds).
 
 ## Honest-modeling notes

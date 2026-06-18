@@ -112,12 +112,21 @@ against. This is the honest default: real model, no pretend edges.
 3. Restart. The **Odds** pill in the header lights up, and picks now show
    vig-removed market probability, **EV %**, and a **Kelly** stake.
 
-Strikeout **prop** lines are a separate, quota-hungrier market. Keep them off
-(moneylines only) or turn them on explicitly:
+Strikeout (and batter) **prop** lines are a separate, quota-hungrier market.
+Keep them off (moneylines only) or turn them on explicitly. Two ways:
+
+- **In the app:** open **⚙️ Keys** and tick *"Fetch real strikeout / batter prop
+  lines"*. This per-session toggle works even with a UI-entered key and overrides
+  the server default — no restart needed.
+- **Server default:** set `ODDS_PLAYER_PROPS=1` in `.env`.
 
 ```
 ODDS_PLAYER_PROPS=1
 ```
+
+With props **off**, each strikeout pick shows the model's *own projected* line
+(centered on its forecast — e.g. "Over 3.5") and is labeled "analysis only".
+With props **on**, it grades the real book line (e.g. "Under 5.5") and computes EV.
 
 ### Optional AI explanations
 

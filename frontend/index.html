@@ -51,6 +51,14 @@
       <input type="password" id="settings-odds-key" autocomplete="off" placeholder="ODDS_API_KEY" />
       <label for="settings-anthropic-key">Anthropic API key (AI narratives)</label>
       <input type="password" id="settings-anthropic-key" autocomplete="off" placeholder="ANTHROPIC_API_KEY" />
+      <label class="settings-check">
+        <input type="checkbox" id="settings-player-props" />
+        Fetch real strikeout / batter prop lines
+      </label>
+      <p class="settings-subnote">
+        Off by default — prop markets use more of your Odds API monthly quota.
+        With this off, props show the model's own projected line ("analysis only").
+      </p>
       <div class="settings-actions">
         <button id="settings-save">Save</button>
         <button id="settings-clear">Clear</button>

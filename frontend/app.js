@@ -6,8 +6,12 @@ function apiHeaders() {
   const headers = {};
   const oddsKey = sessionStorage.getItem("oddsApiKey");
   const anthropicKey = sessionStorage.getItem("anthropicApiKey");
+  const playerProps = sessionStorage.getItem("oddsPlayerProps");
   if (oddsKey) headers["X-Odds-Api-Key"] = oddsKey;
   if (anthropicKey) headers["X-Anthropic-Api-Key"] = anthropicKey;
+  // Only send when the user has made an explicit choice; otherwise the server's
+  // ODDS_PLAYER_PROPS env default applies.
+  if (playerProps === "1" || playerProps === "0") headers["X-Odds-Player-Props"] = playerProps;
   return headers;
 }
 
@@ -22,10 +26,15 @@ const settingsSave = document.getElementById("settings-save");
 const settingsClear = document.getElementById("settings-clear");
 const settingsOddsKey = document.getElementById("settings-odds-key");
 const settingsAnthropicKey = document.getElementById("settings-anthropic-key");
+const settingsPlayerProps = document.getElementById("settings-player-props");
 
 settingsToggle.addEventListener("click", () => {
   settingsOddsKey.value = sessionStorage.getItem("oddsApiKey") || "";
   settingsAnthropicKey.value = sessionStorage.getItem("anthropicApiKey") || "";
+  // Reflect the user's explicit choice if set, else the server's effective default
+  // (shown by the Props pill).
+  const pp = sessionStorage.getItem("oddsPlayerProps");
+  settingsPlayerProps.checked = pp === "1" || (pp === null && pillProps.classList.contains("on"));
   settingsOverlay.classList.add("open");
 });
 settingsClose.addEventListener("click", () => settingsOverlay.classList.remove("open"));
@@ -37,6 +46,7 @@ settingsSave.addEventListener("click", () => {
   const anthropic = settingsAnthropicKey.value.trim();
   if (odds) sessionStorage.setItem("oddsApiKey", odds); else sessionStorage.removeItem("oddsApiKey");
   if (anthropic) sessionStorage.setItem("anthropicApiKey", anthropic); else sessionStorage.removeItem("anthropicApiKey");
+  sessionStorage.setItem("oddsPlayerProps", settingsPlayerProps.checked ? "1" : "0");
   settingsOverlay.classList.remove("open");
   fetch("/api/health", { headers: apiHeaders() })
     .then((r) => r.json())
@@ -57,8 +67,10 @@ settingsSave.addEventListener("click", () => {
 settingsClear.addEventListener("click", () => {
   sessionStorage.removeItem("oddsApiKey");
   sessionStorage.removeItem("anthropicApiKey");
+  sessionStorage.removeItem("oddsPlayerProps");
   settingsOddsKey.value = "";
   settingsAnthropicKey.value = "";
+  settingsPlayerProps.checked = false;
 });
 
 const dateInput = document.getElementById("date-input");

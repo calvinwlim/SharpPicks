@@ -40,7 +40,15 @@ def _key(api_key: Optional[str] = None) -> str:
     return api_key or os.environ.get("ODDS_API_KEY", "")
 
 
-def player_props_enabled() -> bool:
+def player_props_enabled(override: Optional[str] = None) -> bool:
+    """Whether to fetch (pricier) player-prop markets.
+
+    A per-request ``override`` ("1"/"0", from the frontend's ``X-Odds-Player-Props``
+    header) wins when present, so a user who supplied their own key in the UI can
+    turn props on without server config; otherwise fall back to ``ODDS_PLAYER_PROPS``.
+    """
+    if override in ("0", "1"):
+        return override == "1"
     return os.environ.get("ODDS_PLAYER_PROPS", "0") == "1"
 
 
@@ -74,13 +82,16 @@ async def get_game_markets(c: httpx.AsyncClient, api_key: Optional[str] = None) 
 
 
 async def get_pitcher_props(c: httpx.AsyncClient, event_id: str, market_key: str,
-                             api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+                             api_key: Optional[str] = None,
+                             enabled: Optional[bool] = None) -> Dict[str, Dict[str, Any]]:
     """``{normalized_pitcher_name: {"line": float, "over": int, "under": int}}`` for ``market_key``.
 
     ``market_key`` is an Odds API player-prop market, e.g. ``"pitcher_strikeouts"``
-    or ``"pitcher_walks"``.
+    or ``"pitcher_walks"``. ``enabled`` is the effective per-request props flag
+    (computed by the caller from header + env); ``None`` falls back to the env.
     """
-    if not has_key(api_key) or not player_props_enabled():
+    props_on = enabled if enabled is not None else player_props_enabled()
+    if not has_key(api_key) or not props_on:
         return {}
 
     async def fetch() -> Dict[str, Dict[str, Any]]:
@@ -119,21 +130,18 @@ async def get_pitcher_props(c: httpx.AsyncClient, event_id: str, market_key: str
 
 
 async def get_pitcher_strikeout_props(c: httpx.AsyncClient, event_id: str,
-                                       api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
-    return await get_pitcher_props(c, event_id, "pitcher_strikeouts", api_key)
-
-
-async def get_pitcher_walks_props(c: httpx.AsyncClient, event_id: str,
-                                   api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
-    return await get_pitcher_props(c, event_id, "pitcher_walks", api_key)
+                                       api_key: Optional[str] = None,
+                                       enabled: Optional[bool] = None) -> Dict[str, Dict[str, Any]]:
+    return await get_pitcher_props(c, event_id, "pitcher_strikeouts", api_key, enabled)
 
 
 async def get_player_props(c: httpx.AsyncClient, event_id: str, market_key: str,
-                            api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+                            api_key: Optional[str] = None,
+                            enabled: Optional[bool] = None) -> Dict[str, Dict[str, Any]]:
     """Batter (or any player) prop market keyed by player name. ``get_pitcher_props``
     is already position-agnostic — this is just the honest name for batter markets
     like ``batter_hits`` / ``batter_total_bases`` / ``batter_home_runs``."""
-    return await get_pitcher_props(c, event_id, market_key, api_key)
+    return await get_pitcher_props(c, event_id, market_key, api_key, enabled)
 
 
 def game_total(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
