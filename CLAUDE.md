@@ -34,7 +34,7 @@ there is no live free rate-stat API). (Re)build it by aggregating the public
 ufcstats mirror — run after new events:
 
 ```bash
-python3 scripts/build_ufc_dataset.py     # fighter rate stats (+ lastFightDate, recentWinRate, sos) -> backend/data/ufc_fighters.json
+python3 scripts/build_ufc_dataset.py     # fighter rate stats (+ sos, headAcc, grndShare, recentFinishLossRate, sample-shrunk) -> backend/data/ufc_fighters.json
 python3 scripts/build_mma_winmodel.py    # fit the winner logistic -> backend/data/ufc_winmodel.json
 python3 scripts/build_mma_finishmodel.py # fit P(distance) & P(KO|finish) -> backend/data/ufc_finishmodel.json
 python3 scripts/build_mma_comps.py       # matchup vectors -> backend/data/ufc_fight_vectors.json (+ holdout + ensemble validation)
@@ -43,15 +43,21 @@ python3 scripts/build_mma_comps.py       # matchup vectors -> backend/data/ufc_f
 Run them in that order after new events: the dataset feeds the win-model fit,
 and the comps validation reads the winner model. The **winner is a learned
 logistic** — `build_mma_winmodel.py` replays every bout point-in-time, fits
-`a − b` differential coefficients (striking/grappling/defense/finishing plus
-stance, an age cliff, ring-rust/layoff, and **strength-of-schedule** `d_sos` =
-avg opponent win% faced — a strong learned feature), and writes
-`ufc_winmodel.json`, which `mma_analysis` loads (falling back to the hand-tuned
-`_skill_score` formula if the file is absent). The learned win prob is sharpened
-by `WIN_LOGIT_TEMP` (≈0.85; the L2 fit is mildly under-confident).
-`WIN_FEATURE_NAMES`/`_win_features` own the feature order (new features are
-appended so an older model file degrades gracefully); the builder imports them so
-the two never drift. **Distance/method:** `build_mma_finishmodel.py` fits
+`a − b` differential coefficients and writes `ufc_winmodel.json`, which
+`mma_analysis` loads (falling back to the hand-tuned `_skill_score` formula if the
+file is absent). Strongest features: striking defense, **head-strike accuracy**
+(`d_headacc`), **strength-of-schedule** (`d_sos` = avg opponent win%), career win%,
+finish rate; plus recent **chin** (`d_chin` = recent finish-loss rate), ground-
+strike share, grappling defense, ring-rust, stance. All career rates are
+**sample-size-shrunk** toward league means (`shrink_rate_profile`, `SHRINK_K`) so a
+4-fight sample doesn't dominate — applied identically in the dataset and
+`mma_backtest.rates` for train/serve parity. The learned win prob is sharpened by
+`WIN_LOGIT_TEMP` (≈0.85; the L2 fit is mildly under-confident).
+`WIN_FEATURE_NAMES`/`_win_features` own the feature order (new features appended so
+an older model file degrades gracefully); the builder imports them so the two
+never drift. **Tested and left out** (measured non-wins, in code comments):
+multiplicative style-matchup interactions and pruning the near-zero features —
+both regressed out-of-sample (collinearity; L2 already neutralizes dead weights). **Distance/method:** `build_mma_finishmodel.py` fits
 `P(distance)` and `P(KO|finish)` point-in-time but only writes the piece that
 *beats the existing heuristic* out-of-sample — currently the per-fighter
 finish-hazard product wins for distance (it captures an A-power×B-chin

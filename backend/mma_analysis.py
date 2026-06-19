@@ -74,6 +74,31 @@ _WC_LBS = [
 ]
 
 
+# Sample-size shrinkage: a 4-fight fighter's rates are noisy; pull them toward
+# the league mean by w = fights/(fights+SHRINK_K) so small samples don't dominate.
+# Applied identically by build_ufc_dataset (runtime data) and mma_backtest.rates
+# (training + backtest) via this one helper, so train and serve never diverge.
+# Only career rate stats are shrunk — NOT sos / recent* (those are deliberately
+# recency/strength signals, not noisy per-fight rates).
+SHRINK_K = 4.0
+_LEAGUE_RATE_MEANS = {
+    "slpm": 3.9, "sapm": 3.9, "strAcc": 0.45, "strDef": 0.55, "tdAvg": 1.4, "tdAcc": 0.40,
+    "tdDef": 0.65, "subAvg": 0.5, "kdPer15": 0.45, "kdAbsPer15": 0.45, "ctrlPerMin": 0.6,
+    "koRate": 0.35, "subRate": 0.18, "decRate": 0.47, "finishRate": 0.53, "finishedRate": 0.45,
+    "headAcc": 0.35, "grndShare": 0.12,
+}
+
+
+def shrink_rate_profile(rec: Dict[str, Any], fights: float, k: float = SHRINK_K) -> Dict[str, Any]:
+    """In-place shrink of a fighter's career rate fields toward league means."""
+    w = fights / (fights + k) if fights else 0.0
+    for key, mean in _LEAGUE_RATE_MEANS.items():
+        v = rec.get(key)
+        if v is not None:
+            rec[key] = w * v + (1.0 - w) * mean
+    return rec
+
+
 def weight_lbs(weight_class: Optional[str]) -> float:
     """Approximate division weight in lbs (light heavyweight handled before the
     'heavyweight' substring match). Heavier divisions finish far more often, so
@@ -183,14 +208,25 @@ def _skill_score(f: Dict[str, Any], opp: Dict[str, Any]) -> float:
 # NOTE: recent form (momentum) was tested as a learned feature but did not
 # improve out-of-sample calibration (career rates already price it in), so it is
 # surfaced as a UI signal only, not a probability input. See _momentum / signals.
-# NOTE: d_sos (strength of schedule) is appended LAST so an older 16-weight
-# ufc_winmodel.json stays aligned with the first 16 features and simply ignores
-# it (graceful degrade); _win_logit sums over len(weights), not len(features).
+# Feature order is canonical here; the builder imports it so the trained
+# coefficients can't drift. New features are appended LAST so an older, shorter
+# ufc_winmodel.json stays aligned with the leading features and simply ignores
+# the rest (graceful degrade) — _win_logit sums over len(weights), not features.
+# NOTE: multiplicative style-matchup interactions (slpm x (1-strDef), TD threat x
+# TD def, finish x chin) were tested as features and did NOT beat the linear model
+# out-of-sample (holdout Brier 0.2235 -> 0.2248): they're collinear with the
+# linear striking/grappling-defense terms, which already separate the signal. Left
+# out, consistent with the public-data ceiling. See mma-model-findings memory.
 WIN_FEATURE_NAMES = [
     "d_striking_net", "d_slpm", "d_strDef", "d_tdAvg", "d_tdDef", "d_ctrl",
     "d_sub", "d_kd", "d_finish", "d_durability", "d_winpct", "d_reach", "d_age",
     "d_age_cliff", "d_stance", "d_rust", "d_sos",
+    "d_chin", "d_headacc", "d_grndshare",
 ]
+# Pruning the near-zero features (d_slpm, d_kd, d_sub, d_durability, d_age_cliff)
+# was TESTED and slightly regressed the backtest (Brier 0.2128 -> 0.2134) with sign
+# instability in the survivors — L2 already neutralizes them, so they're kept. Like
+# the interaction terms above, a measured non-win. New features still append last.
 
 _SOUTHPAW, _ORTHODOX = "southpaw", "orthodox"
 
@@ -245,6 +281,13 @@ def _win_features(a: Dict[str, Any], b: Dict[str, Any],
     higher value favours fighter ``a``)."""
     reach = ((a.get("reachIn") or 0) - (b.get("reachIn") or 0)) if (a.get("reachIn") and b.get("reachIn")) else 0.0
     age = (b_age - a_age) if (a_age is not None and b_age is not None) else 0.0
+    # Chin (recent rate of being finished; a tougher -> positive). Falls back to
+    # the career finished-rate when there's no recent window.
+    a_chin = a.get("recentFinishLossRate", a.get("finishedRate", 0.0))
+    b_chin = b.get("recentFinishLossRate", b.get("finishedRate", 0.0))
+    # Strike-quality breakdown (only when both sides have it, like reach/age).
+    head = (a.get("headAcc", 0) - b.get("headAcc", 0)) if (a.get("headAcc") and b.get("headAcc")) else 0.0
+    grnd = (a.get("grndShare", 0) - b.get("grndShare", 0)) if (a.get("grndShare") is not None and b.get("grndShare") is not None) else 0.0
     return [
         (a.get("slpm", 0) - a.get("sapm", 0)) - (b.get("slpm", 0) - b.get("sapm", 0)),
         a.get("slpm", 0) - b.get("slpm", 0),
@@ -263,6 +306,9 @@ def _win_features(a: Dict[str, Any], b: Dict[str, Any],
         _stance_edge(a, b),
         b_rust - a_rust,  # b rustier -> favours a
         a.get("sos", 0.5) - b.get("sos", 0.5),  # strength of schedule (avg opp win% faced)
+        b_chin - a_chin,  # d_chin: recent finishability (a tougher -> positive)
+        head,             # d_headacc: head-strike accuracy edge (power/precision)
+        grnd,             # d_grndshare: share of strikes landed on the ground (grappling dominance)
     ]
 
 

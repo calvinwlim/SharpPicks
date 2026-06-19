@@ -27,6 +27,10 @@ from typing import Any, Dict, Optional, Tuple
 
 import httpx
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from backend import mma_analysis as M  # shared rate-shrinkage (train/serve parity)
+
 RAW = "https://raw.githubusercontent.com/Greco1899/scrape_ufc_stats/main"
 OUT = Path(__file__).resolve().parent.parent / "backend" / "data" / "ufc_fighters.json"
 UA = {"User-Agent": "Mozilla/5.0"}
@@ -60,7 +64,7 @@ def _fresh() -> Dict[str, Any]:
     g = {k: 0.0 for k in (
         "minutes", "sigL", "sigA", "sigAbs", "oppSigA", "tdL", "tdA", "oppTdL", "oppTdA",
         "subAtt", "kd", "kdAbs", "ctrl", "fights", "wins", "losses",
-        "koW", "subW", "decW", "koL", "subL")}
+        "koW", "subW", "decW", "koL", "subL", "headL", "headA", "groundL")}
     g["name"] = ""
     g["wc"] = {}
     return g
@@ -128,10 +132,14 @@ async def main() -> None:
     box: Dict[Tuple[str, str, str], Dict[str, float]] = {}
     for row in fstats:
         key = (row["EVENT"].strip(), row["BOUT"].strip(), row["FIGHTER"].strip())
-        b = box.setdefault(key, {k: 0.0 for k in ("sigL", "sigA", "tdL", "tdA", "subAtt", "kd", "ctrl")})
+        b = box.setdefault(key, {k: 0.0 for k in ("sigL", "sigA", "tdL", "tdA", "subAtt", "kd", "ctrl",
+                                                  "headL", "headA", "groundL")})
         sl, sa = _x_of_y(row.get("SIG.STR.", ""))
         tl, ta = _x_of_y(row.get("TD", ""))
+        hl, ha = _x_of_y(row.get("HEAD", ""))
+        gl, _ga = _x_of_y(row.get("GROUND", ""))
         b["sigL"] += sl; b["sigA"] += sa; b["tdL"] += tl; b["tdA"] += ta
+        b["headL"] += hl; b["headA"] += ha; b["groundL"] += gl
         b["subAtt"] += float(row.get("SUB.ATT") or 0)
         b["kd"] += float(row.get("KD") or 0)
         b["ctrl"] += _mmss(row.get("CTRL", ""))
@@ -140,6 +148,7 @@ async def main() -> None:
     agg: Dict[str, Dict[str, Any]] = {}
     last_date: Dict[str, datetime.date] = {}  # most recent bout per fighter (for layoff)
     results_by_fighter: Dict[str, list] = {}   # (date, won) per fighter (for recent form)
+    finishloss_by_fighter: Dict[str, list] = {}  # (date, was finished) per fighter (chin)
     opponents: Dict[str, list] = {}            # opponent keys per fighter (for strength of schedule)
     for (event, bout), meta in bouts.items():
         a, bb = meta["names"]
@@ -154,6 +163,8 @@ async def main() -> None:
                 if key not in last_date or d > last_date[key]:
                     last_date[key] = d
                 results_by_fighter.setdefault(key, []).append((d, 1 if meta["winner"] == nm else 0))
+                fl = 1 if (meta["winner"] and meta["winner"] != nm and meta["method"] in ("ko", "sub")) else 0
+                finishloss_by_fighter.setdefault(key, []).append((d, fl))
         for me, opp, ms, os in ((a, bb, sa, sb), (bb, a, sb, sa)):
             g = agg.setdefault(_norm(me), _fresh())
             g["name"] = me
@@ -164,6 +175,7 @@ async def main() -> None:
             g["tdL"] += ms["tdL"]; g["tdA"] += ms["tdA"]
             g["oppTdL"] += os["tdL"]; g["oppTdA"] += os["tdA"]
             g["subAtt"] += ms["subAtt"]; g["kd"] += ms["kd"]; g["kdAbs"] += os["kd"]
+            g["headL"] += ms["headL"]; g["headA"] += ms["headA"]; g["groundL"] += ms["groundL"]
             g["ctrl"] += ms["ctrl"]; g["fights"] += 1
             if meta["wc"]:
                 g["wc"][meta["wc"]] = g["wc"].get(meta["wc"], 0) + 1
@@ -196,6 +208,15 @@ async def main() -> None:
         if not res:
             return None
         last5 = [w for _, w in sorted(res, key=lambda x: x[0])[-5:]]
+        return round(sum(last5) / len(last5), 4) if last5 else None
+
+    def recent_finish_loss_rate(key: str) -> Optional[float]:
+        """Share of the fighter's last (up to 5) bouts that ended in a finish loss
+        — recent chin. None when no history."""
+        res = finishloss_by_fighter.get(key)
+        if not res:
+            return None
+        last5 = [fl for _, fl in sorted(res, key=lambda x: x[0])[-5:]]
         return round(sum(last5) / len(last5), 4) if last5 else None
 
     # Strength of schedule: a fighter's average opponent career win% (resume
@@ -233,7 +254,14 @@ async def main() -> None:
             "lastFightDate": last_date[key].isoformat() if key in last_date else None,
             "recentWinRate": recent_win_rate(key),
             "sos": sos_for(key),
+            "headAcc": rate(g["headL"], g["headA"]),
+            "grndShare": rate(g["groundL"], g["sigL"]),
+            "recentFinishLossRate": recent_finish_loss_rate(key),
         }
+        M.shrink_rate_profile(rec, g["fights"])  # sample-size shrink (train/serve parity)
+        for rk in M._LEAGUE_RATE_MEANS:           # re-round (shrink yields long floats -> bloats the file)
+            if isinstance(rec.get(rk), float):
+                rec[rk] = round(rec[rk], 4)
         rec.update(phys.get(key, {}))
         out[key] = rec
 

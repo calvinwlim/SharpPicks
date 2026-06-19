@@ -58,7 +58,8 @@ def classify(method: str) -> str:
 
 def fresh() -> Dict[str, float]:
     return {k: 0.0 for k in ("minutes", "sigL", "sigA", "sigAbs", "oppSigA", "tdL", "tdA", "oppTdL", "oppTdA",
-                             "subAtt", "kd", "kdAbs", "ctrl", "fights", "wins", "losses", "koW", "subW", "decW", "koL", "subL")}
+                             "subAtt", "kd", "kdAbs", "ctrl", "fights", "wins", "losses", "koW", "subW", "decW", "koL", "subL",
+                             "headL", "headA", "groundL")}
 
 
 def rates(acc: Dict[str, float], phys: Dict[str, Any]) -> Dict[str, Any]:
@@ -75,7 +76,10 @@ def rates(acc: Dict[str, float], phys: Dict[str, Any]) -> Dict[str, Any]:
         "ctrlPerMin": acc["ctrl"] / 60.0 / m,
         "koRate": r(acc["koW"], w), "subRate": r(acc["subW"], w), "decRate": r(acc["decW"], w),
         "finishRate": r(acc["koW"] + acc["subW"], w), "finishedRate": r(acc["koL"] + acc["subL"], l),
+        "headAcc": r(acc.get("headL", 0), acc.get("headA", 0)),
+        "grndShare": r(acc.get("groundL", 0), acc["sigL"]),
     }
+    M.shrink_rate_profile(out, acc["fights"])
     out.update(phys)
     return out
 
@@ -106,9 +110,12 @@ async def load() -> Tuple[list, list, dict, dict]:
     box: Dict[Tuple[str, str, str], Dict[str, float]] = {}
     for row in fstats:
         key = (row["EVENT"].strip(), row["BOUT"].strip(), row["FIGHTER"].strip())
-        b = box.setdefault(key, {k: 0.0 for k in ("sigL", "sigA", "tdL", "tdA", "subAtt", "kd", "ctrl")})
+        b = box.setdefault(key, {k: 0.0 for k in ("sigL", "sigA", "tdL", "tdA", "subAtt", "kd", "ctrl",
+                                                  "headL", "headA", "groundL")})
         sl, sa = x_of_y(row.get("SIG.STR.", "")); tl, ta = x_of_y(row.get("TD", ""))
+        hl, ha = x_of_y(row.get("HEAD", "")); gl, _ga = x_of_y(row.get("GROUND", ""))
         b["sigL"] += sl; b["sigA"] += sa; b["tdL"] += tl; b["tdA"] += ta
+        b["headL"] += hl; b["headA"] += ha; b["groundL"] += gl
         b["subAtt"] += float(row.get("SUB.ATT") or 0); b["kd"] += float(row.get("KD") or 0); b["ctrl"] += mmss(row.get("CTRL", ""))
     return results, box, event_date, phys
 
@@ -169,6 +176,14 @@ async def main_async(since: str) -> None:
     def _sos(nm: str) -> float:
         s = sos.get(nm)
         return s[0] / s[1] if s and s[1] else 0.5
+
+    def _recent_fl(window) -> Optional[float]:
+        """Recent finish-loss rate: share of the last 5 fights this fighter was
+        finished (KO/sub loss) — chin erosion. None when no history."""
+        if not window:
+            return None
+        last5 = window[-5:]
+        return sum(1 for d in last5 if d["koL"] or d["subL"]) / len(last5)
     blend_keys = ("slpm", "sapm", "strAcc", "strDef", "tdAvg", "tdAcc", "tdDef", "subAvg",
                   "kdPer15", "kdAbsPer15", "ctrlPerMin", "koRate", "subRate", "decRate",
                   "finishRate", "finishedRate")
@@ -200,6 +215,8 @@ async def main_async(since: str) -> None:
         if gradeable:
             fa = rates(acc_a, phys.get(na, {})); fb = rates(acc_b, phys.get(nb, {}))
             fa["sos"], fb["sos"] = _sos(na), _sos(nb)
+            fa["recentFinishLossRate"] = _recent_fl(recent_window.get(na))
+            fb["recentFinishLossRate"] = _recent_fl(recent_window.get(nb))
             model = M.analyze_fight(fa, fb, a, b, rounds=bt["rounds"], fight_date=bt["date"].isoformat())
             fm = model["fightModel"]
             a_won = 1.0 if bt["winner"] == a else 0.0
@@ -237,6 +254,7 @@ async def main_async(since: str) -> None:
                 d["sigAbs"] = os["sigL"]; d["oppSigA"] = os["sigA"]; d["tdL"] = ms["tdL"]; d["tdA"] = ms["tdA"]
                 d["oppTdL"] = os["tdL"]; d["oppTdA"] = os["tdA"]; d["subAtt"] = ms["subAtt"]
                 d["kd"] = ms["kd"]; d["kdAbs"] = os["kd"]; d["ctrl"] = ms["ctrl"]; d["fights"] = 1
+                d["headL"] = ms.get("headL", 0); d["headA"] = ms.get("headA", 0); d["groundL"] = ms.get("groundL", 0)
                 if bt["winner"] == me:
                     d["wins"] = 1; d[{"ko": "koW", "sub": "subW", "dec": "decW"}.get(bt["method"], "decW")] = 1
                 else:

@@ -104,11 +104,16 @@ def _collect(bouts, box, phys):
     running: Dict[str, Dict[str, float]] = {}
     last_date: Dict[str, Any] = {}  # most recent prior bout date per fighter (for layoff)
     recent: Dict[str, List[int]] = {}  # last results (1=win) per fighter (for momentum)
+    floss: Dict[str, List[int]] = {}  # last results (1=finished loss) per fighter (chin)
     sos: Dict[str, List[float]] = {}  # [sum(opp win% faced), count] per fighter (strength of schedule)
     rows: List[Tuple[str, List[float], float]] = []
 
     def rwr(name: str) -> Optional[float]:
         r = recent.get(name)
+        return (sum(r[-5:]) / len(r[-5:])) if r else None
+
+    def rfl(name: str) -> Optional[float]:
+        r = floss.get(name)
         return (sum(r[-5:]) / len(r[-5:])) if r else None
 
     def winpct_acc(acc: Optional[Dict[str, float]]) -> float:
@@ -131,6 +136,7 @@ def _collect(bouts, box, phys):
             fb = B.rates(acc_b, phys.get(nb, {}))
             fa["recentWinRate"], fb["recentWinRate"] = rwr(na), rwr(nb)
             fa["sos"], fb["sos"] = sos_for(na), sos_for(nb)
+            fa["recentFinishLossRate"], fb["recentFinishLossRate"] = rfl(na), rfl(nb)
             ds = bt["date"].isoformat()
             aa = M._age(fa.get("dob"), ds)
             ab = M._age(fb.get("dob"), ds)
@@ -144,6 +150,8 @@ def _collect(bouts, box, phys):
         last_date[nb] = bt["date"]
         recent.setdefault(na, []).append(1 if bt["winner"] == a else 0)
         recent.setdefault(nb, []).append(1 if bt["winner"] == b else 0)
+        for nm0, opp_nm in ((na, b), (nb, a)):
+            floss.setdefault(nm0, []).append(1 if (bt["winner"] == opp_nm and bt["method"] in ("ko", "sub")) else 0)
         if sa and sb:  # advance accumulators (same pairing as the other builders)
             opp_q = {na: winpct_acc(acc_b), nb: winpct_acc(acc_a)}  # opponent's pre-bout win% (SOS)
             for me, opp, ms, os in ((a, b, sa, sb), (b, a, sb, sa)):
@@ -154,6 +162,7 @@ def _collect(bouts, box, phys):
                 g["sigL"] += ms["sigL"]; g["sigA"] += ms["sigA"]; g["sigAbs"] += os["sigL"]; g["oppSigA"] += os["sigA"]
                 g["tdL"] += ms["tdL"]; g["tdA"] += ms["tdA"]; g["oppTdL"] += os["tdL"]; g["oppTdA"] += os["tdA"]
                 g["subAtt"] += ms["subAtt"]; g["kd"] += ms["kd"]; g["kdAbs"] += os["kd"]; g["ctrl"] += ms["ctrl"]
+                g["headL"] += ms.get("headL", 0); g["headA"] += ms.get("headA", 0); g["groundL"] += ms.get("groundL", 0)
                 g["fights"] += 1
                 if bt["winner"] == me:
                     g["wins"] += 1; g[{"ko": "koW", "sub": "subW", "dec": "decW"}.get(bt["method"], "decW")] += 1

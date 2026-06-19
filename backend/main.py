@@ -230,6 +230,7 @@ def _neutral_fighter(weight_class: Optional[str]) -> Dict[str, Any]:
         "ctrlPerMin": 0.6, "koRate": 0.35, "subRate": 0.15, "decRate": 0.50,
         "finishRate": 0.50, "finishedRate": 0.50, "weightClass": weight_class,
         "reachIn": None, "stance": None, "dob": None, "lastFightDate": None, "recentWinRate": None,
+        "sos": 0.5, "headAcc": 0.35, "grndShare": 0.12, "recentFinishLossRate": 0.25,
     }
 
 
