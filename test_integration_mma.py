@@ -71,6 +71,11 @@ def main():
     check(fm is not None, "fight model present")
     check(abs(fm["aWinProb"] + fm["bWinProb"] - 1.0) < 1e-6, "win probs sum to 1")
     check(fm["aWinProb"] > 0.5, f"stronger fighter favored: {fm['aWinProb']}")
+    pick = fm["pick"]
+    check(pick["fighter"] == fm["aName"], "winner pick is the favoured fighter")
+    check(pick["tier"] in ("Strong", "Lean", "Pass"), f"pick tier valid: {pick['tier']}")
+    check(pick["tier"] == "Strong" and not pick["coinFlip"], "heavy favourite -> Strong, not a coin flip")
+    check(0 <= pick["confidence"] <= 100, "pick confidence in range")
     m = fm["method"]
     check(abs(m["ko"] + m["sub"] + m["decision"] - 1.0) < 1e-6, "method probs sum to 1")
     check(0.0 <= fm["distanceProb"] <= 1.0, "distance prob in range")

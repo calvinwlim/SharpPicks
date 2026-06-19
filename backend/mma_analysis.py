@@ -35,6 +35,11 @@ LG_STR_DEF = 0.55
 LG_TD_DEF = 0.65
 LG_FIN_PER_FIGHT = 0.22  # league-average finishes per fight (for durability scaling)
 WIN_PROB_FLOOR, WIN_PROB_CEIL = 0.12, 0.88  # MMA upsets are common — don't overclaim
+# Selectivity tiers for the winner pick, calibrated to mma_backtest (since 2023):
+# below the lean floor the favourite is a coin flip (~54% actual), 60–70% hits ~71%,
+# ≥70% hits ~78%. Picks under the floor are labelled "pass" so we don't push
+# coin-flips as plays — acting only on confident picks is the biggest free accuracy lever.
+WIN_LEAN_FLOOR, WIN_STRONG_FLOOR = 0.60, 0.70
 WIN_DIFF_SCALE = 6.0   # logistic scale on the hand-tuned differential (fallback when no learned model)
 WIN_LOGIT_TEMP = 0.85  # <1 sharpens the learned win prob. The L2 in the fit leaves it slightly
                        # under-confident (mma_backtest's temperature sweep bottoms ~0.75 across
@@ -351,6 +356,24 @@ def _win_prob(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_ag
     return _clamp(_logistic(logit), WIN_PROB_FLOOR, WIN_PROB_CEIL)
 
 
+def _winner_pick(a_name: str, b_name: str, a_win: float) -> Dict[str, Any]:
+    """The selectivity verdict on the winner: who to lean, how strongly, and
+    whether it's a coin flip to pass on. ``histHitRate`` is the measured accuracy
+    of this confidence band in mma_backtest (since 2023)."""
+    prob = max(a_win, 1.0 - a_win)
+    if prob >= WIN_STRONG_FLOOR:
+        tier, hist = "Strong", 0.78
+    elif prob >= WIN_LEAN_FLOOR:
+        tier, hist = "Lean", 0.71
+    else:
+        tier, hist = "Pass", 0.54
+    return {
+        "fighter": a_name if a_win >= 0.5 else b_name,
+        "prob": round(prob, 4), "confidence": int(round(prob * 100)),
+        "tier": tier, "coinFlip": prob < WIN_LEAN_FLOOR, "histHitRate": hist,
+    }
+
+
 # --------------------------------------------------------------------------- learned distance / method
 
 # Both feature sets are deliberately SYMMETRIC (combined, order-invariant):
@@ -544,6 +567,7 @@ def analyze_fight(
     fight_model = {
         "aName": a_name, "bName": b_name, "rounds": rounds,
         "aWinProb": round(a_win, 4), "bWinProb": round(1 - a_win, 4),
+        "pick": _winner_pick(a_name, b_name, a_win),
         "aWinProbModel": round(a_win_model, 4),
         "aWinProbComps": round(comp_win_prob, 4) if comp_win_prob is not None else None,
         "winDiff": round(win_diff, 3),

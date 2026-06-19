@@ -316,6 +316,14 @@ async def main_async(since: str) -> None:
         if idx:
             favw = mean((win_o[i] if win_p[i] >= 0.5 else 1 - win_o[i]) for i in idx)
             print(f"    fav {lo:.0%}-{hi:.0%}: n={len(idx):<4} predicted ~{mean(max(win_p[i],1-win_p[i]) for i in idx):.0%} actual {favw:.0%}")
+    # selectivity: accuracy if we only ACT on picks at/above a confidence threshold.
+    # Raw accuracy includes coin-flips; confident picks are what you'd actually bet.
+    print("  selectivity (only pick fights at/above a confidence floor):")
+    for thr in (0.50, 0.55, 0.60, 0.65, 0.70):
+        idx = [i for i, p in enumerate(win_p) if max(p, 1 - p) >= thr]
+        if idx:
+            acc = mean(int((win_p[i] >= 0.5) == bool(win_o[i])) for i in idx)
+            print(f"    >= {thr:.0%}: {acc:.1%} accuracy on {len(idx)} picks ({len(idx)/n:.0%} of slate)")
 
     print("\n=== A/B: recent-form blend (last 5 fights, 40% weight) ===")
     print(f"  career-only  Brier {_brier(win_p, win_o):.4f}   acc {win_correct/n:.1%}")

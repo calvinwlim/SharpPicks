@@ -960,6 +960,7 @@ function renderMmaAnalysis(data, game, container) {
   bWp.querySelector(".bar > span").style.width = `${(fm.bWinProb * 100).toFixed(0)}%`;
   container.appendChild(node);
 
+  if (fm.pick) container.appendChild(renderMmaPickVerdict(fm.pick));
   if (fm.moneyline) container.appendChild(renderMmaMoneylineCard(fm));
   container.appendChild(renderMmaSummaryCard(fm));
   if (fm.signals && fm.signals.length) container.appendChild(renderMmaSignals(fm));
@@ -978,6 +979,24 @@ function renderMmaAnalysis(data, game, container) {
       container.appendChild(card);
     }
   }
+}
+
+function renderMmaPickVerdict(p) {
+  const card = document.createElement("div");
+  card.className = "mma-pick mma-pick--" + p.tier.toLowerCase();
+  const hist = `${(p.histHitRate * 100).toFixed(0)}%`;
+  if (p.coinFlip) {
+    card.innerHTML =
+      `<div class="mma-pick-label">Coin flip — Pass</div>` +
+      `<div class="mma-pick-detail">No confident side (model leans ${p.fighter} just ${p.confidence}%). ` +
+      `Picks this close hit only ~${hist} historically — not a play.</div>`;
+  } else {
+    card.innerHTML =
+      `<div class="mma-pick-label">${p.tier} lean · ${p.fighter}</div>` +
+      `<div class="mma-pick-detail">${p.confidence}% model confidence · ${p.tier} leans (≥${p.tier === "Strong" ? 70 : 60}%) ` +
+      `have hit ~${hist} historically.</div>`;
+  }
+  return card;
 }
 
 function renderMmaMoneylineCard(fm) {

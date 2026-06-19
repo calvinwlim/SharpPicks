@@ -75,6 +75,12 @@ is computed** off a synthetic profile. With odds present, `_analyze_mma` matches
 the `mma_mixed_martial_arts` h2h market and reports moneyline EV/Kelly (the same
 de-vig math as MLB) as `fightModel.moneyline` + per-fighter `mma_moneyline` picks.
 
+`fightModel.pick` (`_winner_pick`) is the **selectivity** verdict: who to lean,
+the confidence %, a tier (`Strong` ≥70% / `Lean` ≥60% / `Pass` coin-flip below
+`WIN_LEAN_FLOOR`), and that band's measured hit rate. Confidence is well-calibrated,
+so filtering to confident picks is the biggest free accuracy lever (raw 66% →
+~77% at ≥65%); the frontend renders it as a colour-coded verdict card.
+
 Backtests (live data, measure model accuracy — needs network):
 
 ```bash
