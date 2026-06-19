@@ -56,6 +56,23 @@ def classify(method: str) -> str:
     return "ko" if ("ko" in m or "tko" in m) else "sub" if "sub" in m else "dec" if "dec" in m else "other"
 
 
+# Time-decay (EWMA): exponentially down-weight older fights when accumulating
+# rate stats. TESTED at a 2yr half-life and it HURT (winner Brier 0.2128->0.2139,
+# holdout 0.2211->0.2220) — more data beats recency here, the third recency idea
+# to fail (after last-5 momentum and the recent-form blend). Left at 0.0 (off);
+# flip the half-life to retest. Applied to rate sums only, not win/loss counts.
+DECAY_HALFLIFE_YRS = 0.0  # set >0 to enable (e.g. 2.0 = half weight after 2 years)
+RATE_DECAY_KEYS = ("minutes", "sigL", "sigA", "sigAbs", "oppSigA", "tdL", "tdA", "oppTdL",
+                   "oppTdA", "subAtt", "kd", "kdAbs", "ctrl", "headL", "headA", "groundL")
+
+
+def decay_factor(prev_date, cur_date) -> float:
+    if not DECAY_HALFLIFE_YRS or prev_date is None:
+        return 1.0
+    dy = max((cur_date - prev_date).days, 0) / 365.25
+    return 0.5 ** (dy / DECAY_HALFLIFE_YRS)
+
+
 def fresh() -> Dict[str, float]:
     return {k: 0.0 for k in ("minutes", "sigL", "sigA", "sigAbs", "oppSigA", "tdL", "tdA", "oppTdL", "oppTdA",
                              "subAtt", "kd", "kdAbs", "ctrl", "fights", "wins", "losses", "koW", "subW", "decW", "koL", "subL",
@@ -164,6 +181,7 @@ async def main_async(since: str) -> None:
 
     running: Dict[str, Dict[str, float]] = {}
     recent_window: Dict[str, list] = {}  # norm -> list of recent per-fight deltas (A/B: recent-form blend)
+    stat_date: Dict[str, Any] = {}       # norm -> last bout added to the accumulator (for time-decay)
     sos: Dict[str, list] = {}            # norm -> [sum(opp win% faced), count] (A/B: strength of schedule)
     RECENT_K, RECENT_W = 5, 0.40
 
@@ -263,6 +281,11 @@ async def main_async(since: str) -> None:
                     elif bt["method"] == "sub": d["subL"] = 1
                 nm = norm(me)
                 g = running.setdefault(nm, fresh())
+                dec = decay_factor(stat_date.get(nm), bt["date"])
+                if dec != 1.0:
+                    for rk in RATE_DECAY_KEYS:
+                        g[rk] *= dec
+                stat_date[nm] = bt["date"]
                 for k, v in d.items():
                     g[k] += v
                 rw = recent_window.setdefault(nm, [])

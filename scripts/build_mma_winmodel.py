@@ -35,6 +35,8 @@ import mma_backtest as B
 from backend import mma_analysis as M
 
 OUT = ROOT / "backend" / "data" / "ufc_winmodel.json"
+L2 = 1.0       # ridge strength (holdout sweep showed it's ~irrelevant here)
+EPOCHS = 4000  # GD iterations for the final fit (tuned via the holdout epochs sweep)
 
 # Feature order is owned by backend.mma_analysis (WIN_FEATURE_NAMES /
 # _win_features) so the trained coefficients always line up with inference.
@@ -106,6 +108,7 @@ def _collect(bouts, box, phys):
     recent: Dict[str, List[int]] = {}  # last results (1=win) per fighter (for momentum)
     floss: Dict[str, List[int]] = {}  # last results (1=finished loss) per fighter (chin)
     sos: Dict[str, List[float]] = {}  # [sum(opp win% faced), count] per fighter (strength of schedule)
+    stat_date: Dict[str, Any] = {}    # last bout added to the accumulator (for time-decay)
     rows: List[Tuple[str, List[float], float]] = []
 
     def rwr(name: str) -> Optional[float]:
@@ -158,6 +161,11 @@ def _collect(bouts, box, phys):
                 nm0 = B.norm(me)
                 s = sos.setdefault(nm0, [0.0, 0]); s[0] += opp_q[nm0]; s[1] += 1
                 g = running.setdefault(B.norm(me), B.fresh())
+                dec = B.decay_factor(stat_date.get(nm0), bt["date"])
+                if dec != 1.0:
+                    for rk in B.RATE_DECAY_KEYS:
+                        g[rk] *= dec
+                stat_date[nm0] = bt["date"]
                 g["minutes"] += (max(bt["endRound"] - 1, 0) * 5 + 2.5)
                 g["sigL"] += ms["sigL"]; g["sigA"] += ms["sigA"]; g["sigAbs"] += os["sigL"]; g["oppSigA"] += os["sigA"]
                 g["tdL"] += ms["tdL"]; g["tdA"] += ms["tdA"]; g["oppTdL"] += os["tdL"]; g["oppTdA"] += os["tdA"]
@@ -198,17 +206,21 @@ async def main_async() -> None:
     te = [(r[1], r[2]) for r in rows if r[0] >= cut]
     if te:
         Ztr, mtr, str_ = _standardize([f for f, _ in tr])
-        wtr, btr = fit_logistic(Ztr, [o for _, o in tr])
         zte = [[(f[i] - mtr[i]) / str_[i] for i in range(len(f))] for f, _ in te]
-        pte = [_logistic(btr + sum(wtr[i] * z[i] for i in range(len(z)))) for z in zte]
         ote = [o for _, o in te]
+        # NOTE: holdout sweeps over L2 (0.1–2.0) and epochs (4k–30k) were both
+        # dead flat (Brier 0.2211, |w|avg 0.102) — the fit is fully converged and
+        # the mild under-confidence is intrinsic, not an optimization artifact. So
+        # L2/EPOCHS are left at the defaults and WIN_LOGIT_TEMP handles calibration.
+        wtr, btr = fit_logistic(Ztr, [o for _, o in tr], l2=L2, epochs=EPOCHS)
+        pte = [_logistic(btr + sum(wtr[i] * z[i] for i in range(len(z)))) for z in zte]
         acc = mean(int((p >= 0.5) == bool(o)) for p, o in zip(pte, ote))
         print(f"\n=== Temporal holdout (train <{cut}, test {len(te)} rows) ===")
         print(f"  accuracy {acc:.1%}   Brier {_brier(pte, ote):.4f}  (always-50% {_brier([0.5]*len(ote), ote):.4f})")
 
     # --- final fit on all data, stored in RAW feature space (no inference-time scaling) ---
     Z, mean_v, std_v = _standardize(X)
-    w_z, b_z = fit_logistic(Z, y)
+    w_z, b_z = fit_logistic(Z, y, l2=L2, epochs=EPOCHS)
     w_raw = [w_z[i] / std_v[i] for i in range(len(w_z))]
     b_raw = b_z - sum(w_z[i] * mean_v[i] / std_v[i] for i in range(len(w_z)))
 

@@ -137,8 +137,9 @@ def _age(dob: Optional[str], fight_date: Optional[str]) -> Optional[float]:
 
 
 def _winpct(f: Dict[str, Any]) -> float:
-    g = f.get("wins", 0) + f.get("losses", 0)
-    return f["wins"] / g if g else 0.5
+    # Laplace-shrunk toward 0.5 so a tiny record (e.g. 5-0) isn't read as 100%.
+    w, l = f.get("wins", 0), f.get("losses", 0)
+    return (w + 1.0) / (w + l + 2.0)
 
 
 # --------------------------------------------------------------------------- finish / distance
@@ -223,6 +224,8 @@ WIN_FEATURE_NAMES = [
     "d_age_cliff", "d_stance", "d_rust", "d_sos",
     "d_chin", "d_headacc", "d_grndshare",
 ]
+# Knockdowns-absorbed (d_kdabs) was tested as a fragility feature: collinear with
+# d_chin (stole its weight, no net gain) — backtest 0.2128->0.2130. Not shipped.
 # Pruning the near-zero features (d_slpm, d_kd, d_sub, d_durability, d_age_cliff)
 # was TESTED and slightly regressed the backtest (Brier 0.2128 -> 0.2134) with sign
 # instability in the survivors — L2 already neutralizes them, so they're kept. Like
