@@ -99,15 +99,43 @@ let activeBetTiers = new Set(BET_TIERS);
 let activeBetTypes = new Set(); // populated as types are seen
 const knownBetTypes = new Set();
 
+const PROP_LABELS = {
+  mma_winner: "Winner", mma_moneyline: "Moneyline", mma_distance: "Rounds",
+  mma_sigstr: "Sig Strikes", mma_sigstr_total: "Total Sig Strikes", mma_td: "Takedowns",
+};
+
 function propTypeLabel(propType) {
   if (!propType) return "Other";
+  if (PROP_LABELS[propType]) return PROP_LABELS[propType];
   return propType
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
 }
 
-let currentSport = "mlb"; // "mlb" | "nba"
+function matchupLabel(game) {
+  // MMA fights carry an `event`; MLB/NBA don't. MMA reads "A vs B", others "AWAY @ HOME".
+  const sep = game.event != null ? "vs" : "@";
+  return `${game.away.abbr} ${sep} ${game.home.abbr}`;
+}
+
+// Picks for the boards: the model's prop/moneyline picks, plus — for MMA — the
+// winner verdict as a synthetic pick when it isn't a coin flip and no moneyline
+// edge already represents it (so the headline lean always reaches the board).
+function boardPicks(data) {
+  const picks = [...(data.picks || [])];
+  const fm = data.fightModel;
+  if (fm && fm.pick && !fm.pick.coinFlip && !fm.moneyline) {
+    picks.unshift({
+      pick: `${fm.pick.fighter} to win`,
+      tier: fm.pick.tier, confidence: fm.pick.confidence,
+      hasMarket: false, edge: null, propType: "mma_winner",
+    });
+  }
+  return picks;
+}
+
+let currentSport = "mlb"; // "mlb" | "nba" | "mma"
 
 function gameKey(game) {
   return game.gameId != null ? game.gameId : game.gamePk;
@@ -966,6 +994,9 @@ function renderMmaAnalysis(data, game, container) {
   if (fm.signals && fm.signals.length) container.appendChild(renderMmaSignals(fm));
   if (data.comps) container.appendChild(renderMmaComps(data.comps));
 
+  addToTopBoard(data, game);
+  addToBetBoard(data, game);
+
   // Props (the moneyline is rendered above as its own card, so skip it here).
   const propPicks = (data.picks || []).filter((p) => p.propType !== "mma_moneyline");
   if (propPicks.length) {
@@ -1231,14 +1262,17 @@ function drawChip(canvas, pick) {
 // ---- top board ----------------------------------------------------------------
 
 function addToTopBoard(data, game) {
+  const key = gameKey(game);
   // On refresh, drop this game's previous entries before re-adding.
   for (const el of Array.from(topBoardList.children)) {
-    if (el.dataset.gamePk === String(game.gamePk)) el.remove();
+    if (el.dataset.gamePk === String(key)) el.remove();
   }
-  if (!data.picks || !data.picks.length) return;
+  const picks = boardPicks(data);
+  if (!picks.length) return;
   topBoardSection.style.display = "block";
+  const matchup = matchupLabel(game);
 
-  for (const pick of data.picks) {
+  for (const pick of picks) {
     const item = document.createElement("div");
     item.className = "top-board-item";
 
@@ -1246,7 +1280,7 @@ function addToTopBoard(data, game) {
     const sortKey = evPct !== null ? evPct : pick.confidence;
 
     item.dataset.sortKey = sortKey;
-    item.dataset.gamePk = game.gamePk;
+    item.dataset.gamePk = key;
     const evLabel =
       evPct !== null
         ? `<span class="${evPct > 0 ? "ev-pos" : "ev-neg"}">${evPct > 0 ? "+" : ""}${evPct.toFixed(1)}% EV</span>`
@@ -1255,13 +1289,13 @@ function addToTopBoard(data, game) {
     item.innerHTML = `
       <div class="tb-pick">${pick.pick}</div>
       <div class="tb-meta">
-        <span>${game.away.abbr} @ ${game.home.abbr} · ${pick.tier}</span>
+        <span>${matchup} · ${pick.tier}</span>
         ${evLabel}
       </div>
     `;
 
     item.addEventListener("click", () => {
-      const card = document.querySelector(`.game-card[data-game-pk="${game.gamePk}"]`);
+      const card = document.querySelector(`.game-card[data-game-pk="${key}"]`);
       if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
     });
 
@@ -1277,12 +1311,13 @@ function addToTopBoard(data, game) {
 // ---- bet board sidebar ------------------------------------------------------
 
 function addToBetBoard(data, game) {
+  const key = gameKey(game);
   // On refresh, drop this game's previous entries before re-adding.
-  betItems = betItems.filter((it) => it.game.gamePk !== game.gamePk);
+  betItems = betItems.filter((it) => gameKey(it.game) !== key);
 
   const added = [];
 
-  for (const pick of data.picks || []) {
+  for (const pick of boardPicks(data)) {
     const evPct = pick.hasMarket && pick.edge ? pick.edge.evPct : null;
     added.push({ pick, game, evPct, tier: pick.tier, type: propTypeLabel(pick.propType) });
   }
@@ -1405,11 +1440,11 @@ function renderBetBoard() {
         ${evLabel}
       </div>
       <div class="bet-label">${pick.pick}</div>
-      <div class="bet-detail">${game.away.abbr} @ ${game.home.abbr}</div>
+      <div class="bet-detail">${matchupLabel(game)}</div>
     `;
 
     el.addEventListener("click", () => {
-      const card = document.querySelector(`.game-card[data-game-pk="${game.gamePk}"]`);
+      const card = document.querySelector(`.game-card[data-game-pk="${gameKey(game)}"]`);
       if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
     });
 

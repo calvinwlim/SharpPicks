@@ -172,9 +172,12 @@ def _p_finish(att: Dict[str, Any], dfn: Dict[str, Any]) -> float:
     return _clamp(ability * vuln, 0.02, 0.85)
 
 
+# P(finish lands in round i | the fight is finished). Measured empirically in
+# mma_backtest (3-round n=299, 5-round n=77) — finishes skew earlier than the old
+# hand guess ([0.40,0.34,0.26]); R1 alone is ~half of 3-round finishes.
 ROUND_FINISH_WEIGHTS = {
-    3: [0.40, 0.34, 0.26],
-    5: [0.27, 0.24, 0.20, 0.16, 0.13],
+    3: [0.51, 0.32, 0.17],
+    5: [0.30, 0.31, 0.22, 0.11, 0.06],
 }
 
 
@@ -380,6 +383,11 @@ def _winner_pick(a_name: str, b_name: str, a_win: float) -> Dict[str, Any]:
 # "does this fight reach the judges" and "is a finish a KO or a sub" don't depend
 # on which corner is listed first. scripts/build_mma_finishmodel.py imports these
 # so the trained coefficients always line up with inference.
+# Adding the per-fighter finish hazards + their product (so a logistic could
+# represent the heuristic 1-(pa+pb)+pa*pb) was TESTED and the learned distance
+# model STILL lost (Brier 0.228 vs heuristic 0.213): a logistic only loosely
+# approximates a probability product, and L2 + the other features dilute it. The
+# heuristic `_p_finish` product stays — don't retry a learned distance model.
 DIST_FEATURE_NAMES = [
     "c_finish", "c_durability", "c_kd", "c_sub", "c_ctrl", "c_strDef", "c_slpm", "rounds", "weight",
 ]

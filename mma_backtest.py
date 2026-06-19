@@ -224,6 +224,7 @@ async def main_async(since: str) -> None:
     sig_err = []
     sig_eval = []  # (slpm_a, sapm_a, slpm_b, sapm_b, model_min, actual_min, actual_sig, model_pred)
     td_eval = []   # (projected_td, actual_td) per fighter
+    round_dist = []  # (scheduled_rounds, end_round) for finishes only (round-prop calibration)
 
     for bt in bouts:
         a, b = bt["names"]
@@ -265,6 +266,9 @@ async def main_async(since: str) -> None:
                                  bt["minutes"] / (bt["rounds"] * 5.0) if bt["method"] != "dec" else None))
                 td_eval.append((fm["projTakedowns"]["a"], sa["tdL"]))
                 td_eval.append((fm["projTakedowns"]["b"], sb["tdL"]))
+                if bt["method"] != "dec":
+                    end_round = min(max(int(math.ceil(bt["minutes"] / 5.0)), 1), bt["rounds"])
+                    round_dist.append((bt["rounds"], end_round))
 
         # update running accumulators with this bout (pair opponents)
         if sa and sb:
@@ -398,6 +402,17 @@ async def main_async(since: str) -> None:
                         max(sf * (0.5*(t[0]+t[2]) + 0.5*(t[1]+t[3])) * t[4], 6.0)) for t in sig_eval]
         tag = "  <- current SIG_STD_FRAC" if abs(sf - M.SIG_STD_FRAC) < 1e-6 else ""
         print(f"    sig_frac={sf}: {mean(lls):.3f}{tag}")
+
+    print("\n=== Finish round distribution (vs ROUND_FINISH_WEIGHTS) ===")
+    for sched in (3, 5):
+        ends = [er for r, er in round_dist if r == sched]
+        if not ends:
+            continue
+        emp = [sum(1 for er in ends if er == k) / len(ends) for k in range(1, sched + 1)]
+        model = M.ROUND_FINISH_WEIGHTS.get(sched, [])
+        print(f"  {sched}-round finishes (n={len(ends)}):")
+        print(f"    actual {[round(x, 2) for x in emp]}")
+        print(f"    model  {model}")
 
     print("\n=== Takedowns (per fighter) ===")
     print(f"  MAE {mean(abs(p - o) for p, o in td_eval):.2f}   bias {mean(p - o for p, o in td_eval):+.2f}"
