@@ -222,6 +222,8 @@ async def main_async(since: str) -> None:
     dist_p, dist_o = [], []
     method_correct = method_n = 0
     sig_err = []
+    sig_eval = []  # (slpm_a, sapm_a, slpm_b, sapm_b, model_min, actual_min, actual_sig, model_pred)
+    td_eval = []   # (projected_td, actual_td) per fighter
 
     for bt in bouts:
         a, b = bt["names"]
@@ -257,6 +259,12 @@ async def main_async(since: str) -> None:
             if sa and sb:
                 actual_sig = sa["sigL"] + sb["sigL"]
                 sig_err.append(abs(fm["projSigStrikes"]["total"] - actual_sig))
+                sig_eval.append((fa["slpm"], fa["sapm"], fb["slpm"], fb["sapm"],
+                                 fm["expMinutes"], bt["minutes"], actual_sig, fm["projSigStrikes"]["total"],
+                                 fm["distanceProb"], bt["rounds"] * 5.0,
+                                 bt["minutes"] / (bt["rounds"] * 5.0) if bt["method"] != "dec" else None))
+                td_eval.append((fm["projTakedowns"]["a"], sa["tdL"]))
+                td_eval.append((fm["projTakedowns"]["b"], sb["tdL"]))
 
         # update running accumulators with this bout (pair opponents)
         if sa and sb:
@@ -350,7 +358,42 @@ async def main_async(since: str) -> None:
     print(f"  accuracy  {method_correct / method_n:.1%}  (n={method_n})")
 
     print("\n=== Total significant strikes ===")
-    print(f"  MAE  {mean(sig_err):.1f}")
+    print(f"  current model MAE {mean(sig_err):.1f}   bias {mean(t[7]-t[6] for t in sig_eval):+.1f}")
+    # Decompose error: rate model (own SLpM vs opp SApM blend) vs the minutes/finish
+    # model. MAE(actual-min) uses the *real* fight length, so it isolates the rate;
+    # the gap up to MAE(model-min) is what the distance/finish-timing model costs.
+    actual_min_mae = mean(abs((0.5*(t[0]+t[2]) + 0.5*(t[1]+t[3])) * t[5] - t[6]) for t in sig_eval)
+    print(f"  with ACTUAL fight length (isolates rate model): MAE {actual_min_mae:.1f}")
+    ff = [t[10] for t in sig_eval if t[10] is not None]  # finish time as a fraction of full
+    if ff:
+        print(f"  finish timing: actual mean {mean(ff):.2f} of full vs FINISH_MID_FRAC={M.FINISH_MID_FRAC} (n={len(ff)})")
+    print("  rate model (MAE at actual fight length, lower=better):")
+    for w in (0.3, 0.4, 0.5, 0.6, 0.7):
+        mae_actual = mean(abs((w*(t[0]+t[2]) + (1-w)*(t[1]+t[3])) * t[5] - t[6]) for t in sig_eval)
+        print(f"    additive w={w}: MAE {mae_actual:.1f}")
+    # log5 / multiplicative: own output x opp porousness / league mean (offense x defense)
+    lg = M.LG_SLPM
+    mae_log5 = mean(abs((t[0]*t[3]/lg + t[2]*t[1]/lg) * t[5] - t[6]) for t in sig_eval)
+    print(f"    log5 (slpm*opp_sapm/lg):  MAE {mae_log5:.1f}")
+
+    # Over/under prop calibration: how well a normal centered on the projection
+    # fits the actual totals, swept over the std fraction (SIG_STD_FRAC). The point
+    # MAE is dominated by fight-length bimodality, but the *prob* the total clears a
+    # line just needs the spread right. (A finish/distance mixture was tested and
+    # did NOT beat a well-tuned single normal — the wide σ already covers it.)
+    def _lognorm(x, mu, sig):
+        sig = max(sig, 1e-6)
+        return -0.5 * math.log(2 * math.pi * sig * sig) - (x - mu) ** 2 / (2 * sig * sig)
+    print("  prop calibration (mean log-likelihood of actual totals, higher=better):")
+    for sf in (0.3, 0.4, 0.5, 0.6, 0.7):
+        lls = [_lognorm(t[6], (0.5*(t[0]+t[2]) + 0.5*(t[1]+t[3])) * t[4],
+                        max(sf * (0.5*(t[0]+t[2]) + 0.5*(t[1]+t[3])) * t[4], 6.0)) for t in sig_eval]
+        tag = "  <- current SIG_STD_FRAC" if abs(sf - M.SIG_STD_FRAC) < 1e-6 else ""
+        print(f"    sig_frac={sf}: {mean(lls):.3f}{tag}")
+
+    print("\n=== Takedowns (per fighter) ===")
+    print(f"  MAE {mean(abs(p - o) for p, o in td_eval):.2f}   bias {mean(p - o for p, o in td_eval):+.2f}"
+          f"   (predicted mean {mean(p for p, _ in td_eval):.2f} vs actual {mean(o for _, o in td_eval):.2f})")
     print("\n(measures model accuracy + calibration, not betting ROI)")
 
 

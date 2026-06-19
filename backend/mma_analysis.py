@@ -40,8 +40,11 @@ WIN_LOGIT_TEMP = 0.85  # <1 sharpens the learned win prob. The L2 in the fit lea
                        # under-confident (mma_backtest's temperature sweep bottoms ~0.75 across
                        # runs); 0.85 is a conservative partial correction so we don't overfit the
                        # backtest sample. Applied to the probability only, not the reported winDiff.
-SIG_STD_FRAC = 0.30    # std of a sig-strike projection as a fraction of the mean
-FINISH_MID_FRAC = 0.45  # finishes land ~45% of the way through the scheduled time
+SIG_STD_FRAC = 0.55    # std of a sig-strike projection as a fraction of the mean. Was 0.30
+                       # (far too tight -> overconfident over/unders); mma_backtest's prop
+                       # calibration LL is a broad plateau 0.5-0.7, so 0.55 is robust.
+FINISH_MID_FRAC = 0.41  # finishes land ~41% of the way through the scheduled time
+                        # (measured mean over 376 finishes in mma_backtest; was 0.45)
 ENSEMBLE_COMP_WEIGHT = 0.0   # weight on the k-NN comps lens when blending the win prob.
                              # build_mma_comps._validate found the learned parametric model
                              # (Brier ~0.220) cleanly beats the comps lens (~0.240) and every
@@ -178,10 +181,13 @@ def _expected_minutes(distance_p: float, rounds: int) -> float:
 
 
 def _sig_projection(att: Dict[str, Any], dfn: Dict[str, Any], minutes: float) -> float:
-    """Expected significant strikes ``att`` lands: own output blended with what
-    the opponent typically absorbs, over the fight's expected length."""
-    rate = 0.5 * att.get("slpm", LG_SLPM) + 0.5 * dfn.get("sapm", LG_SLPM)
-    return rate * minutes
+    """Expected significant strikes ``att`` lands over the fight's expected length.
+
+    log5-style: own output x opponent porousness / league mean (offense x defense,
+    like expected goals). Beat the old additive 0.5/0.5 blend on backtest MAE
+    (31.5 vs 32.2 at actual fight length)."""
+    rate = att.get("slpm", LG_SLPM) * dfn.get("sapm", LG_SLPM) / LG_SLPM
+    return _clamp(rate, 0.5, 12.0) * minutes
 
 
 def _td_projection(att: Dict[str, Any], dfn: Dict[str, Any], minutes: float) -> float:
