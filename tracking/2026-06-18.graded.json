@@ -1,0 +1,25 @@
+{
+  "date": "2026-06-18",
+  "generatedAt": "2026-06-19T10:16:44",
+  "strikeouts": {
+    "w": 10,
+    "l": 4,
+    "p": 0,
+    "brier": 0.2171
+  },
+  "total": {
+    "w": 4,
+    "l": 4,
+    "p": 0,
+    "brier": 0.2578
+  },
+  "moneyline": {
+    "w": 4,
+    "l": 4,
+    "p": 0,
+    "brier": 0.2686
+  },
+  "totalBias": -0.48,
+  "pending": 1,
+  "games": 9
+}
