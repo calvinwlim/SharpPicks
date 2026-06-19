@@ -19,7 +19,7 @@ import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .mma_analysis import _age, _winpct
+from .mma_analysis import _age, _winpct, weight_lbs
 
 VECTORS_FILE = Path(__file__).resolve().parent / "data" / "ufc_fight_vectors.json"
 
@@ -48,23 +48,6 @@ FEATURE_WEIGHTS = [
     3.0, 1.6, 1.6, 1.6, 1.1, 1.1, 1.4, 1.1, 1.2, 0.8,        # style
     0.5, 0.5, 0.4, 0.5, 0.5, 0.5, 0.4, 0.4,                  # gap
 ]
-
-_WC_TABLE = [
-    ("strawweight", 115), ("flyweight", 125), ("bantamweight", 135), ("featherweight", 145),
-    ("lightweight", 155), ("welterweight", 170), ("middleweight", 185), ("heavyweight", 265),
-]
-
-
-def weight_lbs(weight_class: Optional[str]) -> float:
-    """Approximate division weight in lbs (light heavyweight handled before heavyweight)."""
-    s = (weight_class or "").lower()
-    if "light heavyweight" in s:
-        return 205.0
-    for key, lbs in _WC_TABLE:
-        if key in s:
-            return float(lbs)
-    return 170.0  # catchweight / unknown -> welterweight-ish
-
 
 def build_vector(a: Dict[str, Any], b: Dict[str, Any], rounds: int,
                  fight_date: Optional[str] = None) -> Tuple[List[float], bool]:

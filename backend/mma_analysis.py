@@ -36,6 +36,10 @@ LG_TD_DEF = 0.65
 LG_FIN_PER_FIGHT = 0.22  # league-average finishes per fight (for durability scaling)
 WIN_PROB_FLOOR, WIN_PROB_CEIL = 0.12, 0.88  # MMA upsets are common — don't overclaim
 WIN_DIFF_SCALE = 6.0   # logistic scale on the hand-tuned differential (fallback when no learned model)
+WIN_LOGIT_TEMP = 0.85  # <1 sharpens the learned win prob. The L2 in the fit leaves it slightly
+                       # under-confident (mma_backtest's temperature sweep bottoms ~0.75 across
+                       # runs); 0.85 is a conservative partial correction so we don't overfit the
+                       # backtest sample. Applied to the probability only, not the reported winDiff.
 SIG_STD_FRAC = 0.30    # std of a sig-strike projection as a fraction of the mean
 FINISH_MID_FRAC = 0.45  # finishes land ~45% of the way through the scheduled time
 ENSEMBLE_COMP_WEIGHT = 0.0   # weight on the k-NN comps lens when blending the win prob.
@@ -53,6 +57,34 @@ try:
     _WINMODEL: Optional[Dict[str, Any]] = json.loads(_WINMODEL_FILE.read_text(encoding="utf-8"))
 except (OSError, ValueError):
     _WINMODEL = None
+
+# Learned finish model: P(distance) and P(KO | finish), fit point-in-time by
+# scripts/build_mma_finishmodel.py. When absent, analyze_fight falls back to the
+# hand-tuned per-fighter finish-hazard (_p_finish) below.
+_FINISHMODEL_FILE = Path(__file__).resolve().parent / "data" / "ufc_finishmodel.json"
+try:
+    _FINISHMODEL: Optional[Dict[str, Any]] = json.loads(_FINISHMODEL_FILE.read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    _FINISHMODEL = None
+
+
+_WC_LBS = [
+    ("strawweight", 115), ("flyweight", 125), ("bantamweight", 135), ("featherweight", 145),
+    ("lightweight", 155), ("welterweight", 170), ("middleweight", 185), ("heavyweight", 265),
+]
+
+
+def weight_lbs(weight_class: Optional[str]) -> float:
+    """Approximate division weight in lbs (light heavyweight handled before the
+    'heavyweight' substring match). Heavier divisions finish far more often, so
+    this is a real feature for the distance/method models."""
+    s = (weight_class or "").lower()
+    if "light heavyweight" in s:
+        return 205.0
+    for key, lbs in _WC_LBS:
+        if key in s:
+            return float(lbs)
+    return 170.0  # catchweight / unknown -> welterweight-ish
 
 
 def normal_cdf(x: float) -> float:
@@ -151,10 +183,13 @@ def _skill_score(f: Dict[str, Any], opp: Dict[str, Any]) -> float:
 # NOTE: recent form (momentum) was tested as a learned feature but did not
 # improve out-of-sample calibration (career rates already price it in), so it is
 # surfaced as a UI signal only, not a probability input. See _momentum / signals.
+# NOTE: d_sos (strength of schedule) is appended LAST so an older 16-weight
+# ufc_winmodel.json stays aligned with the first 16 features and simply ignores
+# it (graceful degrade); _win_logit sums over len(weights), not len(features).
 WIN_FEATURE_NAMES = [
     "d_striking_net", "d_slpm", "d_strDef", "d_tdAvg", "d_tdDef", "d_ctrl",
     "d_sub", "d_kd", "d_finish", "d_durability", "d_winpct", "d_reach", "d_age",
-    "d_age_cliff", "d_stance", "d_rust",
+    "d_age_cliff", "d_stance", "d_rust", "d_sos",
 ]
 
 _SOUTHPAW, _ORTHODOX = "southpaw", "orthodox"
@@ -227,6 +262,7 @@ def _win_features(a: Dict[str, Any], b: Dict[str, Any],
         _age_cliff(b_age) - _age_cliff(a_age),  # a past the cliff -> negative
         _stance_edge(a, b),
         b_rust - a_rust,  # b rustier -> favours a
+        a.get("sos", 0.5) - b.get("sos", 0.5),  # strength of schedule (avg opp win% faced)
     ]
 
 
@@ -254,7 +290,58 @@ def _win_diff(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_ag
 
 def _win_prob(a: Dict[str, Any], b: Dict[str, Any], a_age: Optional[float], b_age: Optional[float],
               a_rust: float = 0.0, b_rust: float = 0.0) -> float:
-    return _clamp(_logistic(_win_logit(a, b, a_age, b_age, a_rust, b_rust)), WIN_PROB_FLOOR, WIN_PROB_CEIL)
+    # Sharpen by WIN_LOGIT_TEMP (the learned logit is mildly under-confident); the
+    # raw logit is still returned by _win_diff for the calibration sweep.
+    logit = _win_logit(a, b, a_age, b_age, a_rust, b_rust) / WIN_LOGIT_TEMP
+    return _clamp(_logistic(logit), WIN_PROB_FLOOR, WIN_PROB_CEIL)
+
+
+# --------------------------------------------------------------------------- learned distance / method
+
+# Both feature sets are deliberately SYMMETRIC (combined, order-invariant):
+# "does this fight reach the judges" and "is a finish a KO or a sub" don't depend
+# on which corner is listed first. scripts/build_mma_finishmodel.py imports these
+# so the trained coefficients always line up with inference.
+DIST_FEATURE_NAMES = [
+    "c_finish", "c_durability", "c_kd", "c_sub", "c_ctrl", "c_strDef", "c_slpm", "rounds", "weight",
+]
+KO_FEATURE_NAMES = [
+    "c_kd", "c_koRate", "c_sub", "c_subRate", "c_ctrl", "c_tdAvg", "weight",
+]
+
+
+def _dist_features(a: Dict[str, Any], b: Dict[str, Any], rounds: int, weight: float) -> List[float]:
+    """Symmetric matchup features for P(fight goes to decision)."""
+    return [
+        a.get("finishRate", 0) + b.get("finishRate", 0),
+        a.get("finishedRate", 0) + b.get("finishedRate", 0),
+        a.get("kdPer15", 0) + b.get("kdPer15", 0),
+        a.get("subAvg", 0) + b.get("subAvg", 0),
+        a.get("ctrlPerMin", 0) + b.get("ctrlPerMin", 0),
+        a.get("strDef", LG_STR_DEF) + b.get("strDef", LG_STR_DEF),
+        a.get("slpm", LG_SLPM) + b.get("slpm", LG_SLPM),
+        float(rounds),
+        weight,
+    ]
+
+
+def _ko_features(a: Dict[str, Any], b: Dict[str, Any], weight: float) -> List[float]:
+    """Symmetric matchup features for P(KO | the fight is finished)."""
+    return [
+        a.get("kdPer15", 0) + b.get("kdPer15", 0),
+        a.get("koRate", 0) + b.get("koRate", 0),
+        a.get("subAvg", 0) + b.get("subAvg", 0),
+        a.get("subRate", 0) + b.get("subRate", 0),
+        a.get("ctrlPerMin", 0) + b.get("ctrlPerMin", 0),
+        a.get("tdAvg", 0) + b.get("tdAvg", 0),
+        weight,
+    ]
+
+
+def _linmodel_prob(model: Dict[str, Any], feats: List[float], lo: float, hi: float) -> float:
+    w = model["weights"]
+    z = model["intercept"] + sum(w[i] * feats[i] for i in range(len(w)))
+    return _clamp(_logistic(z), lo, hi)
 
 
 # --------------------------------------------------------------------------- pick helpers
@@ -312,16 +399,33 @@ def analyze_fight(
         a_win = a_win_model
 
     # ---- distance / method / rounds ----
+    # Per-fighter finish hazards drive the *signal* text (and the heuristic
+    # fallback); the headline distance/method numbers come from the learned
+    # finish model when it's present.
     pa_fin = _p_finish(a, b)
     pb_fin = _p_finish(b, a)
-    distance_p = (1.0 - pa_fin) * (1.0 - pb_fin)
+    weight = (weight_lbs(a.get("weightClass")) + weight_lbs(b.get("weightClass"))) / 2.0
+    fm_dist = _FINISHMODEL.get("distance") if _FINISHMODEL else None
+    fm_ko = _FINISHMODEL.get("koGivenFinish") if _FINISHMODEL else None
+
+    # Distance: learned P(decision) only if it beat the heuristic out-of-sample
+    # (the builder gates that). The per-fighter finish-hazard product captures an
+    # A-power x B-chin interaction a linear model can't, so it's a strong default.
+    if fm_dist:
+        distance_p = _linmodel_prob(fm_dist, _dist_features(a, b, rounds, weight), 0.05, 0.95)
+    else:
+        distance_p = (1.0 - pa_fin) * (1.0 - pb_fin)
     finish_p = 1.0 - distance_p
-    # KO vs Sub split from both fighters' finishing tendencies.
-    ko_weight = a.get("koRate", 0) * a_win + b.get("koRate", 0) * (1 - a_win) + 0.01
-    sub_weight = a.get("subRate", 0) * a_win + b.get("subRate", 0) * (1 - a_win) + 0.01
-    ks = ko_weight + sub_weight
-    p_ko = finish_p * ko_weight / ks
-    p_sub = finish_p * sub_weight / ks
+
+    # Method: KO vs Sub split among finishes.
+    if fm_ko:
+        p_ko_given = _linmodel_prob(fm_ko, _ko_features(a, b, weight), 0.05, 0.95)
+    else:
+        ko_weight = a.get("koRate", 0) * a_win + b.get("koRate", 0) * (1 - a_win) + 0.01
+        sub_weight = a.get("subRate", 0) * a_win + b.get("subRate", 0) * (1 - a_win) + 0.01
+        p_ko_given = ko_weight / (ko_weight + sub_weight)
+    p_ko = finish_p * p_ko_given
+    p_sub = finish_p * (1.0 - p_ko_given)
 
     weights = ROUND_FINISH_WEIGHTS.get(rounds, ROUND_FINISH_WEIGHTS[3])
     round_probs = [round(finish_p * w, 4) for w in weights]

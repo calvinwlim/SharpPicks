@@ -14,6 +14,7 @@ from .cache import cache
 
 ODDS_BASE = "https://api.the-odds-api.com/v4"
 SPORT_KEY = "baseball_mlb"
+MMA_SPORT_KEY = "mma_mixed_martial_arts"
 
 _client: Optional[httpx.AsyncClient] = None
 
@@ -196,6 +197,81 @@ def best_moneyline(event: Dict[str, Any], team_name: str) -> Optional[int]:
     return best
 
 
+# --------------------------------------------------------------------------- MMA / UFC
+
+async def get_mma_markets(c: httpx.AsyncClient, api_key: Optional[str] = None) -> List[Dict[str, Any]]:
+    """All upcoming UFC/MMA events with moneyline (h2h) odds. h2h is the only
+    market reliably priced for MMA at US books, and it maps directly onto the
+    model's headline win probability."""
+    if not has_key(api_key):
+        return []
+
+    async def fetch() -> List[Dict[str, Any]]:
+        r = await c.get(
+            f"{ODDS_BASE}/sports/{MMA_SPORT_KEY}/odds",
+            params={
+                "apiKey": _key(api_key),
+                "regions": "us",
+                "markets": "h2h",
+                "oddsFormat": "american",
+            },
+        )
+        r.raise_for_status()
+        return r.json()
+
+    cache_key = "odds:mma_markets" if not api_key else f"odds:mma_markets:{api_key[-6:]}"
+    return await cache.get_or_set(cache_key, 300, fetch)
+
+
+def _name_tokens(name: str) -> List[str]:
+    return [t for t in "".join(ch if ch.isalnum() else " " for ch in (name or "").lower()).split() if t]
+
+
+def _fighter_matches(api_name: str, our_name: str) -> bool:
+    """Fuzzy match a fighter name across providers (ESPN card vs Odds API).
+
+    Exact normalized equality first; then surname + first-initial (handles
+    dropped middle names, "Jr", and minor spelling drift); then a token-subset
+    test (one name is a nickname/short form of the other). Always used *within*
+    a single two-fighter event, so the false-match surface is tiny."""
+    a, b = norm(api_name), norm(our_name)
+    if a and a == b:
+        return True
+    ta, tb = _name_tokens(api_name), _name_tokens(our_name)
+    if not ta or not tb:
+        return False
+    if ta[-1] == tb[-1] and ta[0][:1] == tb[0][:1]:
+        return True
+    sa, sb = set(ta), set(tb)
+    return sa.issubset(sb) or sb.issubset(sa)
+
+
+def match_mma_event(events: List[Dict[str, Any]], a_name: str, b_name: str) -> Optional[Dict[str, Any]]:
+    """The event whose two competitors fuzzy-match ``a_name`` and ``b_name`` (in
+    either corner orientation)."""
+    for e in events:
+        ht, at = e.get("home_team", ""), e.get("away_team", "")
+        if ((_fighter_matches(ht, a_name) and _fighter_matches(at, b_name)) or
+                (_fighter_matches(ht, b_name) and _fighter_matches(at, a_name))):
+            return e
+    return None
+
+
+def best_mma_moneyline(event: Dict[str, Any], fighter_name: str) -> Optional[int]:
+    """Best (highest) American moneyline price for ``fighter_name`` across books."""
+    best: Optional[int] = None
+    for bm in event.get("bookmakers", []):
+        for market in bm.get("markets", []):
+            if market.get("key") != "h2h":
+                continue
+            for outcome in market.get("outcomes", []):
+                if _fighter_matches(outcome.get("name", ""), fighter_name):
+                    price = outcome.get("price")
+                    if price is not None and (best is None or price > best):
+                        best = price
+    return best
+
+
 # --------------------------------------------------------------------------- betting math
 
 def american_to_decimal(price: float) -> float:
@@ -234,3 +310,16 @@ def kelly_pct(model_prob: float, price: float) -> float:
     q = 1.0 - model_prob
     f = (b * model_prob - q) / b
     return max(f, 0.0) * 100.0
+
+
+def moneyline_edge(model_prob: float, price: int, fair_prob: float) -> Dict[str, Any]:
+    """The standard ``edge`` block (price, model/market/fair prob, EV%, Kelly%)
+    the frontend renders for any matched two-way market."""
+    return {
+        "price": price,
+        "modelProb": round(model_prob, 4),
+        "marketProb": round(implied_prob(price), 4),
+        "fairProb": round(fair_prob, 4),
+        "evPct": round(ev_pct(model_prob, price), 2),
+        "kellyPct": round(kelly_pct(model_prob, price), 2),
+    }

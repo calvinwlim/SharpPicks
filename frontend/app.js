@@ -924,6 +924,14 @@ function renderNbaSignals(gm, away, home) {
 
 function renderMmaAnalysis(data, game, container) {
   container.innerHTML = "";
+
+  if (data.oddsNote) {
+    const note = document.createElement("div");
+    note.className = "odds-note";
+    note.textContent = `⚠ Odds: ${data.oddsNote}`;
+    container.appendChild(note);
+  }
+
   const fm = data.fightModel;
   if (!fm) {
     const div = document.createElement("div");
@@ -931,6 +939,14 @@ function renderMmaAnalysis(data, game, container) {
     div.textContent = data.note || "No model output for this fight.";
     container.appendChild(div);
     return;
+  }
+
+  // Thin-data banner (one fighter modeled as league-average) — shown above the model.
+  if (data.lowData && data.note) {
+    const note = document.createElement("div");
+    note.className = "odds-note";
+    note.textContent = `⚠ ${data.note}`;
+    container.appendChild(note);
   }
 
   // Win-probability bars (away corner = fighter A, home corner = fighter B).
@@ -944,21 +960,35 @@ function renderMmaAnalysis(data, game, container) {
   bWp.querySelector(".bar > span").style.width = `${(fm.bWinProb * 100).toFixed(0)}%`;
   container.appendChild(node);
 
+  if (fm.moneyline) container.appendChild(renderMmaMoneylineCard(fm));
   container.appendChild(renderMmaSummaryCard(fm));
   if (fm.signals && fm.signals.length) container.appendChild(renderMmaSignals(fm));
   if (data.comps) container.appendChild(renderMmaComps(data.comps));
 
-  if (data.picks && data.picks.length) {
+  // Props (the moneyline is rendered above as its own card, so skip it here).
+  const propPicks = (data.picks || []).filter((p) => p.propType !== "mma_moneyline");
+  if (propPicks.length) {
     const heading = document.createElement("div");
     heading.className = "signals-heading";
     heading.style.marginTop = "10px";
     heading.textContent = "Props";
     container.appendChild(heading);
-    for (const pick of data.picks) {
+    for (const pick of propPicks) {
       const { node: card } = renderPickCard(pick);
       container.appendChild(card);
     }
   }
+}
+
+function renderMmaMoneylineCard(fm) {
+  const card = document.createElement("div");
+  card.className = "pick-card";
+  const ml = fm.moneyline;
+  card.innerHTML = `
+    <div class="pick-header"><div class="pick-title">Moneyline</div></div>
+    <div class="edge-box"><span><strong>${fm.aName}</strong></span>${edgeLine(ml.a)}</div>
+    <div class="edge-box"><span><strong>${fm.bName}</strong></span>${edgeLine(ml.b)}</div>`;
+  return card;
 }
 
 function renderMmaSummaryCard(fm) {

@@ -157,7 +157,18 @@ async def main_async(since: str) -> None:
 
     running: Dict[str, Dict[str, float]] = {}
     recent_window: Dict[str, list] = {}  # norm -> list of recent per-fight deltas (A/B: recent-form blend)
+    sos: Dict[str, list] = {}            # norm -> [sum(opp win% faced), count] (A/B: strength of schedule)
     RECENT_K, RECENT_W = 5, 0.40
+
+    def _winpct_acc(acc: Optional[Dict[str, float]]) -> float:
+        if not acc:
+            return 0.5
+        g = acc["wins"] + acc["losses"]
+        return acc["wins"] / g if g else 0.5
+
+    def _sos(nm: str) -> float:
+        s = sos.get(nm)
+        return s[0] / s[1] if s and s[1] else 0.5
     blend_keys = ("slpm", "sapm", "strAcc", "strDef", "tdAvg", "tdAcc", "tdDef", "subAvg",
                   "kdPer15", "kdAbsPer15", "ctrlPerMin", "koRate", "subRate", "decRate",
                   "finishRate", "finishedRate")
@@ -173,6 +184,7 @@ async def main_async(since: str) -> None:
 
     win_p, win_o, win_diff_pairs = [], [], []
     win_p_recent = []
+    sos_eval = []  # (winDiff, sos_diff, a_won) for the strength-of-schedule A/B sweep
     win_correct = 0
     dist_p, dist_o = [], []
     method_correct = method_n = 0
@@ -187,6 +199,7 @@ async def main_async(since: str) -> None:
                      and acc_a["fights"] >= MIN_PRIOR and acc_b["fights"] >= MIN_PRIOR and sa and sb)
         if gradeable:
             fa = rates(acc_a, phys.get(na, {})); fb = rates(acc_b, phys.get(nb, {}))
+            fa["sos"], fb["sos"] = _sos(na), _sos(nb)
             model = M.analyze_fight(fa, fb, a, b, rounds=bt["rounds"], fight_date=bt["date"].isoformat())
             fm = model["fightModel"]
             a_won = 1.0 if bt["winner"] == a else 0.0
@@ -198,6 +211,7 @@ async def main_async(since: str) -> None:
             mr = M.analyze_fight(blended(fa, ra, phys.get(na, {})), blended(fb, rb, phys.get(nb, {})),
                                  a, b, rounds=bt["rounds"], fight_date=bt["date"].isoformat())
             win_p_recent.append(mr["fightModel"]["aWinProb"])
+            sos_eval.append((fm["winDiff"], _sos(na) - _sos(nb), a_won))
             win_correct += int((fm["aWinProb"] >= 0.5) == bool(a_won))
             actual_dist = 1.0 if bt["method"] == "dec" else 0.0
             dist_p.append(fm["distanceProb"]); dist_o.append(actual_dist)
@@ -211,7 +225,13 @@ async def main_async(since: str) -> None:
 
         # update running accumulators with this bout (pair opponents)
         if sa and sb:
+            # strength-of-schedule: record each fighter's opponent quality (the
+            # opponent's *pre-bout* win%) before the accumulators advance.
+            opp_q = {na: _winpct_acc(acc_b), nb: _winpct_acc(acc_a)}
             for me, opp, ms, os in ((a, b, sa, sb), (b, a, sb, sa)):
+                nm0 = norm(me)
+                s = sos.setdefault(nm0, [0.0, 0])
+                s[0] += opp_q[nm0]; s[1] += 1
                 d = fresh()
                 d["minutes"] = bt["minutes"]; d["sigL"] = ms["sigL"]; d["sigA"] = ms["sigA"]
                 d["sigAbs"] = os["sigL"]; d["oppSigA"] = os["sigA"]; d["tdL"] = ms["tdL"]; d["tdA"] = ms["tdA"]
@@ -265,6 +285,20 @@ async def main_async(since: str) -> None:
             best = (temp, br)
         print(f"  T={temp:>4}: Brier {br:.4f}")
     print(f"  -> best temperature {best[0]} (Brier {best[1]:.4f}); 1.0 = as-calibrated")
+
+    # A/B: would a strength-of-schedule differential improve the winner? Sweep how
+    # much SOS (avg opponent win% faced, a-b) added to the logit changes Brier. If
+    # the best coefficient is ~0, career rates already price competition level in.
+    print("\n=== A/B: strength-of-schedule on the win logit (Brier; lower=better) ===")
+    sbest = None
+    for k in (-1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0):
+        preds = [min(max(1 / (1 + math.exp(-(d + k * s))), M.WIN_PROB_FLOOR), M.WIN_PROB_CEIL)
+                 for d, s, _ in sos_eval]
+        br = _brier(preds, [o for _, _, o in sos_eval])
+        if sbest is None or br < sbest[1]:
+            sbest = (k, br)
+        print(f"  k={k:>5}: Brier {br:.4f}")
+    print(f"  -> best SOS coefficient {sbest[0]} (Brier {sbest[1]:.4f}); k=0 = SOS adds nothing")
 
     print("\n=== Distance (goes to decision) ===")
     print(f"  accuracy  {mean(int((p>=0.5)==bool(o)) for p,o in zip(dist_p,dist_o)):.1%}")

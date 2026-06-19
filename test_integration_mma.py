@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 import backend.mma as mma
 import backend.mma_data as mma_data
 import backend.mma_analysis as mma_analysis
+import backend.odds as odds
 from backend.main import app
 
 DATE = "2026-06-15"
@@ -99,10 +100,47 @@ def main():
     else:
         print("    comps: none (vectors dataset not built)")
 
-    print("\n[missing fighter -> graceful note]")
+    print("\n[moneyline EV with synthetic odds]")
+    # Synthetic h2h: Alpha -200 (fair ~64%), but the model has Alpha ~81% -> +EV on Alpha.
+    EVENT = {"id": "evt1", "home_team": "Bravo Grappler", "away_team": "Alpha Striker",
+             "bookmakers": [{"markets": [{"key": "h2h", "outcomes": [
+                 {"name": "Alpha Striker", "price": -200},
+                 {"name": "Bravo Grappler", "price": 170}]}]}]}
+    _orig_has_key, _orig_fetch = odds.has_key, odds.get_mma_markets
+    odds.has_key = lambda *a, **k: True
+    async def _fake_markets(c, api_key=None): return [EVENT]
+    odds.get_mma_markets = _fake_markets
+    try:
+        am = client.get(f"/api/analyze/{FIGHT['gameId']}?date={DATE}&sport=mma").json()
+    finally:
+        odds.has_key, odds.get_mma_markets = _orig_has_key, _orig_fetch
+    ml = am["fightModel"].get("moneyline")
+    check(ml is not None, "moneyline edges attached to fight model")
+    check(ml["a"]["price"] == -200 and ml["b"]["price"] == 170, "fighter prices matched by name")
+    check(ml["a"]["evPct"] > 0, f"+EV flagged on the model's favorite ({ml['a']['evPct']}%)")
+    check(abs(ml["a"]["fairProb"] + ml["b"]["fairProb"] - 1.0) < 1e-6, "moneyline de-vigged to fair probs")
+    mlp = [p for p in am["picks"] if p["propType"] == "mma_moneyline"]
+    check(len(mlp) == 2, "a moneyline pick per fighter on the board")
+    check(all(p["hasMarket"] and p["edge"] for p in mlp), "moneyline picks carry a market edge")
+
+    print("\n[one fighter missing -> league-average fallback, flagged]")
+    # Odds enabled here so we verify the guard actually suppresses EV for a synthetic fighter.
     mma_data.get_fighter = lambda name: _fighter("Alpha" in name) if "Alpha" in name else None
-    a2 = client.get(f"/api/analyze/{FIGHT['gameId']}?date={DATE}&sport=mma").json()
-    check(a2["fightModel"] is None and "note" in a2, "missing data returns a graceful note")
+    odds.has_key = lambda *a, **k: True
+    odds.get_mma_markets = _fake_markets
+    try:
+        a2 = client.get(f"/api/analyze/{FIGHT['gameId']}?date={DATE}&sport=mma").json()
+    finally:
+        odds.has_key, odds.get_mma_markets = _orig_has_key, _orig_fetch
+    check(a2["fightModel"] is not None, "one-missing still produces a model")
+    check(a2.get("lowData") is True and a2.get("note"), "low-data flag + note set")
+    check(not a2["fightModel"].get("moneyline"), "no moneyline edge computed off a synthetic fighter")
+    check(not any(p["propType"] == "mma_moneyline" for p in a2["picks"]), "no moneyline pick when low-data")
+
+    print("\n[both fighters missing -> graceful blank]")
+    mma_data.get_fighter = lambda name: None
+    a3 = client.get(f"/api/analyze/{FIGHT['gameId']}?date={DATE}&sport=mma").json()
+    check(a3["fightModel"] is None and "note" in a3, "both-missing returns a graceful note")
 
     print("\n" + ("ALL PASS" if not FAIL else f"{len(FAIL)} FAILURE(S)"))
     sys.exit(1 if FAIL else 0)

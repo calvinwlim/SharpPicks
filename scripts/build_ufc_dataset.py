@@ -140,6 +140,7 @@ async def main() -> None:
     agg: Dict[str, Dict[str, Any]] = {}
     last_date: Dict[str, datetime.date] = {}  # most recent bout per fighter (for layoff)
     results_by_fighter: Dict[str, list] = {}   # (date, won) per fighter (for recent form)
+    opponents: Dict[str, list] = {}            # opponent keys per fighter (for strength of schedule)
     for (event, bout), meta in bouts.items():
         a, bb = meta["names"]
         sa, sb = box.get((event, bout, a)), box.get((event, bout, bb))
@@ -156,6 +157,7 @@ async def main() -> None:
         for me, opp, ms, os in ((a, bb, sa, sb), (bb, a, sb, sa)):
             g = agg.setdefault(_norm(me), _fresh())
             g["name"] = me
+            opponents.setdefault(_norm(me), []).append(_norm(opp))
             g["minutes"] += minutes
             g["sigL"] += ms["sigL"]; g["sigA"] += ms["sigA"]
             g["sigAbs"] += os["sigL"]; g["oppSigA"] += os["sigA"]
@@ -196,6 +198,19 @@ async def main() -> None:
         last5 = [w for _, w in sorted(res, key=lambda x: x[0])[-5:]]
         return round(sum(last5) / len(last5), 4) if last5 else None
 
+    # Strength of schedule: a fighter's average opponent career win% (resume
+    # quality). Beating tougher opponents is a measured winner signal that raw
+    # career rates miss (validated in mma_backtest's SOS A/B).
+    winpct_by_key = {
+        k: (g["wins"] / (g["wins"] + g["losses"])) if (g["wins"] + g["losses"]) else 0.5
+        for k, g in agg.items()
+    }
+
+    def sos_for(key: str) -> float:
+        opps = opponents.get(key) or []
+        vals = [winpct_by_key.get(o, 0.5) for o in opps]
+        return round(sum(vals) / len(vals), 4) if vals else 0.5
+
     out: Dict[str, Any] = {}
     for key, g in agg.items():
         m = g["minutes"] or 1.0
@@ -217,6 +232,7 @@ async def main() -> None:
             "weightClass": max(g["wc"], key=g["wc"].get) if g["wc"] else None,
             "lastFightDate": last_date[key].isoformat() if key in last_date else None,
             "recentWinRate": recent_win_rate(key),
+            "sos": sos_for(key),
         }
         rec.update(phys.get(key, {}))
         out[key] = rec

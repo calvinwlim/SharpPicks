@@ -34,22 +34,40 @@ there is no live free rate-stat API). (Re)build it by aggregating the public
 ufcstats mirror — run after new events:
 
 ```bash
-python3 scripts/build_ufc_dataset.py    # fighter rate stats (+ lastFightDate, recentWinRate) -> backend/data/ufc_fighters.json
-python3 scripts/build_mma_winmodel.py   # fit the winner logistic -> backend/data/ufc_winmodel.json
-python3 scripts/build_mma_comps.py      # matchup vectors -> backend/data/ufc_fight_vectors.json (+ holdout + ensemble validation)
+python3 scripts/build_ufc_dataset.py     # fighter rate stats (+ lastFightDate, recentWinRate, sos) -> backend/data/ufc_fighters.json
+python3 scripts/build_mma_winmodel.py    # fit the winner logistic -> backend/data/ufc_winmodel.json
+python3 scripts/build_mma_finishmodel.py # fit P(distance) & P(KO|finish) -> backend/data/ufc_finishmodel.json
+python3 scripts/build_mma_comps.py       # matchup vectors -> backend/data/ufc_fight_vectors.json (+ holdout + ensemble validation)
 ```
 
 Run them in that order after new events: the dataset feeds the win-model fit,
 and the comps validation reads the winner model. The **winner is a learned
 logistic** — `build_mma_winmodel.py` replays every bout point-in-time, fits
 `a − b` differential coefficients (striking/grappling/defense/finishing plus
-stance, an age cliff, and ring-rust/layoff), and writes `ufc_winmodel.json`,
-which `mma_analysis` loads (falling back to the hand-tuned `_skill_score` formula
-if the file is absent). `WIN_FEATURE_NAMES`/`_win_features` in `mma_analysis` own
-the feature order; the builder imports them so the two never drift. Recent form
-(momentum) and the k-NN comps lens were both measured and **left out of the win
-probability** (they didn't improve out-of-sample) — momentum shows as a signal,
-comps as a separate `aWinProbComps` number (`ENSEMBLE_COMP_WEIGHT=0`).
+stance, an age cliff, ring-rust/layoff, and **strength-of-schedule** `d_sos` =
+avg opponent win% faced — a strong learned feature), and writes
+`ufc_winmodel.json`, which `mma_analysis` loads (falling back to the hand-tuned
+`_skill_score` formula if the file is absent). The learned win prob is sharpened
+by `WIN_LOGIT_TEMP` (≈0.85; the L2 fit is mildly under-confident).
+`WIN_FEATURE_NAMES`/`_win_features` own the feature order (new features are
+appended so an older model file degrades gracefully); the builder imports them so
+the two never drift. **Distance/method:** `build_mma_finishmodel.py` fits
+`P(distance)` and `P(KO|finish)` point-in-time but only writes the piece that
+*beats the existing heuristic* out-of-sample — currently the per-fighter
+finish-hazard product wins for distance (it captures an A-power×B-chin
+interaction a linear model can't), while the learned `koGivenFinish` ships
+(`mma_analysis` gates each piece independently, heuristic when absent). Recent
+form (momentum) and the k-NN comps lens were both measured and **left out of the
+win probability** (they didn't improve out-of-sample) — momentum shows as a
+signal, comps as a separate `aWinProbComps` number (`ENSEMBLE_COMP_WEIGHT=0`).
+
+Coverage: `mma_data.get_fighter` matches ESPN card names against the ufcstats
+dataset accent-insensitively, with a uniqueness-guarded surname+initial fuzzy
+fallback. A fighter genuinely absent (debut / short-notice replacement) is
+modeled as a league-average stand-in and flagged (`lowData`) — **no betting edge
+is computed** off a synthetic profile. With odds present, `_analyze_mma` matches
+the `mma_mixed_martial_arts` h2h market and reports moneyline EV/Kelly (the same
+de-vig math as MLB) as `fightModel.moneyline` + per-fighter `mma_moneyline` picks.
 
 Backtests (live data, measure model accuracy — needs network):
 

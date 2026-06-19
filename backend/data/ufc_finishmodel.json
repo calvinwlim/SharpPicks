@@ -1,0 +1,24 @@
+{
+  "koGivenFinish": {
+    "features": [
+      "c_kd",
+      "c_koRate",
+      "c_sub",
+      "c_subRate",
+      "c_ctrl",
+      "c_tdAvg",
+      "weight"
+    ],
+    "weights": [
+      0.231056,
+      -0.013214,
+      -0.059245,
+      -0.840658,
+      -0.153331,
+      -0.047843,
+      0.007441
+    ],
+    "intercept": -0.028182,
+    "n": 1486
+  }
+}

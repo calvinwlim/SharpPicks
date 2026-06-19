@@ -104,11 +104,22 @@ def _collect(bouts, box, phys):
     running: Dict[str, Dict[str, float]] = {}
     last_date: Dict[str, Any] = {}  # most recent prior bout date per fighter (for layoff)
     recent: Dict[str, List[int]] = {}  # last results (1=win) per fighter (for momentum)
+    sos: Dict[str, List[float]] = {}  # [sum(opp win% faced), count] per fighter (strength of schedule)
     rows: List[Tuple[str, List[float], float]] = []
 
     def rwr(name: str) -> Optional[float]:
         r = recent.get(name)
         return (sum(r[-5:]) / len(r[-5:])) if r else None
+
+    def winpct_acc(acc: Optional[Dict[str, float]]) -> float:
+        if not acc:
+            return 0.5
+        g = acc["wins"] + acc["losses"]
+        return acc["wins"] / g if g else 0.5
+
+    def sos_for(name: str) -> float:
+        s = sos.get(name)
+        return s[0] / s[1] if s and s[1] else 0.5
 
     for bt in bouts:
         a, b = bt["names"]
@@ -119,6 +130,7 @@ def _collect(bouts, box, phys):
             fa = B.rates(acc_a, phys.get(na, {}))
             fb = B.rates(acc_b, phys.get(nb, {}))
             fa["recentWinRate"], fb["recentWinRate"] = rwr(na), rwr(nb)
+            fa["sos"], fb["sos"] = sos_for(na), sos_for(nb)
             ds = bt["date"].isoformat()
             aa = M._age(fa.get("dob"), ds)
             ab = M._age(fb.get("dob"), ds)
@@ -133,7 +145,10 @@ def _collect(bouts, box, phys):
         recent.setdefault(na, []).append(1 if bt["winner"] == a else 0)
         recent.setdefault(nb, []).append(1 if bt["winner"] == b else 0)
         if sa and sb:  # advance accumulators (same pairing as the other builders)
+            opp_q = {na: winpct_acc(acc_b), nb: winpct_acc(acc_a)}  # opponent's pre-bout win% (SOS)
             for me, opp, ms, os in ((a, b, sa, sb), (b, a, sb, sa)):
+                nm0 = B.norm(me)
+                s = sos.setdefault(nm0, [0.0, 0]); s[0] += opp_q[nm0]; s[1] += 1
                 g = running.setdefault(B.norm(me), B.fresh())
                 g["minutes"] += (max(bt["endRound"] - 1, 0) * 5 + 2.5)
                 g["sigL"] += ms["sigL"]; g["sigA"] += ms["sigA"]; g["sigAbs"] += os["sigL"]; g["oppSigA"] += os["sigA"]

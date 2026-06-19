@@ -144,11 +144,26 @@ async def _analyze_mma(game_id: str, date: str, odds_key: Optional[str] = None,
 
     a_name, b_name = fight["away"]["name"], fight["home"]["name"]
     a, b = mma_data.get_fighter(a_name), mma_data.get_fighter(b_name)
+    # Both unknown -> nothing to anchor a read on. One unknown (debut / short-notice
+    # replacement) -> model the missing fighter as league-average and flag it hard;
+    # a directional read on the known fighter beats a blank, but we do NOT compute a
+    # betting edge off a synthetic profile (see the odds guard below).
+    low_data_note: Optional[str] = None
+    if not a and not b:
+        return {"gameId": game_id, "sport": "mma", "fight": fight, "fightModel": None,
+                "picks": [], "note": f"No rate-stat data for {a_name} or {b_name} — both look like UFC debutants "
+                                     f"(not in ufcstats). Re-run scripts/build_ufc_dataset.py after the next events to refresh.",
+                "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
     if not a or not b:
         missing = a_name if not a else b_name
-        return {"gameId": game_id, "sport": "mma", "fight": fight, "fightModel": None,
-                "picks": [], "note": f"No rate-stat data for {missing} — run scripts/build_ufc_dataset.py to refresh.",
-                "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
+        wc = fight.get("weightClass")
+        if not a:
+            a = _neutral_fighter(wc)
+        if not b:
+            b = _neutral_fighter(wc)
+        low_data_note = (f"Limited data: {missing} isn't in the ufcstats dataset (likely a debut or short-notice "
+                         f"replacement), so they're modeled as a league-average fighter. Treat this as a directional "
+                         f"read only — no betting edge is computed.")
 
     rounds = fight.get("rounds", 3)
     try:
@@ -159,8 +174,81 @@ async def _analyze_mma(game_id: str, date: str, odds_key: Optional[str] = None,
     comp_p = mma_comps.comp_win_prob_for(comps, a_name)
     model = mma_analysis.analyze_fight(a, b, a_name, b_name, rounds=rounds, fight_date=date,
                                        comp_win_prob=comp_p)
-    return {"gameId": game_id, "sport": "mma", "fight": fight, "fightModel": model["fightModel"],
-            "picks": model["picks"], "comps": comps, "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
+    fm = model["fightModel"]
+    picks = model["picks"]
+
+    # ---- moneyline EV (h2h) — the model's win prob vs the vig-removed market ----
+    # Suppressed when a fighter is synthetic: an edge off a league-average stand-in
+    # would be fiction.
+    odds_note: Optional[str] = None
+    if odds.has_key(odds_key) and not low_data_note:
+        try:
+            events = await odds.get_mma_markets(odds.client(), odds_key)
+            market_event = odds.match_mma_event(events, a_name, b_name) if events else None
+            if not events:
+                odds_note = "No upcoming MMA events returned from Odds API — the card may be over or your quota is exhausted."
+            elif market_event is None:
+                odds_note = f"Fight not found in Odds API ({len(events)} MMA events available)."
+            else:
+                a_price = odds.best_mma_moneyline(market_event, a_name)
+                b_price = odds.best_mma_moneyline(market_event, b_name)
+                if a_price is not None and b_price is not None:
+                    fair_a, fair_b = odds.devig_two(a_price, b_price)
+                    ml = {"a": odds.moneyline_edge(fm["aWinProb"], a_price, fair_a),
+                          "b": odds.moneyline_edge(fm["bWinProb"], b_price, fair_b)}
+                    fm["moneyline"] = ml
+                    picks = _mma_moneyline_picks(a_name, b_name, fm["aWinProb"], fm["bWinProb"], ml) + picks
+                else:
+                    odds_note = "Matched the fight but no moneyline was priced at the US books."
+        except Exception as exc:
+            err = str(exc).lower()
+            if "401" in err or "unauthorized" in err:
+                odds_note = "Odds API key rejected (401) — check that the key is correct."
+            elif "402" in err or "quota" in err:
+                odds_note = "Odds API quota exceeded — your monthly request limit may be exhausted."
+            elif "429" in err:
+                odds_note = "Odds API rate limit hit — too many requests in a short period."
+            else:
+                odds_note = "Could not fetch MMA odds (network error) — showing analysis only."
+
+    return {"gameId": game_id, "sport": "mma", "fight": fight, "fightModel": fm,
+            "picks": picks, "comps": comps, "oddsNote": odds_note,
+            "lowData": low_data_note is not None, "note": low_data_note,
+            "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
+
+
+# A league-average UFC fighter, used as a stand-in for a debutant/short-notice
+# replacement absent from ufcstats. Win% is held neutral (we ignore regional
+# records, which are inflated) and physicals are left unknown so the reach / age /
+# stance signals correctly stay silent. Rates track the model's league baselines.
+def _neutral_fighter(weight_class: Optional[str]) -> Dict[str, Any]:
+    return {
+        "name": "(league average)", "fights": 14, "wins": 7, "losses": 7, "minutes": 70.0,
+        "slpm": mma_analysis.LG_SLPM, "sapm": mma_analysis.LG_SLPM, "strAcc": 0.45,
+        "strDef": mma_analysis.LG_STR_DEF, "tdAvg": 1.4, "tdAcc": 0.40,
+        "tdDef": mma_analysis.LG_TD_DEF, "subAvg": 0.6, "kdPer15": 0.45, "kdAbsPer15": 0.45,
+        "ctrlPerMin": 0.6, "koRate": 0.35, "subRate": 0.15, "decRate": 0.50,
+        "finishRate": 0.50, "finishedRate": 0.50, "weightClass": weight_class,
+        "reachIn": None, "stance": None, "dob": None, "lastFightDate": None, "recentWinRate": None,
+    }
+
+
+def _mma_moneyline_picks(a_name: str, b_name: str, a_win: float, b_win: float,
+                         ml: Dict[str, Any]) -> list:
+    """Build a board-ready moneyline pick per fighter from the matched edges."""
+    out = []
+    for name, win, edge in ((a_name, a_win, ml["a"]), (b_name, b_win, ml["b"])):
+        ev = edge["evPct"]
+        out.append({
+            "propType": "mma_moneyline", "statNoun": "moneyline", "player": name,
+            "pick": f"{name} ML ({edge['price']:+d})",
+            "side": "win", "line": None, "projection": round(win, 3),
+            "modelProb": round(win, 4), "confidence": int(max(0, min(100, round(win * 100)))),
+            "tier": "Premium" if ev >= 8 else "Strong" if ev > 0 else "Lean",
+            "splits": [], "spark": [], "signals": [],
+            "edge": edge, "hasMarket": True, "lowSample": False,
+        })
+    return out
 
 
 async def _analyze_nba(game_id: str, date: str, odds_key: Optional[str] = None,
