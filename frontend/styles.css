@@ -721,6 +721,15 @@ header.app-header {
   border-color: var(--accent-2);
   color: #0b1020;
 }
+.dd-sport {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+  margin: 14px 0 4px;
+}
 
 .disclaimer {
   background: var(--bg-elevated);

@@ -105,22 +105,27 @@ closing lines).
 Live tracking (record today's picks, grade them tonight):
 
 ```bash
-python3 track.py snapshot                 # save today's predictions + bet prices -> tracking/<date>.json
-python3 track.py close                     # (optional) re-capture closing lines near game time, for CLV
-python3 track.py grade                     # once games are final, score them vs results
-python3 track.py grade --date 2026-06-14   # re-grade a specific day
+python3 track.py snapshot                       # MLB: save today's predictions + bet prices -> tracking/<date>.json
+python3 track.py close                           # (optional) re-capture closing lines near game time, for CLV
+python3 track.py grade                           # once games are final, score them vs results
+python3 track.py snapshot --sport mma            # UFC: snapshot a card -> tracking/<date>.mma.json
+python3 track.py grade --sport mma --date 2026-06-14   # grade a UFC card vs ESPN results
 ```
 
-`track.py` is the going-forward counterpart to the backtest: `snapshot` runs the
-exact app analysis (`backend.main._analyze_mlb`) over the day's slate and saves
-each strikeout/total/moneyline prediction **with the matched price**; `grade`
-pulls final scores + boxscores and writes `tracking/<date>.graded.json` with, per
-market: W-L + Brier (accuracy), **ROI** (flat 1u on every +EV pick at the captured
-price), and **CLV** (how much the price beat the close — only if `close` was run).
-An `overall` block aggregates the +EV betting record. The frontend History view's
-"All-Time Record" bar (`renderStatsBar`) aggregates these across days into ROI /
-CLV / per-market cards. Snapshots live under `tracking/` (gitignored). Run
-`snapshot` before first pitch, `close` near game time, `grade` after final.
+`track.py` is the going-forward counterpart to the backtest. `--sport mlb`
+(default) and `--sport mma` are supported; MMA writes `.mma`-suffixed files so a
+ballgame and a UFC card on the same date don't collide. `snapshot` runs the exact
+app analysis over the slate/card and saves each prediction **with the matched
+price**; `grade` pulls results and writes `tracking/<date>[.mma].graded.json` with,
+per market, W-L + Brier (accuracy), **ROI** (flat 1u on every +EV pick at the
+captured price), and **CLV** (how much the price beat the close — only if `close`
+ran). MLB markets = strikeouts/total/moneyline (+ run bias); MMA = moneyline
+(winner, from ESPN's `winner` flag), method (KO/Sub/Dec parsed from the
+competition `details`), distance (ESPN `status.period`/method). An `overall` block
+holds the +EV betting record. The History view tags each graded day with its
+`sport`; `renderStatsBar`/the calendar are market-generic and filter by sport
+(`historySport`), so the same date can show an MLB *and* a UFC record. Snapshots
+live under `tracking/` (gitignored).
 
 ## Architecture
 

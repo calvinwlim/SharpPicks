@@ -216,7 +216,7 @@ async function loadYesterdayStrip(date) {
 
 // ---- history calendar -------------------------------------------------------
 
-let calHistory = {};       // date string -> graded summary object
+let historyList = [];      // flat list of graded summaries (a date can have >1 sport)
 let calViewYear = 0;
 let calViewMonth = 0;      // 0-based
 let calSelectedDate = "";
@@ -227,24 +227,30 @@ const calMonthLabel = document.getElementById("cal-month-label");
 const historyDayDetail = document.getElementById("history-day-detail");
 
 const SPORT_LABEL = { all: "All", mlb: "⚾ MLB", nba: "🏀 NBA", mma: "🥊 UFC" };
+// Every market we know how to render; renderStatsBar/calendar skip empty ones,
+// so each sport shows only its own (MLB: K/total/ML, MMA: ML/method/distance).
+const MARKET_LABELS = {
+  strikeouts: "Strikeouts", total: "Totals", moneyline: "Moneyline",
+  method: "Method", distance: "Distance",
+};
+const MARKET_KEYS = Object.keys(MARKET_LABELS);
 const entrySport = (e) => e.sport || "mlb"; // older graded files predate the field
 
 // Entries matching the active sport filter (record bar aggregates these).
 function historyEntries() {
-  return Object.values(calHistory).filter(
-    (e) => historySport === "all" || entrySport(e) === historySport);
+  return historyList.filter((e) => historySport === "all" || entrySport(e) === historySport);
 }
-// The day's entry, but only if it passes the filter (calendar uses this).
-function historyForDate(dateStr) {
-  const e = calHistory[dateStr];
-  if (!e) return null;
-  return historySport === "all" || entrySport(e) === historySport ? e : null;
+// Filtered entries grouped by date (a date may hold an MLB and a UFC entry).
+function historyByDate() {
+  const m = {};
+  for (const e of historyEntries()) (m[e.date] = m[e.date] || []).push(e);
+  return m;
 }
 
 // Filter chips: "All" plus each sport that actually has tracked data.
 function renderHistoryFilter() {
   const el = document.getElementById("history-filter");
-  const sports = [...new Set(Object.values(calHistory).map(entrySport))];
+  const sports = [...new Set(historyList.map(entrySport))];
   if (!sports.length) { el.style.display = "none"; return; }
   if (!sports.includes(historySport) && historySport !== "all") historySport = "all";
   el.style.display = "flex";
@@ -267,10 +273,7 @@ async function loadHistory() {
   try {
     const res = await fetch("/api/track/history");
     const data = await res.json();
-    calHistory = {};
-    for (const e of data.entries || []) {
-      calHistory[e.date] = e;
-    }
+    historyList = data.entries || [];
     renderHistoryFilter();
     renderStatsBar();
     renderCalendar();
@@ -298,12 +301,9 @@ function renderStatsBar() {
   const entries = historyEntries();
   if (!entries.length) { statsEl.style.display = "none"; return; }
 
-  const agg = {
-    strikeouts: { w: 0, l: 0, p: 0, briers: [], units: 0, bets: 0, label: "Strikeouts" },
-    total:      { w: 0, l: 0, p: 0, briers: [], units: 0, bets: 0, label: "Totals" },
-    moneyline:  { w: 0, l: 0, p: 0, briers: [], units: 0, bets: 0, label: "Moneyline" },
-  };
-  let totalGames = 0, totalDays = entries.length, biasSum = 0, biasCount = 0;
+  const agg = {};
+  for (const k of MARKET_KEYS) agg[k] = { w: 0, l: 0, p: 0, briers: [], units: 0, bets: 0, label: MARKET_LABELS[k] };
+  let totalGames = 0, totalDays = new Set(entries.map((e) => e.date)).size, biasSum = 0, biasCount = 0;
   let oUnits = 0, oBets = 0, oClvSum = 0, oClvN = 0, oBeatN = 0;
 
   for (const e of entries) {
@@ -314,7 +314,7 @@ function renderStatsBar() {
       oUnits += ov.units || 0; oBets += ov.bets || 0;
       oClvSum += ov.clvSum || 0; oClvN += ov.clvN || 0; oBeatN += ov.beatN || 0;
     }
-    for (const key of ["strikeouts", "total", "moneyline"]) {
+    for (const key of MARKET_KEYS) {
       const m = e[key];
       if (!m) continue;
       agg[key].w += m.w || 0; agg[key].l += m.l || 0; agg[key].p += m.p || 0;
@@ -345,7 +345,7 @@ function renderStatsBar() {
       clv > 0 ? "win" : clv < 0 ? "loss" : "even"));
   }
 
-  for (const key of ["strikeouts", "total", "moneyline"]) {
+  for (const key of MARKET_KEYS) {
     const m = agg[key];
     if (m.w + m.l + m.p === 0 && m.bets === 0) continue; // no data for this market/sport
     const tot = m.w + m.l;
@@ -398,6 +398,7 @@ function renderCalendar() {
   const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
   const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
   const todayStr = today.toISOString().slice(0, 10);
+  const byDate = historyByDate();
 
   for (let i = 0; i < firstDay; i++) {
     calGrid.appendChild(document.createElement("div"));
@@ -405,7 +406,7 @@ function renderCalendar() {
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calViewYear}-${String(calViewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const entry = historyForDate(dateStr);
+    const dayEntries = byDate[dateStr];
 
     const cell = document.createElement("div");
     cell.className = "cal-day";
@@ -417,38 +418,41 @@ function renderCalendar() {
     num.textContent = d;
     cell.appendChild(num);
 
-    if (entry) {
+    if (dayEntries && dayEntries.length) {
       cell.classList.add("has-data");
-      const k = entry.strikeouts || {};
-      const kGraded = (k.w || 0) + (k.l || 0);
-
-      if (kGraded > 0) {
-        const rec = document.createElement("div");
-        rec.className = "cal-day-record";
-        rec.textContent = `${k.w}-${k.l}`;
-        cell.appendChild(rec);
-        cell.classList.add(k.w > k.l ? "winning" : k.l > k.w ? "losing" : "even");
-      } else {
-        cell.classList.add("even");
-      }
-
-      // three-market dot row
+      // combined record + a dot per market with data, across the day's entries
+      let dw = 0, dl = 0;
       const dots = document.createElement("div");
       dots.className = "cal-day-dots";
-      for (const key of ["strikeouts", "total", "moneyline"]) {
-        const m = entry[key] || {};
-        const tot = (m.w || 0) + (m.l || 0);
-        const cls = tot > 0 ? (m.w > m.l ? "win" : m.l > m.w ? "loss" : "even") : "none";
-        const dot = document.createElement("span");
-        dot.className = `cal-dot ${cls}`;
-        dots.appendChild(dot);
+      for (const key of MARKET_KEYS) {
+        let mw = 0, ml = 0, present = false;
+        for (const e of dayEntries) {
+          const m = e[key];
+          if (m) { mw += m.w || 0; ml += m.l || 0; present = present || (m.w + m.l + (m.p || 0)) > 0; }
+        }
+        dw += mw; dl += ml;
+        if (present) {
+          const dot = document.createElement("span");
+          dot.className = `cal-dot ${mw + ml === 0 ? "even" : mw > ml ? "win" : ml > mw ? "loss" : "even"}`;
+          dots.appendChild(dot);
+        }
+      }
+
+      if (dw + dl > 0) {
+        const rec = document.createElement("div");
+        rec.className = "cal-day-record";
+        rec.textContent = `${dw}-${dl}`;
+        cell.appendChild(rec);
+        cell.classList.add(dw > dl ? "winning" : dl > dw ? "losing" : "even");
+      } else {
+        cell.classList.add("even");
       }
       cell.appendChild(dots);
 
       cell.addEventListener("click", () => {
         calSelectedDate = dateStr;
         renderCalendar();
-        showDayDetail(entry);
+        showDayDetail(dayEntries);
       });
     }
 
@@ -456,7 +460,7 @@ function renderCalendar() {
   }
 }
 
-function showDayDetail(entry) {
+function showDayDetail(dayEntries) {
   const fmtMarket = (m, label) => {
     if (!m) return "";
     const tot = (m.w || 0) + (m.l || 0);
@@ -464,47 +468,55 @@ function showDayDetail(entry) {
     const pct = tot > 0 ? `${((m.w / tot) * 100).toFixed(1)}%` : "—";
     const push = m.p ? `<span class="ddm-push">${m.p}P</span>` : "";
     const brier = m.brier != null ? `<span class="ddm-brier">Brier ${m.brier.toFixed(3)}</span>` : "";
+    const roi = m.bets ? `<span class="ddm-brier">ROI ${m.roi >= 0 ? "+" : ""}${m.roi}%</span>` : "";
     const winCls = tot > 0 ? (m.w > m.l ? "win" : m.l > m.w ? "loss" : "even") : "even";
     return `
       <div class="dd-market">
         <span class="ddm-label">${label}</span>
         <span class="ddm-record ${winCls}">${m.w}-${m.l}${push ? " " + push : ""}</span>
         <span class="ddm-pct">${pct}</span>
-        ${brier}
+        ${brier}${roi}
       </div>`;
   };
 
-  const biasSign = entry.totalBias > 0 ? "+" : "";
-  const biasCls = entry.totalBias > 0 ? "pos" : entry.totalBias < 0 ? "neg" : "";
-  const biasHtml = entry.totalBias != null
-    ? `<div class="dd-bias">Run bias: <span class="${biasCls}">${biasSign}${entry.totalBias} runs</span> <span class="dd-bias-hint">(model proj − actual)</span></div>`
-    : "";
-  const pendHtml = entry.pending
-    ? `<div class="dd-pending">${entry.pending} game${entry.pending !== 1 ? "s" : ""} still pending</div>`
-    : "";
+  const date = dayEntries[0].date;
+  const totalGames = dayEntries.reduce((s, e) => s + (e.games || 0), 0);
+  const multi = dayEntries.length > 1;
+
+  const sections = dayEntries.map((entry) => {
+    const markets = MARKET_KEYS.map((k) => fmtMarket(entry[k], MARKET_LABELS[k])).join("");
+    const ov = entry.overall;
+    const ovHtml = ov && ov.bets
+      ? `<div class="dd-bias">${ov.bets} +EV bets · ROI <span class="${ov.roi > 0 ? "pos" : ov.roi < 0 ? "neg" : ""}">${ov.roi >= 0 ? "+" : ""}${ov.roi}%</span>`
+        + (ov.clv != null ? ` · CLV <span class="${ov.clv > 0 ? "pos" : "neg"}">${ov.clv >= 0 ? "+" : ""}${ov.clv}%</span>` : "") + `</div>`
+      : "";
+    const biasHtml = entry.totalBias != null
+      ? `<div class="dd-bias">Run bias: <span class="${entry.totalBias > 0 ? "pos" : entry.totalBias < 0 ? "neg" : ""}">${entry.totalBias > 0 ? "+" : ""}${entry.totalBias} runs</span> <span class="dd-bias-hint">(model proj − actual)</span></div>`
+      : "";
+    const pendHtml = entry.pending
+      ? `<div class="dd-pending">${entry.pending} still pending</div>` : "";
+    const head = multi ? `<div class="dd-sport">${SPORT_LABEL[entrySport(entry)]}</div>` : "";
+    return `${head}<div class="dd-markets">${markets}</div>${ovHtml}${biasHtml}${pendHtml}`;
+  }).join("");
 
   historyDayDetail.innerHTML = `
     <div class="dd-header">
-      <div class="dd-date">${entry.date}</div>
-      <div class="dd-games">${entry.games} game${entry.games !== 1 ? "s" : ""}</div>
+      <div class="dd-date">${date}</div>
+      <div class="dd-games">${totalGames} game${totalGames !== 1 ? "s" : ""}</div>
     </div>
-    <div class="dd-markets">
-      ${fmtMarket(entry.strikeouts, "Strikeouts")}
-      ${fmtMarket(entry.total, "Totals")}
-      ${fmtMarket(entry.moneyline, "Moneyline")}
-    </div>
-    ${biasHtml}
-    ${pendHtml}
+    ${sections}
     <button class="dd-view-btn" id="dd-view-btn">View full slate →</button>
   `;
 
   document.getElementById("dd-view-btn").addEventListener("click", () => {
-    dateInput.value = entry.date;
-    currentSport = "mlb";
+    const sport = entrySport(dayEntries[0]);
+    dateInput.value = date;
+    currentSport = sport;
+    setBrandSport(sport);
     document.querySelectorAll(".sport-tab").forEach((t) =>
-      t.classList.toggle("active", t.dataset.sport === "mlb"));
+      t.classList.toggle("active", t.dataset.sport === sport));
     showSlateView();
-    loadSlate(entry.date);
+    loadSlate(date);
   });
 
   historyDayDetail.style.display = "block";
