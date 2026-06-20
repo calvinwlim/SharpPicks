@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Sharp Slate ⚾</title>
+<title>Sharp Picks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
 
   <header class="app-header">
     <div class="brand">
-      <h1>Sharp Slate</h1>
+      <h1>Sharp Picks <span class="brand-sport" id="brand-sport" aria-hidden="true"></span></h1>
       <span class="tagline">Where the numbers disagree with the price</span>
     </div>
     <div class="controls">
@@ -25,7 +25,7 @@
         <button class="sport-tab" id="history-tab" data-sport="">📅 History</button>
       </div>
       <input type="date" id="date-input" />
-      <button id="load-btn">Visualize</button>
+      <button id="load-btn">Load slate</button>
       <button id="board-toggle" title="Toggle bet board">📋 Board</button>
       <button id="settings-toggle" title="API keys">⚙️ Keys</button>
       <div class="pills">
@@ -71,22 +71,20 @@
     <div class="yesterday-strip" id="yesterday-strip" style="display: none;"></div>
 
     <div class="disclaimer">
-      Sharp Slate estimates strikeout-prop probabilities from free MLB data and,
-      when a real betting line is supplied, compares them to the vig-removed
-      market price. A projection alone is <strong>not</strong> an edge — EV is a
-      long-run average, not a guarantee. Gambling carries real financial risk.
-      21+ where legal. If it stops being fun, call 1-800-GAMBLER.
+      <strong>Not betting advice.</strong> A projection isn't an edge, and EV is a
+      long-run average — not a guarantee. 21+ where legal; if it stops being fun,
+      call <strong>1-800-GAMBLER</strong>.
     </div>
 
     <section class="top-board" id="top-board-section" style="display: none;">
-      <h2 class="section-title">Top Board</h2>
+      <h2 class="section-title">Top Plays</h2>
       <div class="top-board-list" id="top-board-list"></div>
     </section>
 
     <section>
       <h2 class="section-title">Slate</h2>
       <div id="slate-container">
-        <div class="empty">Pick a date and hit Visualize.</div>
+        <div class="empty">Pick a date and hit “Load slate”.</div>
       </div>
     </section>
   </div>

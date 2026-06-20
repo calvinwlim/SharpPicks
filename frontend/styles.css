@@ -1,4 +1,4 @@
-/* Sharp Slate — "ballpark at night" design system */
+/* Sharp Picks — dark sports-betting design system (multi-sport) */
 
 :root {
   --bg: #0b1020;
@@ -71,6 +71,18 @@ header.app-header {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* sport icon next to the wordmark — opt out of the gradient text-clip so the
+   emoji renders as its normal colour glyph and swaps per active sport */
+.brand-sport {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: initial;
+  color: initial;
+  font-size: 0.7em;
+  vertical-align: 0.06em;
 }
 
 .brand .tagline {
@@ -630,14 +642,15 @@ header.app-header {
 .disclaimer {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--accent);
+  border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
-  padding: 12px 16px;
-  font-size: 13px;
+  padding: 8px 13px;
+  font-size: 11.5px;
   color: var(--text-dim);
-  margin-bottom: 24px;
-  line-height: 1.5;
+  margin-bottom: 16px;
+  line-height: 1.45;
 }
+.disclaimer strong { color: var(--text); }
 
 /* ---- top board ----------------------------------------------------------- */
 

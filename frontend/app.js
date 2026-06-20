@@ -137,6 +137,15 @@ function boardPicks(data) {
 
 let currentSport = "mlb"; // "mlb" | "nba" | "mma"
 
+const SPORT_ICON = { mlb: "⚾", nba: "🏀", mma: "🥊" };
+function setBrandSport(sport) {
+  const icon = SPORT_ICON[sport] || "";
+  const el = document.getElementById("brand-sport");
+  if (el) el.textContent = icon;
+  document.title = icon ? `Sharp Picks ${icon}` : "Sharp Picks";
+}
+setBrandSport(currentSport);
+
 function gameKey(game) {
   return game.gameId != null ? game.gameId : game.gamePk;
 }
@@ -1491,6 +1500,7 @@ document.querySelectorAll(".sport-tab").forEach((tab) => {
     if (tab.dataset.sport === currentSport && !historyMode) return;
     showSlateView();
     currentSport = tab.dataset.sport;
+    setBrandSport(currentSport);
     document.querySelectorAll(".sport-tab").forEach((t) => t.classList.toggle("active", t === tab));
     loadSlate(dateInput.value);
   });
