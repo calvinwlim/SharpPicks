@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional
 
 from backend import main as app
 from backend import mlb
+from backend import mma
 from backend import odds
 
 TRACK_DIR = "tracking"
@@ -43,16 +44,22 @@ def _today() -> str:
     return datetime.date.today().isoformat()
 
 
-def _path(date: str) -> str:
-    return os.path.join(TRACK_DIR, f"{date}.json")
+def _suffix(sport: str) -> str:
+    # MLB keeps the original bare filenames (back-compat); other sports get a tag
+    # so e.g. an MLB and a UFC card on the same date don't overwrite each other.
+    return "" if sport == "mlb" else f".{sport}"
 
 
-def _graded_path(date: str) -> str:
-    return os.path.join(TRACK_DIR, f"{date}.graded.json")
+def _path(date: str, sport: str = "mlb") -> str:
+    return os.path.join(TRACK_DIR, f"{date}{_suffix(sport)}.json")
 
 
-def _close_path(date: str) -> str:
-    return os.path.join(TRACK_DIR, f"{date}.close.json")
+def _graded_path(date: str, sport: str = "mlb") -> str:
+    return os.path.join(TRACK_DIR, f"{date}{_suffix(sport)}.graded.json")
+
+
+def _close_path(date: str, sport: str = "mlb") -> str:
+    return os.path.join(TRACK_DIR, f"{date}{_suffix(sport)}.close.json")
 
 
 # --------------------------------------------------------------------------- snapshot
@@ -120,7 +127,7 @@ def _extract_predictions(res: Dict[str, Any], game: Dict[str, Any]) -> Dict[str,
     }
 
 
-async def _capture(date: str, as_close: bool = False) -> None:
+async def _capture_mlb(date: str, as_close: bool = False) -> None:
     """Run the full app analysis over the slate and save the gradeable picks.
 
     ``snapshot`` saves them as the *bet* (opening) lines; ``close`` re-runs near
@@ -161,12 +168,12 @@ async def _capture(date: str, as_close: bool = False) -> None:
     await mlb.close()
 
 
-async def snapshot(date: str) -> None:
-    await _capture(date, as_close=False)
+async def snapshot(date: str, sport: str = "mlb") -> None:
+    await (_capture_mma(date, False) if sport == "mma" else _capture_mlb(date, False))
 
 
-async def close(date: str) -> None:
-    await _capture(date, as_close=True)
+async def close(date: str, sport: str = "mlb") -> None:
+    await (_capture_mma(date, True) if sport == "mma" else _capture_mlb(date, True))
 
 
 # --------------------------------------------------------------------------- grade
@@ -269,7 +276,14 @@ class Tally:
         return f"  {label:<12} {self.w}-{self.l}{push}  (win {wr}, Brier {brier}){roi}{clv}"
 
 
-async def grade(date: str) -> None:
+async def grade(date: str, sport: str = "mlb") -> None:
+    if sport == "mma":
+        await _grade_mma(date)
+    else:
+        await _grade_mlb(date)
+
+
+async def _grade_mlb(date: str) -> None:
     try:
         with open(_path(date), encoding="utf-8") as f:
             snap = json.load(f)
@@ -396,19 +410,214 @@ async def grade(date: str) -> None:
     await mlb.close()
 
 
+# --------------------------------------------------------------------------- MMA
+
+def _extract_mma_predictions(res: Dict[str, Any], fight: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Gradeable picks from one ``_analyze_mma`` result: winner (moneyline, the
+    only priced market), method (KO/Sub/Dec argmax), and distance (over/under)."""
+    fm = res.get("fightModel")
+    if not fm:
+        return None
+    a, b = fm["aName"], fm["bName"]
+    pick = fm.get("pick") or {}
+    pick_fighter = pick.get("fighter")
+    ml_side = (fm.get("moneyline") or {}).get("a" if pick_fighter == a else "b") or {}
+    moneyline = {
+        "pick": pick_fighter, "modelProb": pick.get("prob"), "tier": pick.get("tier"),
+        "evPct": ml_side.get("evPct"), "price": ml_side.get("price"),
+    }
+    method = fm.get("method") or {}
+    name_map = {"ko": "ko", "sub": "sub", "decision": "dec"}
+    pred = max(method, key=method.get) if method else None
+    method_pred = {"pick": name_map.get(pred), "modelProb": method.get(pred)} if pred else None
+    dp = fm.get("distanceProb")
+    distance = ({"side": "over" if dp >= 0.5 else "under", "modelProb": round(max(dp, 1 - dp), 4)}
+               if dp is not None else None)
+    return {
+        "gameId": fight["gameId"], "away": fight["away"]["abbr"], "home": fight["home"]["abbr"],
+        "moneyline": moneyline, "method": method_pred, "distance": distance,
+    }
+
+
+async def _capture_mma(date: str, as_close: bool = False) -> None:
+    fights = await mma.get_schedule(date)
+    if not fights:
+        print(f"No UFC fights on {date}.")
+        return
+    what = "closing lines" if as_close else "predictions"
+    print(f"Capturing {what} for {len(fights)} UFC fights on {date} (running full analysis)...")
+    entries: List[Dict[str, Any]] = []
+    for fight in fights:
+        label = f"{fight['away']['abbr']} vs {fight['home']['abbr']}"
+        try:
+            res = await app._analyze_mma(fight["gameId"], date)
+            pred = _extract_mma_predictions(res, fight)
+            if pred:
+                entries.append(pred)
+                print(f"  ok   {label}")
+            else:
+                print(f"  skip {label}: no model (missing fighter data)")
+        except Exception as e:
+            print(f"  skip {label}: {e!r}")
+
+    os.makedirs(TRACK_DIR, exist_ok=True)
+    payload = {
+        "date": date, "sport": "mma",
+        "generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
+        "fights": entries,
+    }
+    path = _close_path(date, "mma") if as_close else _path(date, "mma")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    if as_close:
+        print(f"\nSaved {path}: closing lines for {len(entries)} fights.")
+    else:
+        print(f"\nSaved {path}: {len(entries)} fights. Optionally run "
+              f"`python track.py close --sport mma --date {date}` near card time, then "
+              f"`python track.py grade --sport mma --date {date}` once final.")
+    await mma.close()
+
+
+def _mma_method(details: Any) -> Optional[str]:
+    """KO/Sub/Dec from an ESPN competition's ``details`` list (the
+    'Unofficial Winner <method>' play; 'Kotko' = KO/TKO)."""
+    for d in details or []:
+        text = ((d.get("type") or {}).get("text") or "")
+        if text.startswith("Unofficial Winner"):
+            s = text[len("Unofficial Winner"):].strip().lower()
+            if "sub" in s:
+                return "sub"
+            if "ko" in s or "tko" in s:
+                return "ko"
+            if "dec" in s:
+                return "dec"
+    return None
+
+
+async def _mma_results(date: str) -> Dict[str, Dict[str, Any]]:
+    """``{competitionId: {final, winner, method, endRound}}`` from ESPN."""
+    d = datetime.date.fromisoformat(date)
+    window = f"{(d - datetime.timedelta(days=1)):%Y%m%d}-{(d + datetime.timedelta(days=1)):%Y%m%d}"
+    r = await mma.client().get(mma.SCOREBOARD, params={"dates": window})
+    r.raise_for_status()
+    out: Dict[str, Dict[str, Any]] = {}
+    for ev in r.json().get("events", []):
+        for comp in ev.get("competitions", []):
+            cs = comp.get("competitors", [])
+            if len(cs) != 2:
+                continue
+            st = comp.get("status", {}).get("type", {})
+            winner = next(((c.get("athlete") or {}).get("displayName") for c in cs if c.get("winner")), None)
+            out[str(comp.get("id"))] = {
+                "final": bool(st.get("completed")),
+                "winner": winner,
+                "method": _mma_method(comp.get("details")),
+                "endRound": comp.get("status", {}).get("period"),
+            }
+    return out
+
+
+async def _grade_mma(date: str) -> None:
+    try:
+        with open(_path(date, "mma"), encoding="utf-8") as f:
+            snap = json.load(f)
+    except FileNotFoundError:
+        print(f"No MMA snapshot at {_path(date, 'mma')}. "
+              f"Run `python track.py snapshot --sport mma --date {date}` first.")
+        return
+
+    close_map: Dict[str, Optional[int]] = {}
+    try:
+        with open(_close_path(date, "mma"), encoding="utf-8") as f:
+            for e in json.load(f)["fights"]:
+                if e.get("moneyline"):
+                    close_map[e["gameId"]] = e["moneyline"].get("price")
+    except FileNotFoundError:
+        pass
+
+    results = await _mma_results(date)
+    ml_tally, method_tally, dist_tally = Tally(), Tally(), Tally()
+    pending = 0
+
+    print(f"Grading UFC {date} (snapshotted {snap.get('generatedAt', '?')})\n")
+    for e in snap["fights"]:
+        gid = e["gameId"]
+        rec = results.get(gid)
+        label = f"{e['away']} vs {e['home']}"
+        if not rec or not rec["final"] or not rec["winner"]:
+            print(f"{label}: pending")
+            pending += 1
+            continue
+        winner, method, rnd = rec["winner"], rec["method"], rec["endRound"]
+        print(f"{label}: {winner} won by {method or '?'} (R{rnd})")
+
+        ml = e.get("moneyline")
+        if ml and ml.get("pick"):
+            won = ml["pick"] == winner
+            ml_tally.add(won, ml.get("modelProb"), ml.get("price"), ml.get("evPct"), close_map.get(gid))
+            print(f"    winner   {ml['pick']} ({(ml.get('modelProb') or 0):.0%}) -> [{'WIN ' if won else 'LOSS'}]")
+        mp = e.get("method")
+        if mp and mp.get("pick") and method:
+            won = mp["pick"] == method
+            method_tally.add(won, mp.get("modelProb"))
+            print(f"    method   {mp['pick']} -> {method}  [{'WIN ' if won else 'LOSS'}]")
+        dp = e.get("distance")
+        if dp and method:
+            actual_dist = method == "dec"
+            won = (dp["side"] == "over") == actual_dist
+            dist_tally.add(won, dp.get("modelProb"))
+            print(f"    distance {dp['side']} -> {'decision' if actual_dist else 'finish'}  [{'WIN ' if won else 'LOSS'}]")
+        print()
+
+    # Only the moneyline (winner) carries prices, so it owns the betting record.
+    o_units, o_staked = ml_tally.units, ml_tally.staked
+    o_clv, o_beat, o_clvn = ml_tally.clv, ml_tally.beat_close, ml_tally.clv_n
+    print("=" * 56)
+    print(ml_tally.line("Winner"))
+    print(method_tally.line("Method"))
+    print(dist_tally.line("Distance"))
+    if pending:
+        print(f"\n  {pending} fight(s) still pending — re-run grade later.")
+    if not o_clvn:
+        print("\nROI is at the captured prices. For CLV, run `track.py close --sport mma` near card time.")
+
+    summary = {
+        "date": date, "sport": "mma",
+        "generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
+        "moneyline": ml_tally.summary(),
+        "method": method_tally.summary(),
+        "distance": dist_tally.summary(),
+        "overall": {
+            "bets": int(o_staked),
+            "units": round(o_units, 2) if o_staked else None,
+            "roi": round(o_units / o_staked * 100, 1) if o_staked else None,
+            "clv": round(mean(o_clv), 2) if o_clv else None,
+            "beatClose": round(o_beat / o_clvn, 3) if o_clvn else None,
+            "clvN": o_clvn, "clvSum": round(sum(o_clv), 4), "beatN": o_beat,
+        },
+        "pending": pending,
+        "games": len(snap["fights"]),
+    }
+    os.makedirs(TRACK_DIR, exist_ok=True)
+    with open(_graded_path(date, "mma"), "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+    await mma.close()
+
+
 # --------------------------------------------------------------------------- main
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Snapshot today's picks and grade them vs results.")
     ap.add_argument("command", choices=["snapshot", "close", "grade"])
     ap.add_argument("--date", default=_today(), help="YYYY-MM-DD (default: today)")
+    ap.add_argument("--sport", default="mlb", choices=["mlb", "mma"], help="sport to track (default: mlb)")
     args = ap.parse_args()
     if args.command == "snapshot":
-        asyncio.run(snapshot(args.date))
+        asyncio.run(snapshot(args.date, args.sport))
     elif args.command == "close":
-        asyncio.run(close(args.date))
+        asyncio.run(close(args.date, args.sport))
     else:
-        asyncio.run(grade(args.date))
+        asyncio.run(grade(args.date, args.sport))
 
 
 if __name__ == "__main__":
