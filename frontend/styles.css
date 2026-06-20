@@ -698,6 +698,30 @@ header.app-header {
 .card-badge.cb-pos .cb-ev { color: var(--green); }
 .card-badge.cb-neg .cb-ev { color: var(--text-faint); }
 
+/* ---- history sport filter ----------------------------------------------- */
+.history-filter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.history-filter-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.history-filter-chip:hover { color: var(--text); border-color: var(--accent-2); }
+.history-filter-chip.active {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: #0b1020;
+}
+
 .disclaimer {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

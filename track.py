@@ -372,6 +372,7 @@ async def grade(date: str) -> None:
 
     summary = {
         "date": date,
+        "sport": "mlb",
         "generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
         "strikeouts": k_tally.summary(),
         "total": total_tally.summary(),

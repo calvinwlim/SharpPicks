@@ -220,10 +220,48 @@ let calHistory = {};       // date string -> graded summary object
 let calViewYear = 0;
 let calViewMonth = 0;      // 0-based
 let calSelectedDate = "";
+let historySport = "all";  // "all" | "mlb" | "nba" | "mma" — active history filter
 
 const calGrid = document.getElementById("history-cal-grid");
 const calMonthLabel = document.getElementById("cal-month-label");
 const historyDayDetail = document.getElementById("history-day-detail");
+
+const SPORT_LABEL = { all: "All", mlb: "⚾ MLB", nba: "🏀 NBA", mma: "🥊 UFC" };
+const entrySport = (e) => e.sport || "mlb"; // older graded files predate the field
+
+// Entries matching the active sport filter (record bar aggregates these).
+function historyEntries() {
+  return Object.values(calHistory).filter(
+    (e) => historySport === "all" || entrySport(e) === historySport);
+}
+// The day's entry, but only if it passes the filter (calendar uses this).
+function historyForDate(dateStr) {
+  const e = calHistory[dateStr];
+  if (!e) return null;
+  return historySport === "all" || entrySport(e) === historySport ? e : null;
+}
+
+// Filter chips: "All" plus each sport that actually has tracked data.
+function renderHistoryFilter() {
+  const el = document.getElementById("history-filter");
+  const sports = [...new Set(Object.values(calHistory).map(entrySport))];
+  if (!sports.length) { el.style.display = "none"; return; }
+  if (!sports.includes(historySport) && historySport !== "all") historySport = "all";
+  el.style.display = "flex";
+  el.innerHTML = "";
+  for (const s of ["all", ...sports]) {
+    const chip = document.createElement("button");
+    chip.className = "history-filter-chip" + (s === historySport ? " active" : "");
+    chip.textContent = SPORT_LABEL[s] || s.toUpperCase();
+    chip.addEventListener("click", () => {
+      historySport = s;
+      renderHistoryFilter();
+      renderStatsBar();
+      renderCalendar();
+    });
+    el.appendChild(chip);
+  }
+}
 
 async function loadHistory() {
   try {
@@ -233,6 +271,7 @@ async function loadHistory() {
     for (const e of data.entries || []) {
       calHistory[e.date] = e;
     }
+    renderHistoryFilter();
     renderStatsBar();
     renderCalendar();
   } catch (e) {
@@ -254,7 +293,9 @@ function renderStatsBar() {
   const statsEl = document.getElementById("history-stats");
   const metaEl = document.getElementById("history-stats-meta");
   const marketsEl = document.getElementById("history-stats-markets");
-  const entries = Object.values(calHistory);
+  const titleEl = document.querySelector(".history-stats-title");
+  if (titleEl) titleEl.textContent = historySport === "all" ? "All-Time Record" : `${historySport.toUpperCase()} Record`;
+  const entries = historyEntries();
   if (!entries.length) { statsEl.style.display = "none"; return; }
 
   const agg = {
@@ -306,6 +347,7 @@ function renderStatsBar() {
 
   for (const key of ["strikeouts", "total", "moneyline"]) {
     const m = agg[key];
+    if (m.w + m.l + m.p === 0 && m.bets === 0) continue; // no data for this market/sport
     const tot = m.w + m.l;
     const pct = tot > 0 ? ((m.w / tot) * 100).toFixed(1) : null;
     const avgBrier = m.briers.length
@@ -363,7 +405,7 @@ function renderCalendar() {
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calViewYear}-${String(calViewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const entry = calHistory[dateStr];
+    const entry = historyForDate(dateStr);
 
     const cell = document.createElement("div");
     cell.className = "cal-day";

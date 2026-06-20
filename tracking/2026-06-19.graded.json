@@ -1,0 +1,60 @@
+{
+  "date": "2026-06-19",
+  "sport": "mlb",
+  "generatedAt": "2026-06-20T09:20:58",
+  "strikeouts": {
+    "w": 19,
+    "l": 9,
+    "p": 0,
+    "brier": 0.218,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "total": {
+    "w": 6,
+    "l": 8,
+    "p": 0,
+    "brier": 0.2896,
+    "bets": 13,
+    "units": -1.38,
+    "roi": -10.6,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "moneyline": {
+    "w": 9,
+    "l": 5,
+    "p": 0,
+    "brier": 0.2173,
+    "bets": 8,
+    "units": 0.57,
+    "roi": 7.2,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "overall": {
+    "bets": 21,
+    "units": -0.81,
+    "roi": -3.8,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "totalBias": -2.75,
+  "pending": 0,
+  "games": 14
+}
