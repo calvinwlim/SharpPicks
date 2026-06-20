@@ -240,6 +240,16 @@ async function loadHistory() {
   }
 }
 
+function statCard(label, big, sub, cls) {
+  const card = document.createElement("div");
+  card.className = `history-stats-card ${cls || "even"}`;
+  card.innerHTML =
+    `<div class="hsc-label">${label}</div>` +
+    `<div class="hsc-record">${big}</div>` +
+    `<div class="hsc-sub">${sub}</div>`;
+  return card;
+}
+
 function renderStatsBar() {
   const statsEl = document.getElementById("history-stats");
   const metaEl = document.getElementById("history-stats-meta");
@@ -248,29 +258,52 @@ function renderStatsBar() {
   if (!entries.length) { statsEl.style.display = "none"; return; }
 
   const agg = {
-    strikeouts: { w: 0, l: 0, p: 0, briers: [], label: "Strikeouts" },
-    total:      { w: 0, l: 0, p: 0, briers: [], label: "Totals" },
-    moneyline:  { w: 0, l: 0, p: 0, briers: [], label: "Moneyline" },
+    strikeouts: { w: 0, l: 0, p: 0, briers: [], units: 0, bets: 0, label: "Strikeouts" },
+    total:      { w: 0, l: 0, p: 0, briers: [], units: 0, bets: 0, label: "Totals" },
+    moneyline:  { w: 0, l: 0, p: 0, briers: [], units: 0, bets: 0, label: "Moneyline" },
   };
   let totalGames = 0, totalDays = entries.length, biasSum = 0, biasCount = 0;
+  let oUnits = 0, oBets = 0, oClvSum = 0, oClvN = 0, oBeatN = 0;
 
   for (const e of entries) {
     totalGames += e.games || 0;
     if (e.totalBias != null) { biasSum += e.totalBias; biasCount++; }
+    const ov = e.overall;
+    if (ov) {
+      oUnits += ov.units || 0; oBets += ov.bets || 0;
+      oClvSum += ov.clvSum || 0; oClvN += ov.clvN || 0; oBeatN += ov.beatN || 0;
+    }
     for (const key of ["strikeouts", "total", "moneyline"]) {
       const m = e[key];
-      if (m) {
-        agg[key].w += m.w || 0;
-        agg[key].l += m.l || 0;
-        agg[key].p += m.p || 0;
-        if (m.brier != null) agg[key].briers.push(m.brier);
-      }
+      if (!m) continue;
+      agg[key].w += m.w || 0; agg[key].l += m.l || 0; agg[key].p += m.p || 0;
+      agg[key].units += m.units || 0; agg[key].bets += m.bets || 0;
+      if (m.brier != null) agg[key].briers.push(m.brier);
     }
   }
 
-  metaEl.textContent = `${totalDays} day${totalDays !== 1 ? "s" : ""} · ${totalGames} games`;
+  metaEl.textContent = `${totalDays} day${totalDays !== 1 ? "s" : ""} · ${totalGames} games`
+    + (oBets ? ` · ${oBets} +EV bets` : "");
 
   marketsEl.innerHTML = "";
+
+  // Headline betting record: ROI (did following the model make money) + CLV
+  // (did our prices beat the close — the real sharpness test).
+  if (oBets > 0) {
+    const roi = (oUnits / oBets) * 100;
+    marketsEl.appendChild(statCard("ROI",
+      `${roi >= 0 ? "+" : ""}${roi.toFixed(1)}%`,
+      `${oUnits >= 0 ? "+" : ""}${oUnits.toFixed(1)}u · ${oBets} bets`,
+      roi > 0 ? "win" : roi < 0 ? "loss" : "even"));
+  }
+  if (oClvN > 0) {
+    const clv = oClvSum / oClvN;
+    marketsEl.appendChild(statCard("CLV",
+      `${clv >= 0 ? "+" : ""}${clv.toFixed(1)}%`,
+      `beat close ${((oBeatN / oClvN) * 100).toFixed(0)}% (${oClvN})`,
+      clv > 0 ? "win" : clv < 0 ? "loss" : "even"));
+  }
+
   for (const key of ["strikeouts", "total", "moneyline"]) {
     const m = agg[key];
     const tot = m.w + m.l;
@@ -279,27 +312,21 @@ function renderStatsBar() {
       ? (m.briers.reduce((a, b) => a + b, 0) / m.briers.length).toFixed(3)
       : null;
     const winCls = tot > 0 ? (m.w > m.l ? "win" : m.l > m.w ? "loss" : "even") : "even";
-
-    const card = document.createElement("div");
-    card.className = `history-stats-card ${winCls}`;
-    card.innerHTML = `
-      <div class="hsc-label">${m.label}</div>
-      <div class="hsc-record">${m.w}-${m.l}${m.p ? `<span class="hsc-push"> · ${m.p}P</span>` : ""}</div>
-      <div class="hsc-sub">${pct !== null ? `${pct}% win` : "—"}${avgBrier !== null ? ` · Brier&nbsp;${avgBrier}` : ""}</div>
-    `;
-    marketsEl.appendChild(card);
+    const roiTxt = m.bets > 0
+      ? ` · ROI ${m.units / m.bets * 100 >= 0 ? "+" : ""}${(m.units / m.bets * 100).toFixed(1)}%` : "";
+    const sub = `${pct !== null ? `${pct}% win` : "—"}`
+      + `${avgBrier !== null ? ` · Brier&nbsp;${avgBrier}` : ""}${roiTxt}`;
+    marketsEl.appendChild(statCard(m.label,
+      `${m.w}-${m.l}${m.p ? `<span class="hsc-push"> · ${m.p}P</span>` : ""}`, sub, winCls));
   }
 
   if (biasCount > 0) {
     const avgBias = (biasSum / biasCount).toFixed(2);
-    const biasCard = document.createElement("div");
-    biasCard.className = "history-stats-card even history-stats-bias";
-    biasCard.innerHTML = `
-      <div class="hsc-label">Avg Run Bias</div>
-      <div class="hsc-record ${parseFloat(avgBias) > 0 ? "win" : parseFloat(avgBias) < 0 ? "loss" : ""}">${avgBias > 0 ? "+" : ""}${avgBias}</div>
-      <div class="hsc-sub">proj − actual runs</div>
-    `;
-    marketsEl.appendChild(biasCard);
+    const card = statCard("Avg Run Bias",
+      `<span class="${parseFloat(avgBias) > 0 ? "win" : parseFloat(avgBias) < 0 ? "loss" : ""}">${avgBias > 0 ? "+" : ""}${avgBias}</span>`,
+      "proj − actual runs", "even");
+    card.classList.add("history-stats-bias");
+    marketsEl.appendChild(card);
   }
 
   statsEl.style.display = "block";

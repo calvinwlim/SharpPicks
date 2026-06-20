@@ -40,6 +40,14 @@ python3 scripts/build_mma_finishmodel.py # fit P(distance) & P(KO|finish) -> bac
 python3 scripts/build_mma_comps.py       # matchup vectors -> backend/data/ufc_fight_vectors.json (+ holdout + ensemble validation)
 ```
 
+Or just run all four in order with one command (also what the weekly
+`SharpPicks-MMA-refresh` Windows scheduled task runs — see the script header for
+the schtasks/cron line):
+
+```bash
+python3 scripts/refresh_mma_data.py
+```
+
 Run them in that order after new events: the dataset feeds the win-model fit,
 and the comps validation reads the winner model. The **winner is a learned
 logistic** — `build_mma_winmodel.py` replays every bout point-in-time, fits
@@ -97,18 +105,22 @@ closing lines).
 Live tracking (record today's picks, grade them tonight):
 
 ```bash
-python3 track.py snapshot                 # save today's predictions to tracking/<date>.json
+python3 track.py snapshot                 # save today's predictions + bet prices -> tracking/<date>.json
+python3 track.py close                     # (optional) re-capture closing lines near game time, for CLV
 python3 track.py grade                     # once games are final, score them vs results
 python3 track.py grade --date 2026-06-14   # re-grade a specific day
 ```
 
 `track.py` is the going-forward counterpart to the backtest: `snapshot` runs the
 exact app analysis (`backend.main._analyze_mlb`) over the day's slate and saves
-each strikeout/total/moneyline prediction; `grade` pulls final scores from the
-schedule and actual strikeouts from each boxscore, then prints a W-L record +
-Brier per market (plus the day's total-runs bias). Snapshots live under
-`tracking/` (gitignored). Run `snapshot` before first pitch (no look-ahead) and
-`grade` after the games go final; pending games can be re-graded later.
+each strikeout/total/moneyline prediction **with the matched price**; `grade`
+pulls final scores + boxscores and writes `tracking/<date>.graded.json` with, per
+market: W-L + Brier (accuracy), **ROI** (flat 1u on every +EV pick at the captured
+price), and **CLV** (how much the price beat the close — only if `close` was run).
+An `overall` block aggregates the +EV betting record. The frontend History view's
+"All-Time Record" bar (`renderStatsBar`) aggregates these across days into ROI /
+CLV / per-market cards. Snapshots live under `tracking/` (gitignored). Run
+`snapshot` before first pitch, `close` near game time, `grade` after final.
 
 ## Architecture
 
