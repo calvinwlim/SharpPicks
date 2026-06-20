@@ -82,7 +82,10 @@
     </section>
 
     <section>
-      <h2 class="section-title">Slate</h2>
+      <div class="section-head">
+        <h2 class="section-title">Slate</h2>
+        <button id="analyze-all-btn" style="display: none;">⚡ Analyze all</button>
+      </div>
       <div id="slate-container">
         <div class="empty">Pick a date and hit “Load slate”.</div>
       </div>
@@ -159,6 +162,7 @@
         <div class="pitcher"></div>
       </div>
     </div>
+    <div class="card-badge" style="display: none;"></div>
     <div class="analyze-row">
       <button class="analyze-btn">Analyze</button>
       <button class="refresh-btn" title="Refresh analysis" style="display: none;">↻</button>

@@ -639,6 +639,65 @@ header.app-header {
 .mma-pick--pass { border-left-color: var(--accent); opacity: 0.82; }
 .mma-pick--pass .mma-pick-label { color: var(--accent); }
 
+/* ---- slate header + "Analyze all" --------------------------------------- */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+#analyze-all-btn {
+  background: transparent;
+  border: 1px solid var(--accent-2);
+  color: var(--accent-2);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#analyze-all-btn:hover { background: color-mix(in srgb, var(--accent-2) 14%, transparent); }
+#analyze-all-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ---- per-card headline badge (glanceable value) ------------------------- */
+.card-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  margin: 8px 0 2px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border-left: 3px solid var(--border);
+}
+.card-badge .cb-tier {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.card-badge .cb-pick {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-badge .cb-ev { font-weight: 600; color: var(--text-dim); white-space: nowrap; }
+.card-badge.cb-strong { border-left-color: var(--green); }
+.card-badge.cb-strong .cb-tier { color: var(--green); }
+.card-badge.cb-premium { border-left-color: var(--accent); }
+.card-badge.cb-premium .cb-tier { color: var(--accent); }
+.card-badge.cb-lean { border-left-color: var(--accent-2); }
+.card-badge.cb-lean .cb-tier { color: var(--accent-2); }
+.card-badge.cb-pass { border-left-color: var(--text-faint); opacity: 0.8; }
+.card-badge.cb-pass .cb-tier { color: var(--text-faint); }
+.card-badge.cb-pos .cb-ev { color: var(--green); }
+.card-badge.cb-neg .cb-ev { color: var(--text-faint); }
+
 .disclaimer {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

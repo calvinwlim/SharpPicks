@@ -459,6 +459,8 @@ document.getElementById("cal-next").addEventListener("click", () => {
 
 async function loadSlate(date) {
   slateContainer.innerHTML = '<div class="loading">Loading slate…</div>';
+  const analyzeAllBtn = document.getElementById("analyze-all-btn");
+  if (analyzeAllBtn) analyzeAllBtn.style.display = "none";
   loadYesterdayStrip(date);
   topBoardSection.style.display = "none";
   topBoardList.innerHTML = "";
@@ -494,6 +496,7 @@ async function loadSlate(date) {
 
   slateContainer.innerHTML = "";
   slateContainer.appendChild(grid);
+  if (analyzeAllBtn) analyzeAllBtn.style.display = "inline-flex";
 }
 
 function renderGameCard(game, date) {
@@ -561,15 +564,20 @@ function fillTeam(el, team) {
 
 // ---- analysis ---------------------------------------------------------------
 
+function fetchAnalysisData(game, date, ai = 0) {
+  return fetch(
+    `/api/analyze/${gameKey(game)}?date=${encodeURIComponent(date)}&sport=${currentSport}&ai=${ai}`,
+    { headers: apiHeaders() }
+  ).then((res) => {
+    if (!res.ok) throw new Error("bad response");
+    return res.json();
+  });
+}
+
 async function loadAnalysis(game, date, container, btn) {
   container.innerHTML = '<div class="loading">Crunching the numbers…</div>';
   try {
-    const ai = hasAnthropicKey() ? 1 : 0;
-    const res = await fetch(
-      `/api/analyze/${gameKey(game)}?date=${encodeURIComponent(date)}&sport=${currentSport}&ai=${ai}`,
-      { headers: apiHeaders() });
-    if (!res.ok) throw new Error("bad response");
-    const data = await res.json();
+    const data = await fetchAnalysisData(game, date, hasAnthropicKey() ? 1 : 0);
     container.dataset.loaded = "1";
     if (data.sport === "nba") {
       renderNbaAnalysis(data, game, container);
@@ -580,11 +588,78 @@ async function loadAnalysis(game, date, container, btn) {
       addToTopBoard(data, game);
       addToBetBoard(data, game);
     }
+    const card = container.closest(".game-card");
+    if (card) { card._analysisLoaded = true; setCardBadge(card, data, game); }
   } catch (e) {
     container.innerHTML = '<div class="error">Could not load analysis for this game.</div>';
     btn.textContent = "Analyze";
     container.classList.remove("open");
   }
+}
+
+// ---- per-card badge + "Analyze all" -----------------------------------------
+
+// The single headline play for a card: best +EV bet, else highest-confidence
+// pick, else a win-probability lean (NBA / games with no market).
+function headlineFor(data, game) {
+  const bets = collectBets(data, game);
+  if (bets.length) {
+    const withEv = bets.filter((b) => b.evPct != null);
+    if (withEv.length) return withEv.reduce((a, b) => (b.evPct > a.evPct ? b : a));
+    return bets.reduce((a, b) => ((b.pick.confidence || 0) > (a.pick.confidence || 0) ? b : a));
+  }
+  const gm = data.gameModel;
+  if (gm && gm.homeWinProb != null && gm.awayWinProb != null) {
+    const homeFav = gm.homeWinProb >= gm.awayWinProb;
+    const prob = homeFav ? gm.homeWinProb : gm.awayWinProb;
+    const team = homeFav ? game.home.abbr : game.away.abbr;
+    const tier = prob >= 0.7 ? "Strong" : prob >= 0.6 ? "Lean" : "Pass";
+    return { pick: { pick: `${team} ${Math.round(prob * 100)}%`, confidence: Math.round(prob * 100) },
+             evPct: null, tier, type: "Winner" };
+  }
+  return null;
+}
+
+function setCardBadge(card, data, game) {
+  const badge = card.querySelector(".card-badge");
+  if (!badge) return;
+  const h = headlineFor(data, game);
+  if (!h) { badge.style.display = "none"; return; }
+  const hasEv = h.evPct != null;
+  const evTxt = hasEv ? `${h.evPct > 0 ? "+" : ""}${h.evPct.toFixed(1)}% EV` : `${h.pick.confidence}% conf`;
+  const evClass = hasEv ? (h.evPct > 0 ? "cb-pos" : "cb-neg") : "";
+  badge.className = `card-badge cb-${(h.tier || "lean").toLowerCase()} ${evClass}`.trim();
+  badge.style.display = "flex";
+  badge.innerHTML =
+    `<span class="cb-tier">${h.tier || "Lean"}</span>` +
+    `<span class="cb-pick" title="${h.pick.pick}">${h.pick.pick}</span>` +
+    `<span class="cb-ev">${evTxt}</span>`;
+}
+
+async function quickAnalyze(card) {
+  if (card._analysisLoaded) return;
+  const analysisEl = card.querySelector(".analysis");
+  const game = JSON.parse(analysisEl.dataset.gameJson);
+  const date = analysisEl.dataset.gameDate;
+  try {
+    const data = await fetchAnalysisData(game, date, 0);
+    card._analysisLoaded = true;
+    addToTopBoard(data, game);
+    addToBetBoard(data, game);
+    setCardBadge(card, data, game);
+  } catch (e) {
+    /* leave the card un-badged on failure */
+  }
+}
+
+async function analyzeAll() {
+  const btn = document.getElementById("analyze-all-btn");
+  const cards = Array.from(slateContainer.querySelectorAll(".game-card"));
+  if (btn) { btn.disabled = true; btn.textContent = "Analyzing…"; }
+  const queue = cards.slice();
+  const worker = async () => { while (queue.length) await quickAnalyze(queue.shift()); };
+  await Promise.all(Array.from({ length: 4 }, worker)); // limited concurrency
+  if (btn) { btn.disabled = false; btn.textContent = "⚡ Analyze all"; }
 }
 
 function renderAnalysis(data, game, container) {
@@ -1319,11 +1394,9 @@ function addToTopBoard(data, game) {
 
 // ---- bet board sidebar ------------------------------------------------------
 
-function addToBetBoard(data, game) {
-  const key = gameKey(game);
-  // On refresh, drop this game's previous entries before re-adding.
-  betItems = betItems.filter((it) => gameKey(it.game) !== key);
-
+// Single source of truth for a game's bettable picks (prop/moneyline picks +,
+// for MLB, the game-model markets). Reused by the bet board and the card badge.
+function collectBets(data, game) {
   const added = [];
 
   for (const pick of boardPicks(data)) {
@@ -1342,10 +1415,7 @@ function addToBetBoard(data, game) {
             pick: `${game[side].abbr} ML (${m.price > 0 ? "+" : ""}${m.price})`,
             confidence: Math.round(m.modelProb * 100),
           },
-          game,
-          evPct: m.evPct,
-          tier: "Strong",
-          type: "Moneyline",
+          game, evPct: m.evPct, tier: "Strong", type: "Moneyline",
         });
       }
     }
@@ -1368,7 +1438,14 @@ function addToBetBoard(data, game) {
       });
     }
   }
+  return added;
+}
 
+function addToBetBoard(data, game) {
+  const key = gameKey(game);
+  // On refresh, drop this game's previous entries before re-adding.
+  betItems = betItems.filter((it) => gameKey(it.game) !== key);
+  const added = collectBets(data, game);
   betItems.push(...added);
 
   for (const item of added) {
@@ -1465,6 +1542,7 @@ function renderBetBoard() {
 
 dateInput.value = todayISO();
 loadBtn.addEventListener("click", () => loadSlate(dateInput.value));
+document.getElementById("analyze-all-btn").addEventListener("click", analyzeAll);
 
 const slateView = document.getElementById("slate-view");
 const historyView = document.getElementById("history-view");
