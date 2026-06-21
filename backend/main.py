@@ -128,7 +128,8 @@ async def analyze(game_id: str, date: str, seasons: int = 4, ai: int = 0, sport:
                    x_anthropic_api_key: Optional[str] = AnthropicKeyHeader,
                    x_odds_player_props: Optional[str] = PlayerPropsHeader) -> Dict[str, Any]:
     if sport == "nba":
-        return await _analyze_nba(game_id, date, x_odds_api_key, x_anthropic_api_key)
+        return await _analyze_nba(game_id, date, x_odds_api_key, x_anthropic_api_key,
+                                  props_override=x_odds_player_props)
     if sport == "mma":
         return await _analyze_mma(game_id, date, x_odds_api_key, x_anthropic_api_key)
     return await _analyze_mlb(int(game_id), date, seasons, ai, x_odds_api_key, x_anthropic_api_key,
@@ -252,8 +253,15 @@ def _mma_moneyline_picks(a_name: str, b_name: str, a_win: float, b_win: float,
     return out
 
 
+NBA_PROP_MARKETS = {  # our prop propType -> Odds API market key
+    "nba_pts": "player_points", "nba_reb": "player_rebounds",
+    "nba_ast": "player_assists", "nba_fg3m": "player_threes",
+}
+
+
 async def _analyze_nba(game_id: str, date: str, odds_key: Optional[str] = None,
-                        anthropic_key: Optional[str] = None) -> Dict[str, Any]:
+                        anthropic_key: Optional[str] = None,
+                        props_override: Optional[str] = None) -> Dict[str, Any]:
     games = await nba.get_schedule(date)
     game = next((g for g in games if g["gameId"] == game_id), None)
     if game is None:
@@ -300,17 +308,70 @@ async def _analyze_nba(game_id: str, date: str, odds_key: Optional[str] = None,
     except Exception:
         h2h = None
 
+    # ---- odds: match the event, get game lines + (gated) player-prop lines ----
+    props_on = odds.player_props_enabled(props_override)
+    market_event: Optional[Dict[str, Any]] = None
+    game_lines: Dict[str, Any] = {}
+    prop_markets: Dict[str, Dict[str, Any]] = {}
+    odds_note: Optional[str] = None
+    if odds.has_key(odds_key):
+        try:
+            events = await odds.get_nba_game_markets(odds.client(), odds_key)
+            if not events:
+                odds_note = "No upcoming NBA events from Odds API — games may be over or your quota is exhausted."
+            else:
+                market_event = odds.match_event(events, home["name"], away["name"])
+                if market_event is None:
+                    odds_note = f"Game not found in Odds API ({len(events)} NBA events available)."
+                else:
+                    game_lines = odds.nba_game_lines(market_event, home["name"], away["name"])
+                    if props_on:
+                        eid = market_event["id"]
+                        results = await asyncio.gather(*[
+                            odds.get_nba_player_props(odds.client(), eid, mk, odds_key, enabled=True)
+                            for mk in NBA_PROP_MARKETS.values()], return_exceptions=True)
+                        for ptype, res in zip(NBA_PROP_MARKETS, results):
+                            prop_markets[ptype] = res if not isinstance(res, Exception) else {}
+        except Exception as exc:
+            err = str(exc).lower()
+            if "401" in err or "unauthorized" in err:
+                odds_note = "Odds API key rejected (401) — check that the key is correct."
+            elif "402" in err or "quota" in err:
+                odds_note = "Odds API quota exceeded — your monthly request limit may be exhausted."
+            elif "429" in err:
+                odds_note = "Odds API rate limit hit — too many requests in a short period."
+            else:
+                odds_note = "Could not fetch NBA odds (network error) — showing analysis only."
+
+    gm_market = {}
+    if game_lines.get("spread"):
+        gm_market["spread"] = game_lines["spread"]["line"]
+    if game_lines.get("total"):
+        gm_market["total"] = game_lines["total"]["line"]
+
     game_model = nba_analysis.nba_game_model(
         home, away, ratings, recent=recent, home_rest=home_rest, away_rest=away_rest,
-        h2h=h2h, home_split_net=home_split_net, away_split_net=away_split_net,
+        market=gm_market or None, h2h=h2h, home_split_net=home_split_net, away_split_net=away_split_net,
     )
+
+    # Moneyline EV (vig-removed) — the model's win prob vs the price.
+    ml = game_lines.get("moneyline")
+    if ml and ml.get("home") is not None and ml.get("away") is not None:
+        fair_h, fair_a = odds.devig_two(ml["home"], ml["away"])
+        hw = game_model["homeWinProb"]
+        game_model["moneyline"] = {
+            "home": odds.moneyline_edge(hw, ml["home"], fair_h),
+            "away": odds.moneyline_edge(1 - hw, ml["away"], fair_a),
+        }
 
     picks: List[Dict[str, Any]] = []
     if players:
-        picks = await _nba_player_picks(home, away, season, ratings, opp_stats, players, game_model["pace"])
+        picks = await _nba_player_picks(home, away, season, ratings, opp_stats, players,
+                                        game_model["pace"], prop_markets)
 
     return {"gameId": game_id, "sport": "nba", "game": game, "gameModel": game_model,
-            "picks": picks, "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
+            "picks": picks, "oddsNote": odds_note,
+            "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
 
 
 async def _nba_h2h(home_id: int, away_id: int, season: str, before_date: str):
@@ -338,7 +399,8 @@ NBA_PLAYER_PICK_CAP = 14
 NBA_PLAYERS_PER_TEAM = 6
 
 
-async def _nba_player_picks(home, away, season, ratings, opp_stats, players, exp_pace):
+async def _nba_player_picks(home, away, season, ratings, opp_stats, players, exp_pace, prop_markets=None):
+    prop_markets = prop_markets or {}
     # Select the rotation (top by minutes) for both teams, then fetch all their
     # game logs concurrently (a semaphore keeps stats.nba.com from throttling).
     selected = []  # (team, opp, pid, player)
@@ -369,12 +431,14 @@ async def _nba_player_picks(home, away, season, ratings, opp_stats, players, exp
         for stat_key, label, noun, opp_key, std_floor, thresh in nba_analysis.PLAYER_PROP_SPECS:
             if p.get(stat_key, 0) < thresh:
                 continue
+            market = prop_markets.get(f"nba_{stat_key}", {}).get(odds.norm(p["name"]))
             pick = nba_analysis.analyze_nba_player_prop(
                 player_name=p["name"], stat_key=stat_key, stat_label=label, stat_noun=noun,
                 gamelog=glog, season_avg=p[stat_key],
                 opp_allowed=opp_stats.get("teams", {}).get(opp["id"], {}).get(opp_key),
                 league_allowed=opp_stats.get("league", {}).get(opp_key),
-                opp_abbr=opp["abbr"], exp_pace=exp_pace, team_pace=team_pace, std_floor=std_floor)
+                opp_abbr=opp["abbr"], exp_pace=exp_pace, team_pace=team_pace, std_floor=std_floor,
+                market=market)
             if pick is not None:
                 picks.append(pick)
 

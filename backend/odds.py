@@ -15,6 +15,7 @@ from .cache import cache
 ODDS_BASE = "https://api.the-odds-api.com/v4"
 SPORT_KEY = "baseball_mlb"
 MMA_SPORT_KEY = "mma_mixed_martial_arts"
+NBA_SPORT_KEY = "basketball_nba"
 
 _client: Optional[httpx.AsyncClient] = None
 
@@ -84,12 +85,14 @@ async def get_game_markets(c: httpx.AsyncClient, api_key: Optional[str] = None) 
 
 async def get_pitcher_props(c: httpx.AsyncClient, event_id: str, market_key: str,
                              api_key: Optional[str] = None,
-                             enabled: Optional[bool] = None) -> Dict[str, Dict[str, Any]]:
-    """``{normalized_pitcher_name: {"line": float, "over": int, "under": int}}`` for ``market_key``.
+                             enabled: Optional[bool] = None,
+                             sport_key: str = SPORT_KEY) -> Dict[str, Dict[str, Any]]:
+    """``{normalized_player_name: {"line": float, "over": int, "under": int}}`` for ``market_key``.
 
-    ``market_key`` is an Odds API player-prop market, e.g. ``"pitcher_strikeouts"``
-    or ``"pitcher_walks"``. ``enabled`` is the effective per-request props flag
-    (computed by the caller from header + env); ``None`` falls back to the env.
+    ``market_key`` is an Odds API player-prop market (``"pitcher_strikeouts"``,
+    ``"player_points"``, …). ``sport_key`` selects the league so the same
+    over/under fetch serves MLB and NBA. ``enabled`` is the effective per-request
+    props flag (header + env); ``None`` falls back to the env.
     """
     props_on = enabled if enabled is not None else player_props_enabled()
     if not has_key(api_key) or not props_on:
@@ -97,7 +100,7 @@ async def get_pitcher_props(c: httpx.AsyncClient, event_id: str, market_key: str
 
     async def fetch() -> Dict[str, Dict[str, Any]]:
         r = await c.get(
-            f"{ODDS_BASE}/sports/{SPORT_KEY}/events/{event_id}/odds",
+            f"{ODDS_BASE}/sports/{sport_key}/events/{event_id}/odds",
             params={
                 "apiKey": _key(api_key),
                 "regions": "us",
@@ -126,7 +129,7 @@ async def get_pitcher_props(c: httpx.AsyncClient, event_id: str, market_key: str
                 break
         return {k: v for k, v in out.items() if "over" in v and "under" in v and v.get("line") is not None}
 
-    cache_key = f"odds:props:{market_key}:{event_id}" if not api_key else f"odds:props:{market_key}:{event_id}:{api_key[-6:]}"
+    cache_key = f"odds:props:{sport_key}:{market_key}:{event_id}" if not api_key else f"odds:props:{sport_key}:{market_key}:{event_id}:{api_key[-6:]}"
     return await cache.get_or_set(cache_key, 300, fetch)
 
 
@@ -270,6 +273,68 @@ def best_mma_moneyline(event: Dict[str, Any], fighter_name: str) -> Optional[int
                     if price is not None and (best is None or price > best):
                         best = price
     return best
+
+
+# --------------------------------------------------------------------------- NBA
+
+async def get_nba_game_markets(c: httpx.AsyncClient, api_key: Optional[str] = None) -> List[Dict[str, Any]]:
+    """All of today's NBA events with moneyline (h2h), spread, and total odds."""
+    if not has_key(api_key):
+        return []
+
+    async def fetch() -> List[Dict[str, Any]]:
+        r = await c.get(
+            f"{ODDS_BASE}/sports/{NBA_SPORT_KEY}/odds",
+            params={"apiKey": _key(api_key), "regions": "us",
+                    "markets": "h2h,spreads,totals", "oddsFormat": "american"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+    cache_key = "odds:nba_game_markets" if not api_key else f"odds:nba_game_markets:{api_key[-6:]}"
+    return await cache.get_or_set(cache_key, 300, fetch)
+
+
+def nba_game_lines(event: Dict[str, Any], home_name: str, away_name: str) -> Dict[str, Any]:
+    """First book's home spread, game total, and moneylines from an NBA event,
+    shaped for ``nba_game_model`` + moneyline EV."""
+    out: Dict[str, Any] = {}
+    for bm in event.get("bookmakers", []):
+        for market in bm.get("markets", []):
+            key = market.get("key")
+            if key == "h2h" and "moneyline" not in out:
+                ml: Dict[str, Any] = {}
+                for o in market.get("outcomes", []):
+                    if _team_matches(o.get("name", ""), home_name):
+                        ml["home"] = o.get("price")
+                    elif _team_matches(o.get("name", ""), away_name):
+                        ml["away"] = o.get("price")
+                if "home" in ml and "away" in ml:
+                    out["moneyline"] = ml
+            elif key == "spreads" and "spread" not in out:
+                for o in market.get("outcomes", []):
+                    if _team_matches(o.get("name", ""), home_name) and o.get("point") is not None:
+                        out["spread"] = {"line": o.get("point"), "price": o.get("price")}
+            elif key == "totals" and "total" not in out:
+                entry: Dict[str, Any] = {}
+                for o in market.get("outcomes", []):
+                    side = (o.get("name") or "").lower()
+                    if side in ("over", "under"):
+                        entry["line"] = o.get("point", entry.get("line"))
+                        entry[side] = o.get("price")
+                if "over" in entry and "under" in entry and entry.get("line") is not None:
+                    out["total"] = entry
+        if {"moneyline", "spread", "total"} <= out.keys():
+            break
+    return out
+
+
+async def get_nba_player_props(c: httpx.AsyncClient, event_id: str, market_key: str,
+                                api_key: Optional[str] = None,
+                                enabled: Optional[bool] = None) -> Dict[str, Dict[str, Any]]:
+    """NBA player over/under props (``player_points`` / ``player_rebounds`` /
+    ``player_assists`` / ``player_threes``) keyed by normalized player name."""
+    return await get_pitcher_props(c, event_id, market_key, api_key, enabled, sport_key=NBA_SPORT_KEY)
 
 
 # --------------------------------------------------------------------------- betting math

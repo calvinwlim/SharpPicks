@@ -1021,6 +1021,14 @@ function renderNrfiCard(nrfi) {
 
 function renderNbaAnalysis(data, game, container) {
   container.innerHTML = "";
+
+  if (data.oddsNote) {
+    const note = document.createElement("div");
+    note.className = "odds-note";
+    note.textContent = `⚠ Odds: ${data.oddsNote}`;
+    container.appendChild(note);
+  }
+
   const gm = data.gameModel;
   if (!gm) {
     container.innerHTML = '<div class="empty">No model output for this game.</div>';
@@ -1039,9 +1047,13 @@ function renderNbaAnalysis(data, game, container) {
   container.appendChild(node);
 
   container.appendChild(renderNbaScoreCard(gm, away, home));
+  if (gm.moneyline) container.appendChild(renderMoneylineCard(gm.moneyline, game));
   if (gm.signals && gm.signals.length) {
     container.appendChild(renderNbaSignals(gm, away, home));
   }
+
+  addToTopBoard(data, game);
+  addToBetBoard(data, game);
 
   if (data.picks && data.picks.length) {
     const heading = document.createElement("div");

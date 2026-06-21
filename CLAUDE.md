@@ -157,13 +157,19 @@ all keys stay server-side.
 
 - `GET /api/health` → `{ ok, flags }`
 - `GET /api/slate?date=YYYY-MM-DD&sport=mlb|nba` → `{ date, sport, count, games[], flags }` (fast; schedule only)
-- `GET /api/analyze/{gameId}?date=&sport=mlb|nba&seasons=4&ai=0` → MLB: `{ gamePk, game, picks[], gameModel, ... }`; NBA: `{ gameId, sport, game, gameModel }`
+- `GET /api/analyze/{gameId}?date=&sport=mlb|nba&seasons=4&ai=0` → MLB: `{ gamePk, game, picks[], gameModel, ... }`; NBA: `{ gameId, sport, game, gameModel, picks[], oddsNote }`
 
 `flags = { hasOdds, playerProps, hasAI }` drives the UI status pills. `sport`
 defaults to `mlb`. The NBA `gameModel` carries `homeWinProb`/`awayWinProb`,
 `home/awayProjScore`, `projMargin`, `modelHomeSpread`, `projTotal`, `pace`,
-`ratings`, `rest`, and `signals[]` (`{label,detail,lean}`, lean ∈
-home/away/over/under/neutral). NBA is game-level only so far (no player props yet).
+`ratings`, `rest`, `signals[]` (`{label,detail,lean}`, lean ∈
+home/away/over/under/neutral), and — when odds are matched — `moneyline` EV and
+`spread`/`total` model probs. NBA also returns **player props** (`picks[]`):
+points/rebounds/assists/threes via `nba_analysis.analyze_nba_player_prop`
+(season+recent blend × opponent-allowed × pace, normal over/under). With the
+player-props toggle on, the `player_points`/`rebounds`/`assists`/`threes` markets
+are matched per pick and graded at the real line with EV/Kelly (`hasMarket`/`edge`,
+same shape as MLB props); otherwise analysis-only on a projection-centered line.
 
 A **pick** (see `analyze_strikeouts`) carries: `pick`, `side`, `line`,
 `projection`, `modelProb`, `confidence`, `tier`, `splits[]` (`{label,hits,n,rate}`),

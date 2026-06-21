@@ -16,6 +16,8 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import odds
+
 # --------------------------------------------------------------------------- tunables
 
 NBA_HCA = 2.8              # home-court advantage in points (well-established ~2.5-3)
@@ -280,13 +282,17 @@ def analyze_nba_player_prop(
     exp_pace: Optional[float],
     team_pace: Optional[float],
     std_floor: float,
+    market: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Grade an NBA player counting prop (points/rebounds/assists/threes).
 
     Projection = season average blended with recent form, scaled by how much the
     opponent allows of this stat (relative to league) and the expected pace
     (more possessions -> more counting stats). Over/under via a normal with the
-    player's own game-to-game std (floored). Same pick-dict shape as MLB props.
+    player's own game-to-game std (floored). When ``market`` (a real book line +
+    over/under prices) is supplied, the projection is graded against *that* line
+    and a vig-removed EV/Kelly edge is attached; otherwise the line is centered on
+    the projection (analysis only). Same pick-dict shape as MLB props.
     """
     if len(gamelog) < NBA_PLAYER_MIN_GAMES:
         return None
@@ -305,15 +311,34 @@ def analyze_nba_player_prop(
     projection = baseline * opp_factor * pace_factor
     std = max(_stdev([r.get(stat_key, 0.0) for r in recent]), std_floor)
 
-    # Pick the side the projection favors around the nearest line.
-    center = max(round(projection), 1)
-    over_line, under_line = center - 0.5, center + 0.5
-    p_over = 1.0 - normal_cdf((over_line - projection) / std)
-    p_under = normal_cdf((under_line - projection) / std)
-    if p_over >= p_under:
-        side, line, model_prob = "over", over_line, p_over
+    edge: Optional[Dict[str, Any]] = None
+    has_market = False
+    if market and market.get("over") is not None and market.get("under") is not None and market.get("line") is not None:
+        # Grade the real book line and attach a vig-removed EV/Kelly edge.
+        line = float(market["line"])
+        p_over = 1.0 - normal_cdf((line - projection) / std)
+        p_under = 1.0 - p_over
+        side, model_prob = ("over", p_over) if p_over >= p_under else ("under", p_under)
+        price = market["over"] if side == "over" else market["under"]
+        fair_over, fair_under = odds.devig_two(market["over"], market["under"])
+        fair_prob = fair_over if side == "over" else fair_under
+        edge = {
+            "decimal": round(odds.american_to_decimal(price), 3), "price": price,
+            "modelProb": round(model_prob, 4), "marketProb": round(odds.implied_prob(price), 4),
+            "fairProb": round(fair_prob, 4), "evPct": round(odds.ev_pct(model_prob, price), 2),
+            "kellyPct": round(odds.kelly_pct(model_prob, price), 2),
+        }
+        has_market = True
     else:
-        side, line, model_prob = "under", under_line, p_under
+        # No line: center on the projection (analysis only).
+        center = max(round(projection), 1)
+        over_line, under_line = center - 0.5, center + 0.5
+        p_over = 1.0 - normal_cdf((over_line - projection) / std)
+        p_under = normal_cdf((under_line - projection) / std)
+        if p_over >= p_under:
+            side, line, model_prob = "over", over_line, p_over
+        else:
+            side, line, model_prob = "under", under_line, p_under
 
     # Splits.
     def hit(r: Dict[str, Any]) -> bool:
@@ -369,6 +394,6 @@ def analyze_nba_player_prop(
         "modelProb": round(model_prob, 4),
         "confidence": confidence, "tier": tier,
         "splits": splits, "spark": spark, "signals": signals,
-        "edge": None, "hasMarket": False, "lowSample": low_sample,
+        "edge": edge, "hasMarket": has_market, "lowSample": low_sample,
         "opponent": opp_abbr,
     }
