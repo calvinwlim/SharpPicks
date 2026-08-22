@@ -140,3 +140,6 @@ async def track_summary(date: str) -> Dict[str, Any]:
     summary["graded"] = True
     return summary
 
+
+# Serve the static frontend — must come after all API routes.
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
