@@ -51,9 +51,15 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
 
     ESPN's single-date MMA filter returns nothing, so we query a small window
     around the date and keep events whose card date matches.
+
+    UFC events start late evening US time (10pm ET / 7pm PT), which is 2–3am UTC
+    the following calendar day. ESPN stores timestamps in UTC, so an Aug 22 US
+    event commonly appears with date "2026-08-23" in the API. We accept events
+    whose UTC date is the requested date OR the next calendar day to handle this.
     """
     import datetime
     d = datetime.date.fromisoformat(date)
+    next_day = (d + datetime.timedelta(days=1)).isoformat()
     window = f"{(d - datetime.timedelta(days=3)):%Y%m%d}-{(d + datetime.timedelta(days=3)):%Y%m%d}"
 
     async def fetch() -> List[Dict[str, Any]]:
@@ -63,7 +69,8 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
         data = r.json()
         fights: List[Dict[str, Any]] = []
         for event in data.get("events", []):
-            if (event.get("date") or "")[:10] != date:
+            event_utc_date = (event.get("date") or "")[:10]
+            if event_utc_date not in (date, next_day):
                 continue
             card = event.get("name", "")
             headliner = card.split(":")[-1].lower() if ":" in card else ""
@@ -76,7 +83,7 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
                 rounds = 5 if (a["abbr"].lower() in headliner and b["abbr"].lower() in headliner) else 3
                 fights.append({
                     "gameId": str(comp.get("id")),
-                    "date": (comp.get("date") or event.get("date") or "")[:10],
+                    "date": date,  # normalize to requested date regardless of UTC offset
                     "event": card,
                     "weightClass": (comp.get("type") or {}).get("text") if isinstance(comp.get("type"), dict) else None,
                     "rounds": rounds,
