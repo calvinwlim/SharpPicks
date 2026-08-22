@@ -70,8 +70,13 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
             data = r.json()
         except Exception:
             return []
+        # ESPN sometimes nests events under leagues[0].events instead of top-level events
+        raw_events = data.get("events") or []
+        if not raw_events:
+            leagues = data.get("leagues") or []
+            raw_events = leagues[0].get("events", []) if leagues else []
         fights: List[Dict[str, Any]] = []
-        for event in data.get("events", []):
+        for event in raw_events:
             event_utc_date = (event.get("date") or "")[:10]
             if event_utc_date not in (date, next_day):
                 continue
