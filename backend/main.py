@@ -109,10 +109,17 @@ async def debug_mma(date: str) -> Dict[str, Any]:
                     events = data.get("events") or []
                     leagues = data.get("leagues") or []
                     league_events = leagues[0].get("events", []) if leagues else []
+                    ev = events[0] if events else (league_events[0] if league_events else {})
+                    comps = ev.get("competitions") or []
+                    first_comp = comps[0] if comps else {}
                     results[label] = {
                         "status": r.status_code, "top_keys": list(data.keys()),
                         "event_count": len(events), "league_event_count": len(league_events),
-                        "sample_date": (events[0] if events else (league_events[0] if league_events else {})).get("date"),
+                        "sample_event_keys": list(ev.keys()),
+                        "sample_date": ev.get("date"),
+                        "competition_count": len(comps),
+                        "first_comp_keys": list(first_comp.keys()) if first_comp else None,
+                        "first_comp_competitor_count": len(first_comp.get("competitors", [])),
                     }
                 except Exception:
                     results[label] = {"status": r.status_code, "parse_error": True, "raw_preview": raw}
