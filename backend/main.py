@@ -109,9 +109,12 @@ async def debug_mma(date: str) -> Dict[str, Any]:
                     events = data.get("events") or []
                     leagues = data.get("leagues") or []
                     league_events = leagues[0].get("events", []) if leagues else []
+                    import json as _json
                     ev = events[0] if events else (league_events[0] if league_events else {})
                     comps = ev.get("competitions") or []
                     first_comp = comps[0] if comps else {}
+                    first_comp_competitors = first_comp.get("competitors", [])
+                    first_comp_competitor_sample = first_comp_competitors[0] if first_comp_competitors else {}
                     results[label] = {
                         "status": r.status_code, "top_keys": list(data.keys()),
                         "event_count": len(events), "league_event_count": len(league_events),
@@ -119,7 +122,9 @@ async def debug_mma(date: str) -> Dict[str, Any]:
                         "sample_date": ev.get("date"),
                         "competition_count": len(comps),
                         "first_comp_keys": list(first_comp.keys()) if first_comp else None,
-                        "first_comp_competitor_count": len(first_comp.get("competitors", [])),
+                        "first_comp_competitor_count": len(first_comp_competitors),
+                        "first_competitor_keys": list(first_comp_competitor_sample.keys()) if first_comp_competitor_sample else None,
+                        "first_event_raw": _json.dumps(ev)[:1500] if ev else None,
                     }
                 except Exception:
                     results[label] = {"status": r.status_code, "parse_error": True, "raw_preview": raw}
