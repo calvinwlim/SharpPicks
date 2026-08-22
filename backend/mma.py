@@ -64,9 +64,12 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
 
     async def fetch() -> List[Dict[str, Any]]:
         c = client()
-        r = await c.get(SCOREBOARD, params={"dates": window})
-        r.raise_for_status()
-        data = r.json()
+        try:
+            r = await c.get(SCOREBOARD, params={"dates": window})
+            r.raise_for_status()
+            data = r.json()
+        except Exception:
+            return []
         fights: List[Dict[str, Any]] = []
         for event in data.get("events", []):
             event_utc_date = (event.get("date") or "")[:10]
