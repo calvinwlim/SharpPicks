@@ -93,7 +93,7 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
                     "gameId": str(comp.get("id")),
                     "date": date,  # normalize to requested date regardless of UTC offset
                     "event": card,
-                    "weightClass": (comp.get("type") or {}).get("text") if isinstance(comp.get("type"), dict) else None,
+                    "weightClass": ((comp.get("type") or {}).get("text") or (comp.get("type") or {}).get("abbreviation")) if isinstance(comp.get("type"), dict) else None,
                     "rounds": rounds,
                     "status": comp.get("status", {}).get("type", {}).get("shortDetail", ""),
                     "away": a, "home": b,
