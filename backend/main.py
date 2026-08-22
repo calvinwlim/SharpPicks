@@ -83,32 +83,42 @@ async def slate(date: str, sport: str = "mlb",
 async def debug_mma(date: str) -> Dict[str, Any]:
     """Return raw ESPN API response structure so we can diagnose parsing issues."""
     import datetime
+    import httpx as _httpx
     d = datetime.date.fromisoformat(date)
     next_day = (d + datetime.timedelta(days=1)).isoformat()
     window = f"{(d - datetime.timedelta(days=3)):%Y%m%d}-{(d + datetime.timedelta(days=3)):%Y%m%d}"
-    c = mma.client()
-    try:
-        r = await c.get(mma.SCOREBOARD, params={"dates": window})
-        data = r.json()
-    except Exception as e:
-        return {"error": str(e), "window": window}
-    top_keys = list(data.keys())
-    events = data.get("events") or []
-    leagues = data.get("leagues") or []
-    league_events = leagues[0].get("events", []) if leagues else []
-    sample_event = events[0] if events else (league_events[0] if league_events else None)
-    return {
-        "window": window,
-        "date_checked": [date, next_day],
-        "http_status": r.status_code,
-        "top_keys": top_keys,
-        "event_count_top": len(events),
-        "league_count": len(leagues),
-        "league_event_count": len(league_events),
-        "sample_event_keys": list(sample_event.keys()) if sample_event else None,
-        "sample_event_date": (sample_event or {}).get("date"),
-        "sample_competition_count": len((sample_event or {}).get("competitions", [])),
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.espn.com/mma/",
+        "Origin": "https://www.espn.com",
     }
+    results = {}
+    async with _httpx.AsyncClient(timeout=15.0, headers=headers, follow_redirects=True) as c:
+        for label, params in [
+            ("range", {"dates": window}),
+            ("single", {"dates": date.replace("-", "")}),
+            ("no_param", {}),
+        ]:
+            try:
+                r = await c.get(mma.SCOREBOARD, params=params)
+                raw = r.text[:800]
+                try:
+                    data = r.json()
+                    events = data.get("events") or []
+                    leagues = data.get("leagues") or []
+                    league_events = leagues[0].get("events", []) if leagues else []
+                    results[label] = {
+                        "status": r.status_code, "top_keys": list(data.keys()),
+                        "event_count": len(events), "league_event_count": len(league_events),
+                        "sample_date": (events[0] if events else (league_events[0] if league_events else {})).get("date"),
+                    }
+                except Exception:
+                    results[label] = {"status": r.status_code, "parse_error": True, "raw_preview": raw}
+            except Exception as e:
+                results[label] = {"fetch_error": str(e)}
+    return {"window": window, "date": date, "next_day": next_day, "results": results}
 
 
 _REPO_ROOT = Path(__file__).parent.parent
