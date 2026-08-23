@@ -37,6 +37,9 @@ class TTLCache:
             self._store[key] = (now + ttl, value)
             return value
 
+    def invalidate(self, key: str) -> None:
+        self._store.pop(key, None)
+
     def clear(self) -> None:
         self._store.clear()
 

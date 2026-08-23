@@ -7,11 +7,14 @@ analyzable unit (like a game in the other sports).
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 from .cache import cache
+
+log = logging.getLogger(__name__)
 
 SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard"
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
@@ -64,17 +67,24 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
 
     async def fetch() -> List[Dict[str, Any]]:
         c = client()
-        try:
-            r = await c.get(SCOREBOARD, params={"dates": window})
-            r.raise_for_status()
-            data = r.json()
-        except Exception:
-            return []
-        # ESPN sometimes nests events under leagues[0].events instead of top-level events
-        raw_events = data.get("events") or []
-        if not raw_events:
-            leagues = data.get("leagues") or []
-            raw_events = leagues[0].get("events", []) if leagues else []
+        raw_events: List[Dict[str, Any]] = []
+        # Try date-range query first; if ESPN returns nothing (common for current/upcoming
+        # events), fall back to the no-param call which always returns the live card.
+        for params in ({"dates": window}, {}):
+            try:
+                r = await c.get(SCOREBOARD, params=params)
+                r.raise_for_status()
+                data = r.json()
+            except Exception as e:
+                log.warning("ESPN MMA fetch failed (params=%s): %s", params, e)
+                continue
+            evs = data.get("events") or []
+            if not evs:
+                leagues = data.get("leagues") or []
+                evs = leagues[0].get("events", []) if leagues else []
+            raw_events = evs
+            if raw_events:
+                break
         fights: List[Dict[str, Any]] = []
         for event in raw_events:
             event_utc_date = (event.get("date") or "")[:10]
@@ -100,4 +110,10 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
                 })
         return fights
 
-    return await cache.get_or_set(f"mma:schedule:{date}", 3600, fetch)
+    key = f"mma:schedule:{date}"
+    fights = await cache.get_or_set(key, 3600, fetch)
+    # Never cache an empty card: a transient ESPN failure would otherwise show
+    # "no fights" for a full hour even once ESPN recovers.
+    if not fights:
+        cache.invalidate(key)
+    return fights
