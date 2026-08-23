@@ -64,17 +64,23 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
 
     async def fetch() -> List[Dict[str, Any]]:
         c = client()
-        try:
-            r = await c.get(SCOREBOARD, params={"dates": window})
-            r.raise_for_status()
-            data = r.json()
-        except Exception:
-            return []
-        # ESPN sometimes nests events under leagues[0].events instead of top-level events
-        raw_events = data.get("events") or []
-        if not raw_events:
-            leagues = data.get("leagues") or []
-            raw_events = leagues[0].get("events", []) if leagues else []
+        raw_events: List[Dict[str, Any]] = []
+        # Try date-range query first; if ESPN returns nothing (common for current/upcoming
+        # events), fall back to the no-param call which always returns the live card.
+        for params in ({"dates": window}, {}):
+            try:
+                r = await c.get(SCOREBOARD, params=params)
+                r.raise_for_status()
+                data = r.json()
+            except Exception:
+                continue
+            evs = data.get("events") or []
+            if not evs:
+                leagues = data.get("leagues") or []
+                evs = leagues[0].get("events", []) if leagues else []
+            raw_events = evs
+            if raw_events:
+                break
         fights: List[Dict[str, Any]] = []
         for event in raw_events:
             event_utc_date = (event.get("date") or "")[:10]
