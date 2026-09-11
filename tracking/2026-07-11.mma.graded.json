@@ -1,0 +1,62 @@
+{
+  "date": "2026-07-11",
+  "sport": "mma",
+  "generatedAt": "2026-09-11T11:12:29",
+  "backfilled": true,
+  "accuracyOnly": true,
+  "backfillNote": "Reconstructed point-in-time (fighter profiles built from prior bouts only). Accuracy only \u2014 no historical prices, so no ROI or CLV. Caveat: the winner model's coefficients were fit on a bout set that includes these fights (~1% of training rows), so this is mildly in-sample \u2014 the same property mma_backtest.py has.",
+  "moneyline": {
+    "w": 5,
+    "l": 4,
+    "p": 0,
+    "brier": 0.248,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "method": {
+    "w": 5,
+    "l": 4,
+    "p": 0,
+    "brier": 0.2192,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "distance": {
+    "w": 8,
+    "l": 1,
+    "p": 0,
+    "brier": 0.1597,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "overall": {
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "pending": 0,
+  "games": 9
+}

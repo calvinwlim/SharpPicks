@@ -1,0 +1,63 @@
+{
+  "date": "2026-06-28",
+  "sport": "mlb",
+  "generatedAt": "2026-09-11T11:12:39",
+  "backfilled": true,
+  "accuracyOnly": true,
+  "backfillNote": "Reconstructed point-in-time (game logs truncated to before this date, opponent offense as-of, prior-season baselines). Accuracy only \u2014 no historical prices exist for past dates, so no ROI or CLV. Totals and moneyline are graded at a reference 8.5 line / 50% threshold, not a real market line.",
+  "strikeouts": {
+    "w": 18,
+    "l": 9,
+    "p": 0,
+    "brier": 0.2299,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "total": {
+    "w": 7,
+    "l": 8,
+    "p": 0,
+    "brier": 0.2721,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "moneyline": {
+    "w": 10,
+    "l": 5,
+    "p": 0,
+    "brier": 0.2403,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "overall": {
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "pending": 0,
+  "games": 15,
+  "totalBias": 0.489
+}

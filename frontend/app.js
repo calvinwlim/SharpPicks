@@ -342,8 +342,13 @@ function renderStatsBar() {
     }
   }
 
+  // Be explicit about the mix. W-L and Brier below span both tracked and
+  // reconstructed days; ROI/CLV can only ever come from tracked ones, since
+  // reconstructed days carry no prices (bets: 0) and contribute nothing.
+  const bfDays = new Set(entries.filter((e) => e.backfilled).map((e) => e.date)).size;
   metaEl.textContent = `${totalDays} day${totalDays !== 1 ? "s" : ""} · ${totalGames} games`
-    + (oBets ? ` · ${oBets} +EV bets` : "");
+    + (oBets ? ` · ${oBets} +EV bets` : "")
+    + (bfDays ? ` · ${bfDays} reconstructed (accuracy only, no ROI)` : "");
 
   marketsEl.innerHTML = "";
 
@@ -439,6 +444,12 @@ function renderCalendar() {
 
     if (dayEntries && dayEntries.length) {
       cell.classList.add("has-data");
+      // A reconstructed day is accuracy-only (no prices existed to bet at), so it
+      // must look different from a day we actually tracked live.
+      if (dayEntries.every((e) => e.backfilled)) {
+        cell.classList.add("backfilled");
+        cell.title = "Reconstructed point-in-time — accuracy only, no betting record";
+      }
       // combined record + a dot per market with data, across the day's entries
       let dw = 0, dl = 0;
       const dots = document.createElement("div");
@@ -515,7 +526,12 @@ function showDayDetail(dayEntries) {
     const pendHtml = entry.pending
       ? `<div class="dd-pending">${entry.pending} still pending</div>` : "";
     const head = multi ? `<div class="dd-sport">${SPORT_LABEL[entrySport(entry)]}</div>` : "";
-    return `${head}<div class="dd-markets">${markets}</div>${ovHtml}${biasHtml}${pendHtml}`;
+    const bfHtml = entry.backfilled
+      ? `<div class="dd-backfilled"><strong>Reconstructed</strong> — this day was not tracked
+         live. Projections were rebuilt point-in-time (no look-ahead), but no historical prices
+         exist, so there is <strong>no betting record</strong> here: accuracy only.</div>`
+      : "";
+    return `${head}${bfHtml}<div class="dd-markets">${markets}</div>${ovHtml}${biasHtml}${pendHtml}`;
   }).join("");
 
   historyDayDetail.innerHTML = `

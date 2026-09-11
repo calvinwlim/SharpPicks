@@ -198,6 +198,36 @@ every response (`odds.quota()`), surfaced on `/api/health` as `oddsQuota`, and
 printed by `track.py` so the CI log shows the burn rate — running out otherwise
 looks exactly like "no odds today".
 
+**Backfilling days that were never tracked** — `scripts/backfill_history.py`:
+
+```bash
+python3 scripts/backfill_history.py --start 2026-06-28 --end 2026-09-10   # both sports
+python3 scripts/backfill_history.py --start ... --end ... --dry-run        # report only
+```
+
+This writes **accuracy-only** graded files, flagged `backfilled` / `accuracyOnly`
+with `bets: 0` and null ROI/CLV, and the History view labels them (dashed calendar
+cell, "Reconstructed" banner, a count in the record bar). Two hard constraints
+make that the only honest option:
+
+- **No historical prices.** The Odds API free plan serves upcoming events only, so
+  a past date matches no market. ROI and CLV cannot be reconstructed, ever. They
+  aggregate to nothing automatically, since the UI only sums ROI where `bets > 0`.
+- **No look-ahead.** Do NOT backfill with `track.py snapshot --date <past>`: that
+  calls the live analyze path, which pulls a pitcher's *full* season log. Measured
+  on one June 28 start, the point-in-time projection was **6.16 K** while the
+  full-log version gave **3.81** — a naive backfill would have been 2.35 K off,
+  informed by starts that had not happened. The script instead reuses
+  `backtest.py`'s replay: game logs truncated to before the date, opponent offense
+  as-of, prior-season baselines, and MMA profiles rebuilt bout-by-bout.
+
+Existing graded files are never overwritten without `--force` — a day tracked live
+carries prices and is strictly better evidence than anything reconstructed. Two
+caveats are recorded in each file's `backfillNote`: backfilled totals are graded
+at a reference 8.5 line rather than a real market line, and the MMA winner model's
+coefficients were fit on a bout set that includes the graded fights (~1% of
+training rows, the same mild in-sample property `mma_backtest.py` has).
+
 Live tracking (record today's picks, grade them tonight):
 
 ```bash

@@ -1461,3 +1461,34 @@ footer {
   .tape { font-size: 11px; gap: 2px 6px; }
   .tape-stat { font-size: 9px; }
 }
+
+/* ---- history: reconstructed (backfilled) days ------------------------ */
+/* These days were rebuilt point-in-time rather than tracked live. They carry
+   accuracy only — no prices existed to bet at — so they are marked with a
+   hatched edge rather than the solid treatment a real tracked day gets. The
+   distinction has to survive a glance at the calendar, not just a click. */
+.cal-day.backfilled {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.cal-day.backfilled .cal-day-num::after {
+  content: "≈";
+  font-size: 9px;
+  color: var(--text-faint);
+  margin-left: 2px;
+  vertical-align: super;
+}
+
+.dd-backfilled {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  margin: 6px 0;
+}
+
+.dd-backfilled strong { color: var(--text); }

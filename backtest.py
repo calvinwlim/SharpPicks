@@ -218,6 +218,7 @@ async def _scored_games(date: str) -> List[Dict[str, Any]]:
                 continue
             out.append({
                 "date": date,
+                "gamePk": g.get("gamePk"),   # needed to pull the boxscore (actual K totals)
                 "homeId": h.get("team", {}).get("id"), "awayId": a.get("team", {}).get("id"),
                 "homeScore": h["score"], "awayScore": a["score"],
                 "homePid": hp.get("id"), "awayPid": ap.get("id"),
