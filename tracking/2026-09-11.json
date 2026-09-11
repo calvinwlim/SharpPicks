@@ -1,6 +1,6 @@
 {
   "date": "2026-09-11",
-  "generatedAt": "2026-09-11T10:54:56",
+  "generatedAt": "2026-09-11T15:09:17",
   "games": [
     {
       "gamePk": 824631,
@@ -114,8 +114,8 @@
         "pick": "home",
         "modelProb": 0.5935,
         "homeWinProb": 0.5935,
-        "evPct": 0.86,
-        "price": -143
+        "evPct": 0.29,
+        "price": -145
       }
     },
     {
@@ -567,8 +567,8 @@
         "pick": "home",
         "modelProb": 0.559,
         "homeWinProb": 0.559,
-        "evPct": 28.01,
-        "price": 129
+        "evPct": 26.89,
+        "price": 127
       }
     }
   ]
