@@ -13,15 +13,19 @@ one fighter fits, so we never silently pick the wrong "Silva".
 """
 from __future__ import annotations
 
+import datetime
 import json
+import sys
 import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 DATA_FILE = Path(__file__).resolve().parent / "data" / "ufc_fighters.json"
+META_KEY = "__meta__"   # build stamp written by scripts/build_ufc_dataset.py
 
 _cache: Optional[Dict[str, Any]] = None
 _token_index: Optional[List[Tuple[str, List[str]]]] = None
+_meta: Optional[Dict[str, Any]] = None
 
 
 def norm(name: str) -> str:
@@ -38,13 +42,42 @@ def _tokens(name: str) -> List[str]:
 
 
 def _load() -> Dict[str, Any]:
-    global _cache
+    global _cache, _meta
     if _cache is None:
         try:
-            _cache = json.loads(DATA_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            _cache = {}
+            raw = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        except Exception as e:
+            # Loud, not silent: an unreadable dataset makes EVERY fighter look
+            # like a debutant (league-average stand-in, no edge computed), which
+            # is indistinguishable in the UI from a card full of newcomers.
+            print(f"[mma_data] could not load {DATA_FILE}: {e!r}", file=sys.stderr)
+            raw = {}
+        _meta = raw.pop(META_KEY, None) or {}
+        _cache = raw
     return _cache
+
+
+def meta() -> Dict[str, Any]:
+    """Build stamp for the bundled dataset (may be empty for older files)."""
+    _load()
+    return _meta or {}
+
+
+def staleness_days() -> Optional[int]:
+    """Days since the newest bout in the dataset, or None if unknown.
+
+    This is the number that matters — not when the file was written, but how
+    much of the sport it has actually seen. A refresh job that silently stops
+    running looks perfectly healthy by every other measure.
+    """
+    latest = meta().get("latestBout")
+    if not latest:
+        return None
+    try:
+        d = datetime.date.fromisoformat(latest)
+    except ValueError:
+        return None
+    return max((datetime.date.today() - d).days, 0)
 
 
 def _index() -> List[Tuple[str, List[str]]]:

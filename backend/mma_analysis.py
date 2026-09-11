@@ -35,19 +35,64 @@ LG_STR_DEF = 0.55
 LG_TD_DEF = 0.65
 LG_FIN_PER_FIGHT = 0.22  # league-average finishes per fight (for durability scaling)
 WIN_PROB_FLOOR, WIN_PROB_CEIL = 0.12, 0.88  # MMA upsets are common — don't overclaim
-# Selectivity tiers for the winner pick, calibrated to mma_backtest (since 2023):
-# below the lean floor the favourite is a coin flip (~54% actual), 60–70% hits ~71%,
-# ≥70% hits ~78%. Picks under the floor are labelled "pass" so we don't push
-# coin-flips as plays — acting only on confident picks is the biggest free accuracy lever.
+# Selectivity tiers for the winner pick. Filtering to confident picks remains the
+# single biggest free accuracy lever: the whole slate grades 66%, but ≥70% picks
+# grade ~80% (at the cost of playing only ~19% of fights). Picks under the lean
+# floor are labelled "Pass" so we never push a coin-flip as a play.
 WIN_LEAN_FLOOR, WIN_STRONG_FLOOR = 0.60, 0.70
+# Measured hit rate of each tier, shown to users verbatim in the verdict card.
+# These are CLAIMS ABOUT OUR OWN ACCURACY, so they are not allowed to be guesses:
+# mma_backtest.py prints the measured values every run and flags this constant as
+# stale when it drifts more than 2 points. Last measured 2026-09-11 over 868
+# fights since 2023-01-01.
+WIN_TIER_HIT_RATES = {"Strong": 0.80, "Lean": 0.70, "Pass": 0.57}
+
+# The model's own scorecard, shipped to the UI so the app can state plainly where
+# it stands instead of letting confident-looking numbers imply more than they
+# should. All measured by mma_backtest.py over 868 point-in-time fights since
+# 2023-01-01. The market comparison is the important one: UFC closing lines run
+# roughly 68-70% on favourites, so this model is at best level with the close and
+# probably slightly behind it. That is a perfectly good screening and explanation
+# tool, and it is NOT a claim of edge — which is why large disagreements with the
+# price are flagged rather than celebrated (see IMPLAUSIBLE_EDGE_PROB_GAP).
+MODEL_SCORECARD = {
+    "winnerAccuracy": 0.662,
+    "winnerBrier": 0.2169,
+    "distanceAccuracy": 0.626,
+    "methodAccuracy": 0.557,
+    "methodBaseline": 0.513,   # "always pick decision"
+    "sampleSize": 868,
+    "since": "2023-01-01",
+    "marketClosingAccuracy": "~68-70%",
+}
 WIN_DIFF_SCALE = 6.0   # logistic scale on the hand-tuned differential (fallback when no learned model)
-WIN_LOGIT_TEMP = 0.85  # <1 sharpens the learned win prob. The L2 in the fit leaves it slightly
-                       # under-confident (mma_backtest's temperature sweep bottoms ~0.75 across
-                       # runs); 0.85 is a conservative partial correction so we don't overfit the
-                       # backtest sample. Applied to the probability only, not the reported winDiff.
-SIG_STD_FRAC = 0.55    # std of a sig-strike projection as a fraction of the mean. Was 0.30
-                       # (far too tight -> overconfident over/unders); mma_backtest's prop
-                       # calibration LL is a broad plateau 0.5-0.7, so 0.55 is robust.
+WIN_LOGIT_TEMP = 1.0   # NO sharpening. This was 0.85, chosen from mma_backtest's temperature
+                       # sweep — but that sweep picks the temperature minimising Brier on the
+                       # very fights it scores, so it cannot help but "find" one. A rolling-origin
+                       # re-test (fit on everything before year Y, grade year Y; see
+                       # mma_experiments.py) shows sharpening is not a property of the model but
+                       # of one window: T=0.85 beat T=1.0 in only 4 of 9 eras (it helps in
+                       # 2023-2025, hurts in 2018-2022 and 2026) and mean Brier across eras is a
+                       # dead heat (0.2290 vs 0.2289). Since this number inflates every confidence
+                       # shown to users and moves fights across the Strong/Lean/Pass boundaries,
+                       # it stays at 1.0 until a correction survives out-of-period testing.
+# Count props are NEGATIVE BINOMIAL, not gaussian/Poisson. Fight-stat counts are
+# strongly right-skewed and overdispersed — takedowns have variance/mean = 2.86,
+# and a normal on sig strikes puts real probability mass below zero. Every
+# dispersion below is fitted on pre-2023 bouts and scored blind on 2023+ in
+# mma_experiments.py; each beat the distribution it replaced by a wide margin
+# (mean log-likelihood per fight):
+#     per-fighter sig strikes   normal -4.947 -> NB -4.764   (+0.182)
+#     total sig strikes         normal -5.543 -> NB -5.421   (+0.122)
+#     takedowns                Poisson -1.543 -> NB -1.321   (+0.223)
+# This is not cosmetic: it moves P(over) at the model's own line by ~10 points
+# for strikes and ~13 for takedowns. A finish/decision MIXTURE was also tested
+# (the obvious fix for the bimodality) and NB beat it outright (+0.122 vs +0.073),
+# because a low-k NB already carries the skew a two-component normal was
+# approximating — don't re-add the mixture.
+NB_K_SIG = 1.5          # per-fighter significant strikes
+NB_K_SIG_TOTAL = 1.75   # combined significant strikes
+NB_K_TD = 0.8           # takedowns
 FINISH_MID_FRAC = 0.41  # finishes land ~41% of the way through the scheduled time
                         # (measured mean over 376 finishes in mma_backtest; was 0.45)
 ENSEMBLE_COMP_WEIGHT = 0.0   # weight on the k-NN comps lens when blending the win prob.
@@ -97,13 +142,38 @@ _LEAGUE_RATE_MEANS = {
 }
 
 
-def shrink_rate_profile(rec: Dict[str, Any], fights: float, k: float = SHRINK_K) -> Dict[str, Any]:
-    """In-place shrink of a fighter's career rate fields toward league means."""
-    w = fights / (fights + k) if fights else 0.0
-    for key, mean in _LEAGUE_RATE_MEANS.items():
+# Each career rate averages over a DIFFERENT denominator, so the shrinkage weight
+# has to use that denominator's sample size — not the fight count. koRate/subRate/
+# decRate/finishRate are shares of *wins*; finishedRate is a share of *losses*.
+# Weighting those by total fights reads a tiny sample as a proven trait: before
+# this fix Makhachev (18-1, his one loss a 2015 KO) carried finishedRate 0.90
+# against a 0.45 league mean — modelled as a glass chin off n=1 — while an
+# undefeated fighter scored ~0.10 ("unfinishable") when the truth is *unknown*.
+# Everything else (per-minute rates, accuracies) is backed by every fight, so it
+# keeps using the fight count.
+_RATE_DENOM = {
+    "koRate": "wins", "subRate": "wins", "decRate": "wins", "finishRate": "wins",
+    "finishedRate": "losses",
+}
+
+
+def shrink_rate_profile(rec: Dict[str, Any], fights: float, k: float = SHRINK_K,
+                        means: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+    """In-place shrink of a fighter's career rate fields toward league means.
+
+    ``rec`` must carry ``wins``/``losses`` so the win/loss-denominated rates are
+    shrunk by their own sample size (see _RATE_DENOM). Falls back to the fight
+    count when those keys are absent. ``means`` overrides the global league means
+    (used to test division-relative shrinkage targets).
+    """
+    for key, mean in (means or _LEAGUE_RATE_MEANS).items():
         v = rec.get(key)
-        if v is not None:
-            rec[key] = w * v + (1.0 - w) * mean
+        if v is None:
+            continue
+        denom_key = _RATE_DENOM.get(key)
+        n = float(fights) if denom_key is None else float(rec.get(denom_key) or 0.0)
+        w = n / (n + k) if n else 0.0
+        rec[key] = w * v + (1.0 - w) * mean
     return rec
 
 
@@ -122,6 +192,35 @@ def weight_lbs(weight_class: Optional[str]) -> float:
 
 def normal_cdf(x: float) -> float:
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _nb_logpmf(x: int, mu: float, k: float) -> float:
+    """log P(X = x) for a negative binomial with mean ``mu`` and dispersion ``k``.
+
+    Parameterised by the mean so it drops straight into a projection: the
+    variance is ``mu + mu^2/k``, so small k = heavy overdispersion and
+    k -> infinity recovers the Poisson.
+    """
+    return (math.lgamma(x + k) - math.lgamma(k) - math.lgamma(x + 1)
+            + k * math.log(k / (k + mu)) + x * math.log(mu / (k + mu)))
+
+
+def nb_prob_over(line: float, mu: float, k: float) -> float:
+    """P(count > ``line``) under a negative binomial with mean ``mu``.
+
+    Lines are half-integers, so this sums the pmf up to floor(line) and
+    complements it — exact, no normal approximation.
+    """
+    mu = max(float(mu), 1e-6)
+    hi = int(math.floor(line))
+    if hi < 0:
+        return 1.0
+    cdf = 0.0
+    for i in range(hi + 1):
+        cdf += math.exp(_nb_logpmf(i, mu, k))
+        if cdf >= 1.0:
+            break
+    return _clamp(1.0 - cdf, 0.0, 1.0)
 
 
 def _logistic(x: float) -> float:
@@ -365,11 +464,12 @@ def _winner_pick(a_name: str, b_name: str, a_win: float) -> Dict[str, Any]:
     of this confidence band in mma_backtest (since 2023)."""
     prob = max(a_win, 1.0 - a_win)
     if prob >= WIN_STRONG_FLOOR:
-        tier, hist = "Strong", 0.78
+        tier = "Strong"
     elif prob >= WIN_LEAN_FLOOR:
-        tier, hist = "Lean", 0.71
+        tier = "Lean"
     else:
-        tier, hist = "Pass", 0.54
+        tier = "Pass"
+    hist = WIN_TIER_HIT_RATES[tier]
     return {
         "fighter": a_name if a_win >= 0.5 else b_name,
         "prob": round(prob, 4), "confidence": int(round(prob * 100)),
@@ -433,13 +533,19 @@ def _linmodel_prob(model: Dict[str, Any], feats: List[float], lo: float, hi: flo
 # --------------------------------------------------------------------------- pick helpers
 
 def _count_prop(player: str, prop_type: str, noun: str, label: str, projection: float,
-                std: float, signals: List[Dict[str, str]]) -> Dict[str, Any]:
+                k: float, signals: List[Dict[str, str]]) -> Dict[str, Any]:
     """Frame a counting prop (strikes/takedowns) at the line just below the
-    projection as the action-side over, graded with a normal."""
+    projection as the action-side over, graded with a negative binomial.
+
+    NOTE: with no market to price against, the line here is derived FROM the
+    projection, so the resulting probability is close to a coin flip by
+    construction. ``analysisOnly`` marks that, and the frontend suppresses the
+    tier badge rather than dressing a self-chosen line as an edge.
+    """
     center = max(round(projection), 1)
     over_line, under_line = center - 0.5, center + 0.5
-    p_over = 1.0 - normal_cdf((over_line - projection) / max(std, 1e-6))
-    p_under = normal_cdf((under_line - projection) / max(std, 1e-6))
+    p_over = nb_prob_over(over_line, projection, k)
+    p_under = 1.0 - nb_prob_over(under_line, projection, k)
     side, line, prob = ("over", over_line, p_over) if p_over >= p_under else ("under", under_line, p_under)
     conf = int(_clamp(round(prob * 100), 0, 100))
     return {
@@ -450,7 +556,77 @@ def _count_prop(player: str, prop_type: str, noun: str, label: str, projection: 
         "tier": "Premium" if conf >= 75 else "Strong" if conf >= 60 else "Lean",
         "splits": [], "spark": [], "signals": signals,
         "edge": None, "hasMarket": False, "lowSample": False,
+        "analysisOnly": True,   # line derived from our own projection, not a book
+        "projLow": round(_nb_interval(projection, k)[0], 0),
+        "projHigh": round(_nb_interval(projection, k)[1], 0),
     }
+
+
+def _nb_mode(mu: float, k: float) -> int:
+    """Most likely single count under the NB (differs from the mean when skewed)."""
+    mu = max(float(mu), 1e-6)
+    best_i, best_p = 0, -1.0
+    for i in range(0, int(mu * 4) + 12):
+        pr = math.exp(_nb_logpmf(i, mu, k))
+        if pr > best_p:
+            best_i, best_p = i, pr
+    return best_i
+
+
+def _nb_interval(mu: float, k: float, lo_q: float = 0.1, hi_q: float = 0.9) -> Tuple[float, float]:
+    """Central ``lo_q``-``hi_q`` interval of the NB, so the UI can show a range
+    instead of implying the point estimate is precise."""
+    mu = max(float(mu), 1e-6)
+    lo = hi = 0
+    cum = 0.0
+    got_lo = False
+    for i in range(0, int(mu * 6) + 30):
+        cum += math.exp(_nb_logpmf(i, mu, k))
+        if not got_lo and cum >= lo_q:
+            lo, got_lo = i, True
+        if cum >= hi_q:
+            hi = i
+            break
+    return float(lo), float(max(hi, lo))
+
+
+# Map each displayed signal to the learned feature(s) it is backed by, so the UI
+# can rank signals by how much they actually moved the number instead of showing
+# a flat list in declaration order. A signal with no learned feature behind it
+# (Momentum, which is deliberately display-only) gets no contribution and sorts last.
+_SIGNAL_FEATURES = {
+    "Striking net": ("d_striking_net",),
+    "Volume / accuracy": ("d_slpm",),
+    "Defense": ("d_strDef", "d_tdDef"),
+    "Grappling": ("d_tdAvg", "d_ctrl", "d_grndshare"),
+    "Finishing": ("d_finish", "d_kd"),
+    "Durability": ("d_durability", "d_chin"),
+    "Experience": ("d_winpct", "d_sos"),
+    "Reach": ("d_reach",),
+    "Age": ("d_age", "d_age_cliff"),
+    "Stance": ("d_stance",),
+    "Layoff": ("d_rust",),
+    "Accuracy (head)": ("d_headacc",),
+}
+
+
+def _signal_contributions(a: Dict[str, Any], b: Dict[str, Any],
+                          a_age: Optional[float], b_age: Optional[float],
+                          a_rust: float, b_rust: float) -> Dict[str, float]:
+    """Signed logit contribution of each displayed signal, in `a`'s favour.
+
+    This is exactly what the model did: weight x differential, summed over the
+    features behind that signal. Positive favours `a`. Returns {} when no learned
+    model is loaded (the hand-tuned fallback has no per-feature decomposition).
+    """
+    if not _WINMODEL:
+        return {}
+    feats = _win_features(a, b, a_age, b_age, a_rust, b_rust)
+    w = _WINMODEL["weights"]
+    by_name = {name: (w[i] * feats[i] if i < len(w) else 0.0)
+               for i, name in enumerate(WIN_FEATURE_NAMES)}
+    return {label: sum(by_name.get(f, 0.0) for f in fs)
+            for label, fs in _SIGNAL_FEATURES.items()}
 
 
 def _sig(label: str, detail: str, lean: str) -> Dict[str, str]:
@@ -572,8 +748,43 @@ def analyze_fight(
                             f"{b_name} {(b.get('recentWinRate') or _winpct(b))*100:.0f}% recent (last 5 vs career)",
                             "a" if ma >= mb else "b"))
 
+    # Rank the signals by how much each ACTUALLY moved the win probability
+    # (learned weight x this matchup's differential), so the panel reads as an
+    # explanation of the pick rather than a flat list in declaration order. The
+    # lean shown is the model's own sign, which is why the three displayed
+    # features are sign-constrained in the builder — otherwise the panel could
+    # claim that landing more strikes favours the opponent.
+    contrib = _signal_contributions(a, b, a_age, b_age, a_rust, b_rust)
+    for sg in signals:
+        c = contrib.get(sg["label"])
+        if c is None:
+            sg["impact"] = None
+        else:
+            sg["impact"] = round(abs(c), 4)
+            if abs(c) > 1e-9:
+                sg["lean"] = "a" if c > 0 else "b"
+    signals.sort(key=lambda sg: (sg["impact"] is None, -(sg["impact"] or 0.0)))
+
+    # Tale of the tape — the canonical way a fight is presented, and every field
+    # was already computed and then thrown away. Values may be None (ufcstats has
+    # gaps, and a league-average stand-in has no physicals); the UI omits those rows.
+    def _tape(f: Dict[str, Any], age: Optional[float]) -> Dict[str, Any]:
+        return {
+            "record": f"{int(f.get('wins', 0))}-{int(f.get('losses', 0))}",
+            "age": round(age) if age is not None else None,
+            "heightIn": f.get("heightIn"), "reachIn": f.get("reachIn"),
+            "stance": f.get("stance"),
+            "slpm": round(f.get("slpm", 0), 1), "sapm": round(f.get("sapm", 0), 1),
+            "strAcc": round(f.get("strAcc", 0), 3), "strDef": round(f.get("strDef", 0), 3),
+            "tdAvg": round(f.get("tdAvg", 0), 1), "tdDef": round(f.get("tdDef", 0), 3),
+            "subAvg": round(f.get("subAvg", 0), 1),
+            "finishRate": round(f.get("finishRate", 0), 3),
+            "fights": int(f.get("fights", 0)),
+        }
+
     fight_model = {
         "aName": a_name, "bName": b_name, "rounds": rounds,
+        "tape": {"a": _tape(a, a_age), "b": _tape(b, b_age)},
         "aWinProb": round(a_win, 4), "bWinProb": round(1 - a_win, 4),
         "pick": _winner_pick(a_name, b_name, a_win),
         "aWinProbModel": round(a_win_model, 4),
@@ -586,6 +797,7 @@ def analyze_fight(
         "projSigStrikes": {"a": round(a_sig, 1), "b": round(b_sig, 1), "total": round(a_sig + b_sig, 1)},
         "projTakedowns": {"a": round(a_td, 1), "b": round(b_td, 1)},
         "signals": signals,
+        "scorecard": MODEL_SCORECARD,
     }
 
     # ---- prop picks (board) ----
@@ -595,13 +807,17 @@ def analyze_fight(
     dist_side = "over" if distance_p >= 0.5 else "under"
     rounds_line = rounds - 0.5
     conf = int(_clamp(round(max(distance_p, 1 - distance_p) * 100), 0, 100))
+    # Unlike the strike/TD props this IS a real market line (O/U rounds), so the
+    # probability is meaningful — but a 50-55% read is a coin flip, and calling it
+    # a "Lean" overstates it. Tiering matches the winner verdict's honesty.
+    dist_tier = "Premium" if conf >= 70 else "Strong" if conf >= 62 else "Lean" if conf >= 55 else "Pass"
     picks.append({
         "propType": "mma_distance", "statNoun": "rounds", "player": f"{a_name} vs {b_name}",
         "pick": f"{'Over' if dist_side == 'over' else 'Under'} {rounds_line} Rounds "
                 f"({'goes the distance' if dist_side == 'over' else 'finish'})",
         "side": dist_side, "line": rounds_line, "projection": round(minutes / 5.0, 1),
         "modelProb": round(max(distance_p, 1 - distance_p), 4), "confidence": conf,
-        "tier": "Premium" if conf >= 75 else "Strong" if conf >= 60 else "Lean",
+        "tier": dist_tier,
         "splits": [], "spark": [], "edge": None, "hasMarket": False, "lowSample": False,
         "signals": [
             _sig("Goes distance", f"{distance_p*100:.0f}% to reach decision", "over" if distance_p >= 0.5 else "under"),
@@ -612,7 +828,6 @@ def analyze_fight(
     })
 
     # Significant strikes (each fighter + total).
-    sig_std = lambda proj: max(proj * SIG_STD_FRAC, 6.0)
     for nm, att, dfn, proj in ((a_name, a, b, a_sig), (b_name, b, a, b_sig)):
         s = [
             _sig("Output vs opp defense",
@@ -621,10 +836,10 @@ def analyze_fight(
             _sig("Expected length", f"~{minutes:.0f} min ({distance_p*100:.0f}% distance)",
                  "over" if distance_p >= 0.5 else "under"),
         ]
-        picks.append(_count_prop(nm, "mma_sigstr", "sig. strikes", "Sig. Strikes", proj, sig_std(proj), s))
+        picks.append(_count_prop(nm, "mma_sigstr", "sig. strikes", "Sig. Strikes", proj, NB_K_SIG, s))
     total_sig = a_sig + b_sig
     picks.append(_count_prop(f"{a_name} vs {b_name}", "mma_sigstr_total", "total sig. strikes",
-                             "Total Sig. Strikes", total_sig, sig_std(total_sig), [
+                             "Total Sig. Strikes", total_sig, NB_K_SIG_TOTAL, [
         _sig("Combined pace", f"{a_name} {a.get('slpm',0):.1f} + {b_name} {b.get('slpm',0):.1f} SLpM over ~{minutes:.0f} min", "neutral"),
     ]))
 
@@ -641,10 +856,14 @@ def analyze_fight(
 
 
 def _td_prop(player: str, projection: float, signals: List[Dict[str, str]]) -> Dict[str, Any]:
-    """Takedowns prop graded as a Poisson over (low counts)."""
-    from .analysis import prob_over
+    """Takedowns prop graded as a negative-binomial over.
+
+    Was Poisson, which assumes variance == mean; takedowns run variance/mean =
+    2.86 (one wrestler piles up eight in a night while most fights have none), so
+    Poisson badly understates the tail. See NB_K_TD.
+    """
     line = max(round(projection), 1) - 0.5
-    p_over = prob_over(line, projection)
+    p_over = nb_prob_over(line, projection, NB_K_TD)
     side, prob = ("over", p_over) if p_over >= 0.5 else ("under", 1 - p_over)
     conf = int(_clamp(round(prob * 100), 0, 100))
     return {
@@ -655,4 +874,11 @@ def _td_prop(player: str, projection: float, signals: List[Dict[str, str]]) -> D
         "tier": "Premium" if conf >= 75 else "Strong" if conf >= 60 else "Lean",
         "splits": [], "spark": [], "signals": signals,
         "edge": None, "hasMarket": False, "lowSample": False,
+        "analysisOnly": True,
+        "projLow": round(_nb_interval(projection, NB_K_TD)[0], 0),
+        "projHigh": round(_nb_interval(projection, NB_K_TD)[1], 0),
+        # Takedown counts are heavily right-skewed: a mean of ~1.0 usually means
+        # "most likely zero, occasionally several". Reporting only the mean next
+        # to an Under 0.5 pick looks self-contradictory when it isn't.
+        "projMode": _nb_mode(projection, NB_K_TD),
     }

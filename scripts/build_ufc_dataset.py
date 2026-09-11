@@ -265,9 +265,21 @@ async def main() -> None:
         rec.update(phys.get(key, {}))
         out[key] = rec
 
+    # Freshness stamp. The file is a flat {normalized_name: record} map, and
+    # mma_data.norm() strips every non-alphanumeric character, so it can never
+    # produce a key with underscores — "__meta__" is safe to co-locate here and
+    # cannot collide with a fighter. mma_data skips it when indexing.
+    latest = max((r["lastFightDate"] for r in out.values() if r.get("lastFightDate")), default=None)
+    out["__meta__"] = {
+        "builtAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "fighters": len(out),
+        "latestBout": latest,     # newest bout in the source data -> real staleness
+        "source": RAW,
+    }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
-    print(f"wrote {len(out)} fighters -> {OUT}  ({OUT.stat().st_size // 1024} KB)")
+    print(f"wrote {len(out) - 1} fighters -> {OUT}  ({OUT.stat().st_size // 1024} KB)")
+    print(f"  newest bout in source data: {latest}")
 
 
 if __name__ == "__main__":

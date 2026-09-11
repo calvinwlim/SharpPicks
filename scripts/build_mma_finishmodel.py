@@ -26,6 +26,7 @@ Re-run after rebuilding the fighter dataset; then validate with mma_backtest.py.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import sys
 from pathlib import Path
@@ -34,12 +35,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import mma_backtest as B
 from backend import mma_analysis as M
-# reuse the winner builder's logistic fitter / standardizer / Brier so the two
-# learned models are trained the exact same way.
-from build_mma_winmodel import fit_logistic, _standardize, _brier, _logistic  # type: ignore
+# Reuse the winner builder's fitter and metrics so the two learned models are
+# trained the exact same way (Newton/IRLS via scripts/fitlib.py; fitlib does its
+# own standardization and returns RAW-space coefficients).
+import fitlib as FL
+from build_mma_winmodel import fit_logistic, _brier, _logistic  # type: ignore
 
 OUT = ROOT / "backend" / "data" / "ufc_finishmodel.json"
 MIN_PRIOR = 4
@@ -131,14 +135,8 @@ def _collect(bouts, box, phys):
 
 
 def _fit_raw(rows: List[Tuple[str, List[float], float]]):
-    """Fit on standardized features, return weights/intercept in RAW space."""
-    X = [r[1] for r in rows]
-    y = [r[2] for r in rows]
-    Z, mean_v, std_v = _standardize(X)
-    w_z, b_z = fit_logistic(Z, y)
-    w_raw = [w_z[i] / std_v[i] for i in range(len(w_z))]
-    b_raw = b_z - sum(w_z[i] * mean_v[i] / std_v[i] for i in range(len(w_z)))
-    return w_raw, b_raw
+    """Fit and return weights/intercept in RAW feature space."""
+    return fit_logistic([r[1] for r in rows], [r[2] for r in rows])
 
 
 def _holdout(rows, label, heur=None) -> bool:
@@ -211,6 +209,7 @@ async def main_async() -> None:
         return
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
+    model["builtAt"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     OUT.write_text(json.dumps(model, indent=2), encoding="utf-8")
     print(f"\nwrote {OUT} ({', '.join(model)})")
 

@@ -54,12 +54,39 @@ def _flags(ai_requested: bool = False, odds_key: Optional[str] = None,
     }
 
 
+# A bundled dataset older than this is reported as stale. UFC runs a card most
+# weekends, so ~3 weeks without a refresh means several events are missing and
+# every fighter on them carries out-of-date rates, form and layoff.
+MMA_STALE_AFTER_DAYS = 21
+
+
+def _mma_data_health() -> Dict[str, Any]:
+    """Freshness of the bundled UFC dataset.
+
+    Surfaced because the failure mode is invisible otherwise: when the weekly
+    refresh silently stops, the app keeps serving confident numbers off months-old
+    rates and nothing in the UI looks wrong. (It had been stale for 118 days
+    before this was added.)
+    """
+    days = mma_data.staleness_days()
+    meta = mma_data.meta()
+    return {
+        "fighters": len(mma_data._load()),
+        "builtAt": meta.get("builtAt"),
+        "latestBout": meta.get("latestBout"),
+        "stalenessDays": days,
+        "stale": bool(days is not None and days > MMA_STALE_AFTER_DAYS),
+        "unknownFreshness": days is None,
+    }
+
+
 @app.get("/api/health")
 async def health(x_odds_api_key: Optional[str] = OddsKeyHeader,
                   x_anthropic_api_key: Optional[str] = AnthropicKeyHeader,
                   x_odds_player_props: Optional[str] = PlayerPropsHeader) -> Dict[str, Any]:
     return {"ok": True, "flags": _flags(odds_key=x_odds_api_key, anthropic_key=x_anthropic_api_key,
-                                        props_override=x_odds_player_props)}
+                                        props_override=x_odds_player_props),
+            "mmaData": _mma_data_health()}
 
 
 @app.get("/api/slate")
@@ -74,7 +101,11 @@ async def slate(date: str, sport: str = "mlb",
         return {"date": date, "sport": "nba", "count": len(games), "games": games, "flags": flags}
     if sport == "mma":
         games = await mma.get_schedule(date)
-        return {"date": date, "sport": "mma", "count": len(games), "games": games, "flags": flags}
+        # Main event last in ESPN's chronological order -> reverse so the card reads
+        # the way a fan reads it (main event first, prelims below).
+        games = list(reversed(games))
+        return {"date": date, "sport": "mma", "count": len(games), "games": games,
+                "dataHealth": _mma_data_health(), "flags": flags}
     games = await mlb.get_schedule(date)
     return {"date": date, "sport": "mlb", "count": len(games), "games": games, "flags": flags}
 
@@ -215,6 +246,7 @@ async def _analyze_mma(game_id: str, date: str, odds_key: Optional[str] = None,
     return {"gameId": game_id, "sport": "mma", "fight": fight, "fightModel": fm,
             "picks": picks, "comps": comps, "oddsNote": odds_note,
             "lowData": low_data_note is not None, "note": low_data_note,
+            "dataHealth": _mma_data_health(),
             "flags": _flags(odds_key=odds_key, anthropic_key=anthropic_key)}
 
 
@@ -235,20 +267,37 @@ def _neutral_fighter(weight_class: Optional[str]) -> Dict[str, Any]:
     }
 
 
+# How far our win probability may sit from the vig-removed market price before we
+# stop calling it an edge. The UFC moneyline market is sharp and closes around
+# 68-70% accurate; our model grades ~66%. A model that is slightly WORSE than the
+# market cannot also be finding 30-point mispricings — a gap that size is
+# overwhelmingly our error (a name matched to the wrong fighter, a stale or
+# mis-scraped price, a fighter whose profile we have wrong), not free money.
+# Beyond this, the pick is surfaced as a red flag instead of a play.
+IMPLAUSIBLE_EDGE_PROB_GAP = 0.25
+
+
 def _mma_moneyline_picks(a_name: str, b_name: str, a_win: float, b_win: float,
                          ml: Dict[str, Any]) -> list:
     """Build a board-ready moneyline pick per fighter from the matched edges."""
     out = []
     for name, win, edge in ((a_name, a_win, ml["a"]), (b_name, b_win, ml["b"])):
         ev = edge["evPct"]
+        fair = edge.get("fairProb")
+        gap = abs(win - fair) if fair is not None else 0.0
+        implausible = gap >= IMPLAUSIBLE_EDGE_PROB_GAP
+        edge["implausible"] = implausible
+        edge["probGap"] = round(gap, 4)
         out.append({
             "propType": "mma_moneyline", "statNoun": "moneyline", "player": name,
             "pick": f"{name} ML ({edge['price']:+d})",
             "side": "win", "line": None, "projection": round(win, 3),
             "modelProb": round(win, 4), "confidence": int(max(0, min(100, round(win * 100)))),
-            "tier": "Premium" if ev >= 8 else "Strong" if ev > 0 else "Lean",
+            # An implausible gap is never promoted, however large the nominal EV.
+            "tier": "Flag" if implausible else "Premium" if ev >= 8 else "Strong" if ev > 0 else "Lean",
             "splits": [], "spark": [], "signals": [],
             "edge": edge, "hasMarket": True, "lowSample": False,
+            "implausible": implausible,
         })
     return out
 

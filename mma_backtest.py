@@ -20,6 +20,8 @@ import datetime
 import io
 import math
 import re
+import time
+from pathlib import Path
 from statistics import mean
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -80,6 +82,12 @@ def fresh() -> Dict[str, float]:
 
 
 def rates(acc: Dict[str, float], phys: Dict[str, Any]) -> Dict[str, Any]:
+    """Career rate profile from a point-in-time accumulator (global league means)."""
+    return rates_with_means(acc, phys, None)
+
+
+def rates_with_means(acc: Dict[str, float], phys: Dict[str, Any],
+                     means: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     m = acc["minutes"] or 1.0
     w, l = acc["wins"], acc["losses"]
     def r(n, d, dv=0.0): return n / d if d else dv
@@ -96,19 +104,47 @@ def rates(acc: Dict[str, float], phys: Dict[str, Any]) -> Dict[str, Any]:
         "headAcc": r(acc.get("headL", 0), acc.get("headA", 0)),
         "grndShare": r(acc.get("groundL", 0), acc["sigL"]),
     }
-    M.shrink_rate_profile(out, acc["fights"])
+    M.shrink_rate_profile(out, acc["fights"], means=means)
     out.update(phys)
     return out
 
 
+CACHE_DIR = Path(__file__).resolve().parent / ".cache" / "ufcstats"
+CACHE_TTL_HRS = 24.0
+
+
+def _cached_csv(name: str) -> Optional[str]:
+    """Return a fresh-enough local copy of ``name``, else None."""
+    f = CACHE_DIR / name
+    if not f.exists():
+        return None
+    age_hrs = (time.time() - f.stat().st_mtime) / 3600.0
+    return f.read_text(encoding="utf-8") if age_hrs < CACHE_TTL_HRS else None
+
+
 async def load() -> Tuple[list, list, dict, dict]:
-    async with httpx.AsyncClient(timeout=60.0, headers=UA, follow_redirects=True) as c:
-        async def csvrows(name):
-            r = await c.get(f"{RAW}/{name}"); r.raise_for_status()
-            return list(csv.DictReader(io.StringIO(r.text)))
-        results, fstats, events, tott = await asyncio.gather(
-            csvrows("ufc_fight_results.csv"), csvrows("ufc_fight_stats.csv"),
-            csvrows("ufc_event_details.csv"), csvrows("ufc_fighter_tott.csv"))
+    """Load the four ufcstats CSVs, caching them under .cache/ for a day.
+
+    The replay is deterministic given these files, so re-downloading ~25MB on
+    every sweep is pure latency. Delete .cache/ufcstats (or wait out the TTL) to
+    pull fresh data after a new event.
+    """
+    names = ("ufc_fight_results.csv", "ufc_fight_stats.csv",
+             "ufc_event_details.csv", "ufc_fighter_tott.csv")
+    texts: Dict[str, str] = {n: t for n in names if (t := _cached_csv(n)) is not None}
+    missing = [n for n in names if n not in texts]
+    if missing:
+        async with httpx.AsyncClient(timeout=60.0, headers=UA, follow_redirects=True) as c:
+            async def fetch(name):
+                r = await c.get(f"{RAW}/{name}"); r.raise_for_status()
+                return name, r.text
+            for name, text in await asyncio.gather(*(fetch(n) for n in missing)):
+                texts[name] = text
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                (CACHE_DIR / name).write_text(text, encoding="utf-8")
+    def rows(name):
+        return list(csv.DictReader(io.StringIO(texts[name])))
+    results, fstats, events, tott = (rows(n) for n in names)
     event_date = {}
     for e in events:
         raw = (e.get("DATE") or "").strip()
@@ -176,7 +212,13 @@ async def main_async(since: str) -> None:
         minutes = max(er - 1, 0) * 5 + mmss(row.get("TIME", "")) / 60.0
         rounds = 5 if "5 Rnd" in (row.get("TIME FORMAT") or "") else 3
         bouts.append({"date": d, "event": event, "bout": bout, "names": names, "winner": winner,
-                      "method": classify(row.get("METHOD", "")), "minutes": minutes if minutes > 0 else 5.0, "rounds": rounds})
+                      "method": classify(row.get("METHOD", "")), "minutes": minutes if minutes > 0 else 5.0,
+                      "rounds": rounds,
+                      # The bout's OWN division. Without this every fight was graded at
+                      # weight_lbs(None)=170lb while build_mma_finishmodel trains on the real
+                      # weight — the distance/method numbers were measuring a different model
+                      # than the one that ships.
+                      "wc": (row.get("WEIGHTCLASS") or "").replace("Bout", "").strip()})
     bouts.sort(key=lambda x: x["date"])
 
     running: Dict[str, Dict[str, float]] = {}
@@ -235,6 +277,7 @@ async def main_async(since: str) -> None:
                      and acc_a["fights"] >= MIN_PRIOR and acc_b["fights"] >= MIN_PRIOR and sa and sb)
         if gradeable:
             fa = rates(acc_a, phys.get(na, {})); fb = rates(acc_b, phys.get(nb, {}))
+            fa["weightClass"] = fb["weightClass"] = bt["wc"]
             fa["sos"], fb["sos"] = _sos(na), _sos(nb)
             fa["recentFinishLossRate"] = _recent_fl(recent_window.get(na))
             fb["recentFinishLossRate"] = _recent_fl(recent_window.get(nb))
@@ -329,13 +372,46 @@ async def main_async(since: str) -> None:
             acc = mean(int((win_p[i] >= 0.5) == bool(win_o[i])) for i in idx)
             print(f"    >= {thr:.0%}: {acc:.1%} accuracy on {len(idx)} picks ({len(idx)/n:.0%} of slate)")
 
+    # --- what the UI is allowed to claim -------------------------------------
+    # WIN_TIER_HIT_RATES in mma_analysis is shown to users verbatim ("Strong leans
+    # have hit ~N% historically"), so it must be a measured number, not a guess
+    # that quietly rots as the model changes. This prints the values the constant
+    # should hold; if they disagree with what is shipped, update it or stop
+    # making the claim.
+    tiers = [("Strong", M.WIN_STRONG_FLOOR, 1.01),
+             ("Lean", M.WIN_LEAN_FLOOR, M.WIN_STRONG_FLOOR),
+             ("Pass", 0.0, M.WIN_LEAN_FLOOR)]
+    print("")
+    print("=== Tier hit rates (drives the user-facing claim) ===")
+    measured = {}
+    for tname, lo, hi in tiers:
+        sel = [(p, o) for p, o in zip(win_p, win_o) if lo <= max(p, 1 - p) < hi]
+        if not sel:
+            continue
+        hit = mean(int((p >= 0.5) == bool(o)) for p, o in sel)
+        measured[tname] = round(hit, 2)
+        shipped = M.WIN_TIER_HIT_RATES.get(tname)
+        stale = shipped is None or abs(shipped - hit) > 0.02
+        flag = "   <-- SHIPPED VALUE IS STALE" if stale else ""
+        sh = "none" if shipped is None else f"{shipped:.0%}"
+        print(f"  {tname:<7} n={len(sel):<4} measured {hit:.1%}   shipped {sh}{flag}")
+    print(f"  -> WIN_TIER_HIT_RATES = {measured}")
+
     print("\n=== A/B: recent-form blend (last 5 fights, 40% weight) ===")
     print(f"  career-only  Brier {_brier(win_p, win_o):.4f}   acc {win_correct/n:.1%}")
     rec_acc = mean(int((p >= 0.5) == bool(o)) for p, o in zip(win_p_recent, win_o))
     print(f"  recent-blend Brier {_brier(win_p_recent, win_o):.4f}   acc {rec_acc:.1%}")
 
-    # winDiff is the decision logit (learned model or hand-tuned/scale); a
-    # temperature sweep should bottom out near T=1.0 if it's well-calibrated.
+    # winDiff is the decision logit; a temperature sweep bottoms near T=1.0 if the
+    # model is well-calibrated on THIS period.
+    #
+    # READ THE WARNING BELOW BEFORE ACTING ON THIS NUMBER. The sweep picks the
+    # temperature that minimises Brier on the very fights it scores, so it will
+    # always "find" one — that is how WIN_LOGIT_TEMP came to be 0.85, a value a
+    # rolling-origin test later showed helps only in 2023-2025 and hurts in
+    # 2018-2022 and 2026. This is a diagnostic for how calibrated the model looks
+    # on a window, NOT a tuning procedure. To actually choose a temperature, use
+    # mma_experiments.py, which selects out-of-period.
     model_tag = "learned coefficients" if M._WINMODEL else f"hand-tuned (WIN_DIFF_SCALE={M.WIN_DIFF_SCALE})"
     print(f"\n=== Win-prob logit-temperature sweep (Brier; lower=better) — {model_tag} ===")
     best = None
@@ -346,6 +422,9 @@ async def main_async(since: str) -> None:
             best = (temp, br)
         print(f"  T={temp:>4}: Brier {br:.4f}")
     print(f"  -> best temperature {best[0]} (Brier {best[1]:.4f}); 1.0 = as-calibrated")
+    print(f"     NOTE: this is chosen IN-SAMPLE on these same fights — do not ship it as")
+    print(f"     WIN_LOGIT_TEMP (currently {M.WIN_LOGIT_TEMP}). Rolling-origin selection lives in")
+    print(f"     mma_experiments.py; the last one said no temperature correction generalises.")
 
     # A/B: would a strength-of-schedule differential improve the winner? Sweep how
     # much SOS (avg opponent win% faced, a-b) added to the logit changes Brier. If
@@ -388,20 +467,26 @@ async def main_async(since: str) -> None:
     mae_log5 = mean(abs((t[0]*t[3]/lg + t[2]*t[1]/lg) * t[5] - t[6]) for t in sig_eval)
     print(f"    log5 (slpm*opp_sapm/lg):  MAE {mae_log5:.1f}")
 
-    # Over/under prop calibration: how well a normal centered on the projection
-    # fits the actual totals, swept over the std fraction (SIG_STD_FRAC). The point
-    # MAE is dominated by fight-length bimodality, but the *prob* the total clears a
-    # line just needs the spread right. (A finish/distance mixture was tested and
-    # did NOT beat a well-tuned single normal — the wide σ already covers it.)
+    # Over/under prop calibration: how well the shipped distribution fits the
+    # actual totals. The point MAE is dominated by fight-length uncertainty, but
+    # the *probability* a total clears a line only needs the spread and skew
+    # right — which is why this moved from a normal to a negative binomial
+    # (see NB_K_* in mma_analysis; the family comparison lives in
+    # mma_experiments.py, fitted pre-2023 and scored on 2023+).
     def _lognorm(x, mu, sig):
         sig = max(sig, 1e-6)
         return -0.5 * math.log(2 * math.pi * sig * sig) - (x - mu) ** 2 / (2 * sig * sig)
+
+    def _proj(t):
+        return (t[0] * t[3] / M.LG_SLPM + t[2] * t[1] / M.LG_SLPM) * t[4]
     print("  prop calibration (mean log-likelihood of actual totals, higher=better):")
-    for sf in (0.3, 0.4, 0.5, 0.6, 0.7):
-        lls = [_lognorm(t[6], (0.5*(t[0]+t[2]) + 0.5*(t[1]+t[3])) * t[4],
-                        max(sf * (0.5*(t[0]+t[2]) + 0.5*(t[1]+t[3])) * t[4], 6.0)) for t in sig_eval]
-        tag = "  <- current SIG_STD_FRAC" if abs(sf - M.SIG_STD_FRAC) < 1e-6 else ""
-        print(f"    sig_frac={sf}: {mean(lls):.3f}{tag}")
+    for sf in (0.5, 0.65, 0.8):
+        lls = [_lognorm(t[6], _proj(t), max(sf * _proj(t), 6.0)) for t in sig_eval]
+        print(f"    normal  sig_frac={sf}: {mean(lls):.3f}")
+    for k in (1.25, M.NB_K_SIG_TOTAL, 2.5):
+        lls = [M._nb_logpmf(int(round(t[6])), max(_proj(t), 1e-6), k) for t in sig_eval]
+        tag = "  <- shipped NB_K_SIG_TOTAL" if abs(k - M.NB_K_SIG_TOTAL) < 1e-9 else ""
+        print(f"    NB      k={k}: {mean(lls):.3f}{tag}")
 
     print("\n=== Finish round distribution (vs ROUND_FINISH_WEIGHTS) ===")
     for sched in (3, 5):

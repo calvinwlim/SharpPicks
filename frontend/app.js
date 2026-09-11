@@ -123,7 +123,19 @@ function matchupLabel(game) {
 // winner verdict as a synthetic pick when it isn't a coin flip and no moneyline
 // edge already represents it (so the headline lean always reaches the board).
 function boardPicks(data) {
-  const picks = [...(data.picks || [])];
+  // The boards are for things you could actually bet. A prop with no matched
+  // line has a line derived from our own projection, so its "confidence" is a
+  // coin flip by construction — listing it as a Strong play would be fiction.
+  // (analysisOnly is only set by the MMA props, so MLB/NBA are unaffected.)
+  // A board is a list of things to actually play, so three kinds of pick are
+  // excluded: props with no matched line (the line came from our own projection,
+  // so the confidence is ~50% by construction), edges too large to believe
+  // against a sharp market, and anything the model itself tiers as a Pass.
+  // An empty board is the honest answer when a card has nothing worth backing.
+  const picks = (data.picks || []).filter(
+    (p) => !(p.analysisOnly && !p.hasMarket) && !p.implausible &&
+           p.tier !== "Pass" && p.tier !== "Flag"
+  );
   const fm = data.fightModel;
   if (fm && fm.pick && !fm.pick.coinFlip && !fm.moneyline) {
     picks.unshift({
@@ -133,6 +145,13 @@ function boardPicks(data) {
     });
   }
   return picks;
+}
+
+// Escape text that originates outside the app (fighter names, event titles,
+// signal details built from them) before it reaches innerHTML.
+function esc(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 let currentSport = "mlb"; // "mlb" | "nba" | "mma"
@@ -590,7 +609,14 @@ function renderGameCard(game, date) {
     card.querySelector(".venue").textContent = game.status || "";
     card.querySelector(".time").textContent = fmtTime(game.gameDate);
   } else if (currentSport === "mma") {
-    card.querySelector(".venue").textContent = `${game.rounds}R · ${(game.event || "").split(":")[0]}`;
+    // A UFC card has a hierarchy; the API now returns main event first. Badge the
+    // 5-round bout as the main event and label the weight class, which was in the
+    // payload but never shown.
+    const venue = card.querySelector(".venue");
+    const slot = game.rounds === 5 ? "MAIN EVENT" : null;
+    venue.innerHTML =
+      (slot ? `<span class="card-slot">${slot}</span>` : "") +
+      esc(`${game.weightClass || `${game.rounds}R`} · ${(game.event || "").split(":")[0]}`);
     card.querySelector(".time").textContent = game.status || "";
     const at = card.querySelector(".at");
     if (at) at.textContent = "vs";
@@ -1146,6 +1172,11 @@ function renderMmaAnalysis(data, game, container) {
     return;
   }
 
+  // Staleness banner first: if the dataset is months old, nothing below it is
+  // trustworthy and the user should know before reading any number.
+  const health = renderDataHealth(data.dataHealth);
+  if (health) container.appendChild(health);
+
   // Thin-data banner (one fighter modeled as league-average) — shown above the model.
   if (data.lowData && data.note) {
     const note = document.createElement("div");
@@ -1165,11 +1196,15 @@ function renderMmaAnalysis(data, game, container) {
   bWp.querySelector(".bar > span").style.width = `${(fm.bWinProb * 100).toFixed(0)}%`;
   container.appendChild(node);
 
-  if (fm.pick) container.appendChild(renderMmaPickVerdict(fm.pick));
+  // Order matters: the verdict answers "should I act on this?", the tape is how
+  // a fight is actually read, then the model detail, then the second opinion.
+  if (fm.pick) container.appendChild(renderMmaPickVerdict(fm.pick, data));
   if (fm.moneyline) container.appendChild(renderMmaMoneylineCard(fm));
+  const tape = renderMmaTape(fm);
+  if (tape) container.appendChild(tape);
   container.appendChild(renderMmaSummaryCard(fm));
   if (fm.signals && fm.signals.length) container.appendChild(renderMmaSignals(fm));
-  if (data.comps) container.appendChild(renderMmaComps(data.comps));
+  if (data.comps) container.appendChild(renderMmaComps(data.comps, fm));
 
   addToTopBoard(data, game);
   addToBetBoard(data, game);
@@ -1189,20 +1224,27 @@ function renderMmaAnalysis(data, game, container) {
   }
 }
 
-function renderMmaPickVerdict(p) {
+function renderMmaPickVerdict(p, data) {
   const card = document.createElement("div");
   card.className = "mma-pick mma-pick--" + p.tier.toLowerCase();
   const hist = `${(p.histHitRate * 100).toFixed(0)}%`;
+  // No market matched => this is a projection, not an edge. Say so plainly
+  // rather than letting a confidence number imply betting value.
+  const priced = !!(data && data.fightModel && data.fightModel.moneyline);
+  const edgeNote = priced
+    ? ""
+    : `<div class="mma-pick-detail">No live price matched, so this is a model lean, not an edge — ` +
+      `positive EV needs the model to beat the vig-removed market number.</div>`;
   if (p.coinFlip) {
     card.innerHTML =
       `<div class="mma-pick-label">Coin flip — Pass</div>` +
-      `<div class="mma-pick-detail">No confident side (model leans ${p.fighter} just ${p.confidence}%). ` +
-      `Picks this close hit only ~${hist} historically — not a play.</div>`;
+      `<div class="mma-pick-detail">No confident side (model leans ${esc(p.fighter)} just ${p.confidence}%). ` +
+      `Picks in this band have hit ~${hist} historically — not a play.</div>` + edgeNote;
   } else {
     card.innerHTML =
-      `<div class="mma-pick-label">${p.tier} lean · ${p.fighter}</div>` +
+      `<div class="mma-pick-label">${p.tier} lean · ${esc(p.fighter)}</div>` +
       `<div class="mma-pick-detail">${p.confidence}% model confidence · ${p.tier} leans (≥${p.tier === "Strong" ? 70 : 60}%) ` +
-      `have hit ~${hist} historically.</div>`;
+      `have hit ~${hist} historically, measured over 868 fights since 2023.</div>` + edgeNote;
   }
   return card;
 }
@@ -1211,10 +1253,27 @@ function renderMmaMoneylineCard(fm) {
   const card = document.createElement("div");
   card.className = "pick-card";
   const ml = fm.moneyline;
+  // A huge "edge" against a sharp market is a warning sign, not a jackpot. Our
+  // model grades slightly worse than the closing line, so it cannot also be
+  // finding 30-point mispricings — say that where the number is shown.
+  const flagged = (ml.a && ml.a.implausible) || (ml.b && ml.b.implausible);
+  const gap = Math.max(
+    ml.a && ml.a.probGap ? ml.a.probGap : 0,
+    ml.b && ml.b.probGap ? ml.b.probGap : 0
+  );
+  const warn = flagged
+    ? `<div class="data-stale" style="margin:8px 0 0;">
+         <strong>Implausible edge — do not trust this EV.</strong> The model is
+         ${(gap * 100).toFixed(0)} points away from the vig-removed market price.
+         On a market this sharp that gap is almost always our error (wrong fighter
+         matched, stale price, or a profile we have wrong), not value.
+       </div>`
+    : "";
   card.innerHTML = `
     <div class="pick-header"><div class="pick-title">Moneyline</div></div>
-    <div class="edge-box"><span><strong>${fm.aName}</strong></span>${edgeLine(ml.a)}</div>
-    <div class="edge-box"><span><strong>${fm.bName}</strong></span>${edgeLine(ml.b)}</div>`;
+    <div class="edge-box"><span><strong>${esc(fm.aName)}</strong></span>${edgeLine(ml.a)}</div>
+    <div class="edge-box"><span><strong>${esc(fm.bName)}</strong></span>${edgeLine(ml.b)}</div>
+    ${warn}`;
   return card;
 }
 
@@ -1234,39 +1293,206 @@ function renderMmaSummaryCard(fm) {
       <span>Goes distance ${(fm.distanceProb * 100).toFixed(0)}%</span>
     </div>
     <div class="narrative">Finish by round: ${roundsTxt} · decision ${(rp.decision * 100).toFixed(0)}%.
-      Projected sig. strikes: ${fm.aName} ${fm.projSigStrikes.a} / ${fm.bName} ${fm.projSigStrikes.b}
-      (total ${fm.projSigStrikes.total}) over ~${fm.expMinutes} min.</div>`;
+      Projected sig. strikes: ${esc(fm.aName)} ${fm.projSigStrikes.a} / ${esc(fm.bName)} ${fm.projSigStrikes.b}
+      (total ${fm.projSigStrikes.total}) over ~${fm.expMinutes} min.</div>
+    ${renderScorecard(fm)}`;
   return card;
 }
 
+// State the model's measured standing next to its own output. Confident-looking
+// percentages invite more trust than this model has earned: it grades at or just
+// below the closing line on winners, and its method split barely beats "always
+// guess decision". Saying that here is the difference between a tool and a pitch.
+function renderScorecard(fm) {
+  const sc = fm.scorecard;
+  if (!sc) return "";
+  const methodEdge = ((sc.methodAccuracy - sc.methodBaseline) * 100).toFixed(1);
+  return `<div class="second-opinion">
+    <span>Measured on ${sc.sampleSize} fights since ${sc.since}:</span>
+    <span>winner <strong>${(sc.winnerAccuracy * 100).toFixed(0)}%</strong></span>
+    <span>distance <strong>${(sc.distanceAccuracy * 100).toFixed(0)}%</strong></span>
+    <span>method <strong>${(sc.methodAccuracy * 100).toFixed(0)}%</strong>
+      (only ${methodEdge} pts better than always guessing decision — treat the
+      KO/Sub split as weak)</span>
+    <span>Closing lines grade ${sc.marketClosingAccuracy}, so this model is at
+      best level with the market — use it to find and explain leans, not to
+      assume an edge.</span>
+  </div>`;
+}
+
+// Tale of the tape: the canonical fight presentation. Every field here was
+// already in the payload and previously shown only as buried text rows (or not
+// at all). `better` marks the stronger side of each row with weight + brightness
+// rather than colour alone, so it still reads without colour vision.
+const TAPE_ROWS = [
+  { key: "record", label: "Record", fmt: (v) => v, cmp: null },
+  { key: "age", label: "Age", fmt: (v) => `${v}`, cmp: "lower" },
+  { key: "heightIn", label: "Height", fmt: (v) => `${Math.floor(v / 12)}'${v % 12}"`, cmp: "higher" },
+  { key: "reachIn", label: "Reach", fmt: (v) => `${v.toFixed(0)}"`, cmp: "higher" },
+  { key: "stance", label: "Stance", fmt: (v) => v, cmp: null },
+  { key: "slpm", label: "Strikes / min", fmt: (v) => v.toFixed(1), cmp: "higher" },
+  { key: "sapm", label: "Absorbed / min", fmt: (v) => v.toFixed(1), cmp: "lower" },
+  { key: "strAcc", label: "Str. accuracy", fmt: (v) => `${(v * 100).toFixed(0)}%`, cmp: "higher" },
+  { key: "strDef", label: "Str. defense", fmt: (v) => `${(v * 100).toFixed(0)}%`, cmp: "higher" },
+  { key: "tdAvg", label: "TD / 15 min", fmt: (v) => v.toFixed(1), cmp: "higher" },
+  { key: "tdDef", label: "TD defense", fmt: (v) => `${(v * 100).toFixed(0)}%`, cmp: "higher" },
+  { key: "subAvg", label: "Sub att / 15", fmt: (v) => v.toFixed(1), cmp: "higher" },
+  { key: "finishRate", label: "Finish rate", fmt: (v) => `${(v * 100).toFixed(0)}%`, cmp: "higher" },
+];
+
+function renderMmaTape(fm) {
+  const tape = fm.tape;
+  if (!tape || !tape.a || !tape.b) return null;
+  const card = document.createElement("div");
+  card.className = "pick-card";
+
+  const rows = [];
+  rows.push(
+    `<div class="tape-name">${fm.aName}</div>` +
+    `<div class="tape-stat"></div>` +
+    `<div class="tape-name b">${fm.bName}</div>` +
+    `<div class="tape-row-sep"></div>`
+  );
+
+  for (const r of TAPE_ROWS) {
+    const av = tape.a[r.key];
+    const bv = tape.b[r.key];
+    if (av === null || av === undefined || bv === null || bv === undefined) continue;
+    let aBetter = false;
+    let bBetter = false;
+    if (r.cmp === "higher" && av !== bv) { aBetter = av > bv; bBetter = bv > av; }
+    if (r.cmp === "lower" && av !== bv) { aBetter = av < bv; bBetter = bv < av; }
+    rows.push(
+      `<div class="tape-val${aBetter ? " better" : ""}">${r.fmt(av)}</div>` +
+      `<div class="tape-stat">${r.label}</div>` +
+      `<div class="tape-val b${bBetter ? " better" : ""}">${r.fmt(bv)}</div>`
+    );
+  }
+
+  const thin = [];
+  if (tape.a.fights < 6) thin.push(`${fm.aName} (${tape.a.fights} UFC fights)`);
+  if (tape.b.fights < 6) thin.push(`${fm.bName} (${tape.b.fights} UFC fights)`);
+
+  card.innerHTML =
+    `<div class="pick-header"><div class="pick-title">Tale of the tape</div></div>` +
+    `<div class="tape">${rows.join("")}</div>` +
+    (thin.length
+      ? `<div class="narrative">Thin sample: ${thin.join(", ")} — career rates are shrunk toward the
+         league mean, so these read closer to average than the raw numbers would.</div>`
+      : "");
+  return card;
+}
+
+// Signals, ordered by how much each actually moved the win probability
+// (learned weight x this fight's differential) and bar-charted by that amount.
+// Turns a flat list of facts into the model explaining its own pick.
 function renderMmaSignals(fm) {
   const favored = fm.aWinProb >= 0.5 ? "a" : "b";
   const wrap = document.createElement("div");
   wrap.className = "signals-block";
   const heading = document.createElement("div");
   heading.className = "signals-heading";
-  heading.textContent = "Signals & discrepancies";
+  heading.textContent = "Why the model leans this way — ranked by impact";
   wrap.appendChild(heading);
 
-  const tagMap = { a: fm.aName.split(" ").pop(), b: fm.bName.split(" ").pop(),
-                   over: "OVER", under: "UNDER", neutral: "—" };
+  const ranked = fm.signals.filter((s) => s.impact !== null && s.impact !== undefined);
+  const maxImpact = ranked.length ? Math.max(...ranked.map((s) => s.impact)) : 0;
+
+  const tagMap = {
+    a: fm.aName.split(" ").pop(),
+    b: fm.bName.split(" ").pop(),
+    over: "OVER",
+    under: "UNDER",
+    neutral: "—",
+  };
+
   for (const s of fm.signals) {
-    let color = "#97a3c4";
-    if (s.lean === "a" || s.lean === "b") color = s.lean === favored ? "#3ecf8e" : "#ffcb47";
-    else if (s.lean === "over" || s.lean === "under") color = "#6ea8fe";
     const row = document.createElement("div");
-    row.className = "signal-row";
+    row.className = "signal-row ranked";
+
+    // Direction is carried by an arrow as well as hue (colour alone is not
+    // accessible), and the bar length is the model's actual contribution.
+    let color = "var(--text-faint)";
+    let mark = "—";
+    if (s.lean === "a" || s.lean === "b") {
+      color = s.lean === favored ? "var(--green)" : "var(--accent)";
+      mark = s.lean === "a" ? "◀" : "▶";
+    } else if (s.lean === "over" || s.lean === "under") {
+      color = "var(--blue)";
+      mark = s.lean === "over" ? "▲" : "▼";
+    }
+
+    const used = s.impact !== null && s.impact !== undefined;
+    const pct = used && maxImpact > 0 ? Math.max((s.impact / maxImpact) * 100, 3) : 0;
+    const bar = used
+      ? `<div class="signal-impact" style="width:${pct}%;background:${color}"></div>`
+      : `<span class="signal-ctx">ctx</span>`;
+
+    // impact === 0 means the model genuinely does not use this input — say so
+    // rather than implying it contributed.
+    const leanTxt = used && s.impact === 0 ? "not used" : `${mark} ${tagMap[s.lean] || s.lean}`;
+    const leanColor = used && s.impact === 0 ? "var(--text-faint)" : color;
+
     row.innerHTML =
-      `<span class="signal-dot" style="color:${color}">●</span>` +
+      `<span>${bar}</span>` +
       `<span class="signal-label">${s.label}</span>` +
       `<span class="signal-detail">${s.detail}</span>` +
-      `<span class="signal-lean" style="color:${color}">${tagMap[s.lean] || s.lean}</span>`;
+      `<span class="signal-lean" style="color:${leanColor}">${leanTxt}</span>`;
     wrap.appendChild(row);
   }
+
+  const note = document.createElement("div");
+  note.className = "narrative";
+  note.textContent =
+    "Bar length = how much that factor moved the win probability in this matchup. " +
+    "Items marked ctx are shown for context and are not model inputs.";
+  wrap.appendChild(note);
   return wrap;
 }
 
-function renderMmaComps(c) {
+// Dataset freshness. The failure this guards against is silent: when the weekly
+// refresh stops, every number stays confident and nothing looks wrong.
+function renderDataHealth(h) {
+  if (!h) return null;
+  if (!h.stale && !h.unknownFreshness) return null;
+  const div = document.createElement("div");
+  div.className = "data-stale";
+  if (h.unknownFreshness) {
+    div.innerHTML =
+      `<strong>Fighter data freshness unknown.</strong> This dataset has no build stamp — ` +
+      `re-run <code>python scripts/refresh_mma_data.py</code> to confirm it is current.`;
+  } else {
+    div.innerHTML =
+      `<strong>Fighter data is ${h.stalenessDays} days old.</strong> Newest bout on file: ` +
+      `${h.latestBout}. Cards since then are missing, so rates, recent form and layoff are ` +
+      `out of date — run <code>python scripts/refresh_mma_data.py</code>.`;
+  }
+  return div;
+}
+
+
+// The comps win probability was computed and shipped in the payload but never
+// displayed. It is deliberately NOT blended into the headline number
+// (ENSEMBLE_COMP_WEIGHT=0 — every nonzero weight scored worse), so show it for
+// what it is: an independent read that either corroborates the model or doesn't.
+function renderSecondOpinion(c, fm) {
+  if (!fm || fm.aWinProbComps === null || fm.aWinProbComps === undefined) return "";
+  const favIsA = fm.aWinProb >= 0.5;
+  const modelPct = (favIsA ? fm.aWinProb : fm.bWinProb) * 100;
+  const compsPct = (favIsA ? fm.aWinProbComps : 1 - fm.aWinProbComps) * 100;
+  const favName = favIsA ? fm.aName : fm.bName;
+  const gap = Math.abs(modelPct - compsPct);
+  const verdict = gap < 5 ? "the two lenses agree"
+    : gap < 12 ? "mild disagreement"
+    : "the lenses disagree — treat with caution";
+  return `<div class="second-opinion">
+    <span>On ${esc(favName)}: model <strong>${modelPct.toFixed(0)}%</strong></span>
+    <span>comps <strong>${compsPct.toFixed(0)}%</strong></span>
+    <span>${verdict}</span>
+  </div>`;
+}
+
+function renderMmaComps(c, fm) {
   const card = document.createElement("div");
   card.className = "pick-card";
   const m = c.method;
@@ -1284,6 +1510,7 @@ function renderMmaComps(c) {
     </div>
     <div class="narrative">How the most comparable style-matchups actually played out
       (empirical, point-in-time). A second lens to weigh against the model above.</div>
+    ${renderSecondOpinion(c, fm)}
     <div class="signals-block" style="margin-top:6px;">${rows}</div>`;
   return card;
 }
@@ -1322,12 +1549,22 @@ function renderPickCard(pick) {
   const tpl = document.getElementById("tpl-pick-card");
   const node = tpl.content.cloneNode(true);
 
-  node.querySelector(".pick-title").textContent =
-    `${pick.pick} — ${pick.confidence}% confidence`;
+  // With no market, the line is derived from our own projection, so the
+  // "confidence" is ~50% by construction and a tier badge would dress a
+  // self-chosen number as an edge. Show the projection range instead.
+  const analysisOnly = pick.analysisOnly && !pick.hasMarket;
+  node.querySelector(".pick-title").textContent = analysisOnly
+    ? pick.pick
+    : `${pick.pick} — ${pick.confidence}% confidence`;
 
   const tier = node.querySelector(".tier");
-  tier.textContent = pick.tier;
-  tier.classList.add(pick.tier);
+  if (analysisOnly) {
+    tier.textContent = "no market";
+    tier.className = "tier analysis-only-tag";
+  } else {
+    tier.textContent = pick.tier;
+    tier.classList.add(pick.tier);
+  }
 
   const splitsEl = node.querySelector(".splits");
   for (const s of pick.splits) {
@@ -1340,6 +1577,14 @@ function renderPickCard(pick) {
     const span = document.createElement("span");
     span.className = "split";
     span.textContent = text;
+    splitsEl.appendChild(span);
+  }
+
+  // A point estimate with a ~50-strike error band should not be shown alone.
+  if (pick.projLow !== undefined && pick.projLow !== null && pick.projHigh) {
+    const span = document.createElement("span");
+    span.className = "split proj-range";
+    span.textContent = `projection ${pick.projection} · 80% range ${pick.projLow}–${pick.projHigh}`;
     splitsEl.appendChild(span);
   }
 
@@ -1376,7 +1621,25 @@ function renderPickCard(pick) {
     edgeBox.innerHTML = edgeLine(pick.edge);
   } else {
     edgeBox.style.display = "flex";
-    edgeBox.innerHTML = `<span>Analysis only — no live line matched. Projection ${pick.projection} ${pick.statNoun || ""}.</span>`;
+    // Show the interval, not just the mean: these projections carry a large error
+    // band (total sig strikes run ~50 MAE), and a lone point estimate reads as
+    // precision we do not have. For a skewed count the most likely value sits
+    // below the mean, so name it rather than letting the two look contradictory.
+    const rangeTxt =
+      pick.projLow !== undefined && pick.projLow !== null && pick.projHigh
+        ? ` 80% range ${pick.projLow}–${pick.projHigh}.`
+        : "";
+    // For a skewed count the mean and the most likely value differ — a takedown
+    // mean of 1.0 usually means "probably none, occasionally several". Spell that
+    // out so the average and the Under pick don't look like they contradict.
+    const modeTxt =
+      pick.projMode !== undefined && pick.projMode !== null &&
+      Math.abs(pick.projMode - pick.projection) >= 0.5
+        ? ` Most likely: ${pick.projMode}.`
+        : "";
+    edgeBox.innerHTML =
+      `<span>Analysis only — no live line matched. Projection ${pick.projection} ` +
+      `${esc(pick.statNoun || "")}.${modeTxt}${rangeTxt}</span>`;
   }
 
   const canvas = node.querySelector("canvas");

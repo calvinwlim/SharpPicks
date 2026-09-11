@@ -21,6 +21,7 @@ Re-run after rebuilding the fighter dataset; then validate with mma_backtest.py.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import math
 import sys
@@ -30,13 +31,25 @@ from typing import Any, Dict, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import fitlib as FL
 import mma_backtest as B
 from backend import mma_analysis as M
 
 OUT = ROOT / "backend" / "data" / "ufc_winmodel.json"
 L2 = 1.0       # ridge strength (holdout sweep showed it's ~irrelevant here)
-EPOCHS = 4000  # GD iterations for the final fit (tuned via the holdout epochs sweep)
+
+# Features whose sign is not in doubt: landing more, defending better, controlling
+# more and hitting harder cannot make you LESS likely to win. Under L2 with
+# collinear inputs the unconstrained fit handed negative weights to d_slpm, d_ctrl
+# and d_kd — which the UI then has to explain to a user as "more knockdowns favours
+# your opponent". Constraining just these three is accuracy-neutral (holdout Brier
+# +0.0003, 95% bootstrap CI [-0.0012, +0.0019] — indistinguishable from zero) and
+# makes the per-signal contributions the frontend now renders actually faithful.
+# Constraining ALL causally-positive features was tested and was worse (+0.0004
+# Brier, -0.7% accuracy), so the constraint stays narrow: only what we display.
+NONNEG_FEATURES = ("d_slpm", "d_ctrl", "d_kd")
 
 # Feature order is owned by backend.mma_analysis (WIN_FEATURE_NAMES /
 # _win_features) so the trained coefficients always line up with inference.
@@ -53,24 +66,15 @@ def _logistic(z: float) -> float:
 
 
 def fit_logistic(X: List[List[float]], y: List[float], l2: float = 1.0,
-                 lr: float = 0.3, epochs: int = 4000) -> Tuple[List[float], float]:
-    """Plain batch gradient-descent logistic regression on standardized X."""
-    n, dim = len(X), len(X[0])
-    w = [0.0] * dim
-    b = 0.0
-    for _ in range(epochs):
-        gw = [0.0] * dim
-        gb = 0.0
-        for xi, yi in zip(X, y):
-            p = _logistic(b + sum(w[d] * xi[d] for d in range(dim)))
-            err = p - yi
-            for d in range(dim):
-                gw[d] += err * xi[d]
-            gb += err
-        for d in range(dim):
-            w[d] -= lr * (gw[d] / n + l2 * w[d] / n)
-        b -= lr * gb / n
-    return w, b
+                 nonneg: Optional[List[int]] = None) -> Tuple[List[float], float]:
+    """Ridge logistic fit -> (weights, intercept) in RAW feature space.
+
+    Delegates to scripts/fitlib.py, which uses Newton/IRLS. This replaced 4000
+    epochs of batch gradient descent: it reaches the actual optimum (rather than
+    wherever a fixed step count landed) in under ten iterations, turning a
+    multi-minute refit into a couple of seconds.
+    """
+    return FL.fit_logistic(X, y, l2=l2, nonneg=nonneg)
 
 
 def _brier(preds, outs):
@@ -181,14 +185,6 @@ def _collect(bouts, box, phys):
     return rows
 
 
-def _standardize(X):
-    dim = len(X[0])
-    cols = [[r[i] for r in X] for i in range(dim)]
-    mean_v = [mean(c) for c in cols]
-    std_v = [(sum((x - mean_v[i]) ** 2 for x in cols[i]) / len(cols[i])) ** 0.5 or 1.0 for i in range(dim)]
-    Z = [[(r[i] - mean_v[i]) / std_v[i] for i in range(dim)] for r in X]
-    return Z, mean_v, std_v
-
 
 async def main_async() -> None:
     print("loading ufcstats CSVs...")
@@ -201,42 +197,44 @@ async def main_async() -> None:
     y = [r[2] for r in rows]
 
     # --- temporal holdout for honesty: train on older, score the recent third ---
+    nonneg = [FEATURES.index(n) for n in NONNEG_FEATURES if n in FEATURES]
     cut = sorted(r[0] for r in rows)[int(len(rows) * 0.7)]
     tr = [(r[1], r[2]) for r in rows if r[0] < cut]
     te = [(r[1], r[2]) for r in rows if r[0] >= cut]
     if te:
-        Ztr, mtr, str_ = _standardize([f for f, _ in tr])
-        zte = [[(f[i] - mtr[i]) / str_[i] for i in range(len(f))] for f, _ in te]
+        # NOTE: holdout sweeps over L2 (0.1-2.0) were dead flat, and with IRLS the
+        # fit is exactly converged, so there is no optimizer knob left to tune.
+        # Calibration is NOT corrected here: see WIN_LOGIT_TEMP in mma_analysis,
+        # where a rolling-origin test showed the old 0.85 sharpening was fitted to
+        # the 2023-2025 window rather than being a property of the model.
+        wtr, btr = fit_logistic([f for f, _ in tr], [o for _, o in tr], l2=L2, nonneg=nonneg)
         ote = [o for _, o in te]
-        # NOTE: holdout sweeps over L2 (0.1–2.0) and epochs (4k–30k) were both
-        # dead flat (Brier 0.2211, |w|avg 0.102) — the fit is fully converged and
-        # the mild under-confidence is intrinsic, not an optimization artifact. So
-        # L2/EPOCHS are left at the defaults and WIN_LOGIT_TEMP handles calibration.
-        wtr, btr = fit_logistic(Ztr, [o for _, o in tr], l2=L2, epochs=EPOCHS)
-        pte = [_logistic(btr + sum(wtr[i] * z[i] for i in range(len(z)))) for z in zte]
+        pte = [_logistic(btr + sum(wtr[i] * f[i] for i in range(len(wtr)))) for f, _ in te]
         acc = mean(int((p >= 0.5) == bool(o)) for p, o in zip(pte, ote))
-        print(f"\n=== Temporal holdout (train <{cut}, test {len(te)} rows) ===")
+        print("")
+        print(f"=== Temporal holdout (train <{cut}, test {len(te)} rows) ===")
         print(f"  accuracy {acc:.1%}   Brier {_brier(pte, ote):.4f}  (always-50% {_brier([0.5]*len(ote), ote):.4f})")
 
     # --- final fit on all data, stored in RAW feature space (no inference-time scaling) ---
-    Z, mean_v, std_v = _standardize(X)
-    w_z, b_z = fit_logistic(Z, y, l2=L2, epochs=EPOCHS)
-    w_raw = [w_z[i] / std_v[i] for i in range(len(w_z))]
-    b_raw = b_z - sum(w_z[i] * mean_v[i] / std_v[i] for i in range(len(w_z)))
+    w_raw, b_raw = fit_logistic(X, y, l2=L2, nonneg=nonneg)
 
     preds = [_logistic(b_raw + sum(w_raw[i] * X[k][i] for i in range(len(w_raw)))) for k in range(len(X))]
     acc = mean(int((p >= 0.5) == bool(o)) for p, o in zip(preds, y))
-    print(f"\n=== Full-data fit ({len(X)} rows) ===")
+    print("")
+    print(f"=== Full-data fit ({len(X)} rows) ===")
     print(f"  in-sample accuracy {acc:.1%}   Brier {_brier(preds, y):.4f}")
     print("  learned weights (raw feature space):")
     for name, wt in sorted(zip(FEATURES, w_raw), key=lambda kv: -abs(kv[1])):
-        print(f"     {name:<16} {wt:+.4f}")
+        pin = "  (pinned >= 0)" if name in NONNEG_FEATURES else ""
+        print(f"     {name:<16} {wt:+.4f}{pin}")
     print(f"     {'(intercept)':<16} {b_raw:+.4f}")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps({
         "features": FEATURES, "weights": [round(w, 6) for w in w_raw],
         "intercept": round(b_raw, 6), "n": len(X),
+        "nonneg": list(NONNEG_FEATURES),
+        "builtAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }, indent=2), encoding="utf-8")
     print(f"\nwrote {OUT}")
 

@@ -59,13 +59,31 @@ finish rate; plus recent **chin** (`d_chin` = recent finish-loss rate), ground-
 strike share, grappling defense, ring-rust, stance. All career rates are
 **sample-size-shrunk** toward league means (`shrink_rate_profile`, `SHRINK_K`) so a
 4-fight sample doesn't dominate — applied identically in the dataset and
-`mma_backtest.rates` for train/serve parity. The learned win prob is sharpened by
-`WIN_LOGIT_TEMP` (≈0.85; the L2 fit is mildly under-confident).
+`mma_backtest.rates` for train/serve parity. Shrinkage is **denominator-aware**
+(`_RATE_DENOM`): `koRate`/`finishRate` are shares of *wins* and `finishedRate` of
+*losses*, so they shrink by that count, not the fight count. (Before this,
+Makhachev's single 2015 KO loss gave him `finishedRate` 0.90 vs a 0.45 league
+mean — a glass chin off n=1 — while an undefeated fighter read as unfinishable.)
+The win prob is **not** temperature-corrected: `WIN_LOGIT_TEMP` is 1.0. It was
+0.85, but that came from `mma_backtest`'s sweep, which minimises Brier on the
+same fights it scores. A rolling-origin re-test (`mma_experiments.py`) showed
+sharpening helps only in 2023-2025 and hurts in 2018-2022 and 2026 — 4 wins in 9
+eras, mean Brier a dead heat. Three features whose sign is not in doubt
+(`d_slpm`, `d_ctrl`, `d_kd`) are **constrained non-negative** in the fit: it is
+accuracy-neutral (bootstrap CI spans zero) and keeps the UI's per-signal
+contributions faithful, since the panel now shows the model's own direction.
 `WIN_FEATURE_NAMES`/`_win_features` own the feature order (new features appended so
 an older model file degrades gracefully); the builder imports them so the two
-never drift. **Tested and left out** (measured non-wins, in code comments):
-multiplicative style-matchup interactions and pruning the near-zero features —
-both regressed out-of-sample (collinearity; L2 already neutralizes dead weights). **Distance/method:** `build_mma_finishmodel.py` fits
+never drift. **Tested and left out** (measured non-wins, in code comments and
+re-runnable via `mma_experiments.py`): multiplicative style-matchup interactions;
+pruning the near-zero features; constraining *all* causally-positive features;
+exponential **time-decay** on the rate sums (swept 1-8yr half-lives — 1y and 2y
+hurt, 4-8y is within noise of no decay); **division-relative** shrinkage targets
+(+0.0005 Brier, worse); a **finish/decision mixture** for sig strikes (beaten
+outright by a negative binomial); a **finisher-weighted** KO|finish split; and a
+**matchup-aware** finish-round hazard curve (clearly worse than the static
+weights). The winner model is at the public-data ceiling; the remaining wins were
+in the distributions and the presentation, not the features. **Distance/method:** `build_mma_finishmodel.py` fits
 `P(distance)` and `P(KO|finish)` point-in-time but only writes the piece that
 *beats the existing heuristic* out-of-sample — currently the per-fighter
 finish-hazard product wins for distance (it captures an A-power×B-chin
@@ -85,16 +103,56 @@ de-vig math as MLB) as `fightModel.moneyline` + per-fighter `mma_moneyline` pick
 
 `fightModel.pick` (`_winner_pick`) is the **selectivity** verdict: who to lean,
 the confidence %, a tier (`Strong` ≥70% / `Lean` ≥60% / `Pass` coin-flip below
-`WIN_LEAN_FLOOR`), and that band's measured hit rate. Confidence is well-calibrated,
-so filtering to confident picks is the biggest free accuracy lever (raw 66% →
-~77% at ≥65%); the frontend renders it as a colour-coded verdict card.
+`WIN_LEAN_FLOOR`), and that band's measured hit rate. Filtering to confident picks
+remains the biggest free accuracy lever (whole slate 66% → ~80% at ≥70%, playing
+only ~19% of fights); the frontend renders it as a verdict card.
+
+`WIN_TIER_HIT_RATES` holds those hit rates and is **shown to users verbatim**, so
+it is not allowed to be a guess: `mma_backtest.py` recomputes them every run and
+prints `<-- SHIPPED VALUE IS STALE` when the constant drifts more than 2 points.
+`MODEL_SCORECARD` ships the model's measured accuracy to the UI alongside the
+caveat that UFC closing lines grade ~68-70% — i.e. this model is at best level
+with the market. Consistent with that, a moneyline whose model probability sits
+more than `IMPLAUSIBLE_EDGE_PROB_GAP` (0.25) from the vig-removed price is
+**flagged, not promoted**: against a sharp market a 30-point gap is our error
+(bad name match, stale price, wrong profile), not free money. Picks that are
+analysis-only, implausible, or tiered `Pass` are kept off the Top Plays and Bet
+Board entirely — an empty board is the honest answer when a card has nothing.
 
 Backtests (live data, measure model accuracy — needs network):
 
 ```bash
 python3 backtest.py --season 2025 --pitchers 25   # MLB projection accuracy + calibration
 python3 mma_backtest.py --since 2022-01-01         # MMA winner/distance/method point-in-time
+python3 mma_experiments.py                         # MMA: score CANDIDATE changes, not the shipped one
 ```
+
+`mma_backtest.py` measures the model that **ships**; `mma_experiments.py` measures
+the ones that might. It runs the same no-leakage replay once, then scores each
+candidate against a temporal holdout (fit before `--cutoff`, grade after), so a
+change only lands with a measured win behind it and the losers get written up as
+comments beside the code they'd have touched. `--only <name>` runs one. Both share
+a 24h local CSV cache under `.cache/` (a full backtest is ~2s after the first run;
+delete the directory to force a re-download).
+
+Fitting for every learned model goes through `scripts/fitlib.py` — pure-Python
+ridge logistic by **Newton/IRLS**, which replaced 4000 epochs of batch gradient
+descent (exact optimum, seconds not minutes) and supports **sign constraints** via
+an active set. Nothing under `backend/` gains a dependency; the bundled models
+stay plain JSON.
+
+**Count props are negative binomial**, not gaussian/Poisson. Fight-stat counts are
+right-skewed and overdispersed (takedowns run variance/mean = 2.86; a normal on
+sig strikes puts mass below zero). Dispersions (`NB_K_SIG`, `NB_K_SIG_TOTAL`,
+`NB_K_TD`) are fitted pre-2023 and scored blind on 2023+; each beat what it
+replaced by a wide margin (+0.18, +0.12, +0.22 mean log-likelihood) and moves
+P(over) at the model's own line by ~10-13 points.
+
+**Data freshness is surfaced, not assumed.** Every builder stamps `builtAt` into
+its output and the dataset also records `latestBout`; `mma_data.staleness_days()`
+and `/api/health`'s `mmaData` block expose it, and the UI shows a red banner past
+`MMA_STALE_AFTER_DAYS` (21). This exists because the weekly refresh silently
+stopped and the app served 118-day-old rates with no visible symptom.
 
 `backtest.py` replays each pitcher start point-in-time (game log filtered to
 before the game date — no look-ahead) and reports projection MAE/bias and
@@ -143,6 +201,8 @@ backend/                FastAPI app + the model (Python, async)
   data/ufc_fighters.json  bundled fighter career rate stats (built by scripts/build_ufc_dataset.py)
   ai.py                 narrative: deterministic template + optional Claude rephrase
   cache.py              in-process TTL cache with per-key locks
+scripts/fitlib.py       pure-Python ridge logistic (Newton/IRLS + sign constraints)
+mma_experiments.py      scores CANDIDATE model changes on a temporal holdout
 frontend/               static single-page UI (no framework, no build)
   index.html            structure + <template>s + Google Fonts + Chart.js (CDN)
   styles.css            design system ("ballpark at night")

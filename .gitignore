@@ -20,3 +20,6 @@ tracking/*.json
 *.swp
 .idea/
 .vscode/
+
+# backtest CSV cache (ufcstats mirror; re-downloaded on demand)
+.cache/

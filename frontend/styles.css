@@ -1311,3 +1311,153 @@ footer {
   font-size: 12px;
   margin-top: 40px;
 }
+
+/* ---- MMA: tale of the tape ------------------------------------------- */
+/* The canonical way a fight is presented. Three columns so each stat reads as
+   a head-to-head; the winning side of each row is emphasised rather than
+   coloured alone, so it survives a colour-vision deficiency. */
+.tape {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 2px 10px;
+  align-items: center;
+  font-size: 12px;
+  margin: 4px 0 2px;
+}
+
+.tape-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  color: var(--text);
+  padding-bottom: 4px;
+}
+
+.tape-name.b { text-align: right; }
+
+.tape-stat {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+
+.tape-val {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  padding: 1px 0;
+}
+
+.tape-val.b { text-align: right; }
+
+/* The better side of a row: brighter + heavier, not hue-only. */
+.tape-val.better {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.tape-row-sep {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: var(--border);
+  opacity: 0.5;
+  margin: 3px 0;
+}
+
+/* ---- MMA: signal impact --------------------------------------------- */
+/* Signals are ordered by how much they moved the model, and the bar shows it.
+   Width is the evidence; the arrow (not just colour) carries the direction. */
+.signal-impact {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-faint);
+  opacity: 0.85;
+  min-width: 2px;
+}
+
+.signal-row.ranked {
+  grid-template-columns: 44px minmax(104px, auto) 1fr auto;
+}
+
+.signal-ctx {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* ---- MMA: projection ranges + analysis-only props -------------------- */
+.proj-range {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-only-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+/* ---- data freshness banner ------------------------------------------ */
+.data-stale {
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid var(--red);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.data-fresh-chip {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+/* ---- MMA: main event / card position -------------------------------- */
+.card-slot {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-right: 6px;
+}
+
+.card-slot.prelim {
+  background: transparent;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+}
+
+/* ---- MMA: second-opinion row ---------------------------------------- */
+.second-opinion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.second-opinion strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 560px) {
+  .tape { font-size: 11px; gap: 2px 6px; }
+  .tape-stat { font-size: 9px; }
+}

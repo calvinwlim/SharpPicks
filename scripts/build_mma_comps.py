@@ -118,7 +118,9 @@ async def main_async() -> None:
     std_v = [round(pstdev(c) or 1.0, 5) for c in cols]
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"featNames": C.FEATURE_NAMES, "mean": mean_v, "std": std_v, "vectors": vectors},
+    OUT.write_text(json.dumps({"featNames": C.FEATURE_NAMES, "mean": mean_v, "std": std_v,
+                               "builtAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                               "vectors": vectors},
                               separators=(",", ":")), encoding="utf-8")
     print(f"wrote {len(vectors)} fight vectors -> {OUT} ({OUT.stat().st_size // 1024} KB)")
 
