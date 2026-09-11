@@ -17,7 +17,11 @@ from .cache import cache
 log = logging.getLogger(__name__)
 
 SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard"
-UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
+# ESPN sits behind Akamai, which 403s a browser User-Agent arriving without the rest
+# of a browser's header set (a Chrome UA + bare Accept is an obvious bot fingerprint).
+# A plain, honest UA is allowed straight through — do NOT "upgrade" this to a Mozilla
+# string: doing so silently blocks every UFC card fetch.
+UA = {"User-Agent": "sharp-slate/1.0 (+https://github.com/pengoof/SharpPicks)",
       "Accept": "application/json"}
 
 _client: Optional[httpx.AsyncClient] = None
