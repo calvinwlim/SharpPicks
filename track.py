@@ -34,8 +34,8 @@ from typing import Any, Dict, List, Optional
 
 from backend import main as app
 from backend import mlb
-from backend import mma
 from backend import odds
+from backend import mma
 
 TRACK_DIR = "tracking"
 
@@ -606,6 +606,25 @@ async def _grade_mma(date: str) -> None:
 
 # --------------------------------------------------------------------------- main
 
+def _print_quota() -> None:
+    """Report remaining Odds API credits after a run.
+
+    The free plan is 500 credits a month and a request costs (markets x regions),
+    so this is the number that decides whether a daily scheduled snapshot stays
+    free. Printing it means a CI log shows the burn rate instead of the quota
+    running out silently months later.
+    """
+    q = odds.quota()
+    if q.get("remaining") is None:
+        return
+    print(f"[odds quota] {q['remaining']} credits remaining"
+          + (f", {q['used']} used" if q.get("used") is not None else "")
+          + (f" (this call cost {q['lastCost']})" if q.get("lastCost") is not None else ""))
+    if q["remaining"] < 50:
+        print(f"[odds quota] WARNING: only {q['remaining']} credits left — "
+              f"snapshots will silently stop capturing prices when this hits zero.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Snapshot today's picks and grade them vs results.")
     ap.add_argument("command", choices=["snapshot", "close", "grade"])
@@ -618,6 +637,7 @@ def main() -> None:
         asyncio.run(close(args.date, args.sport))
     else:
         asyncio.run(grade(args.date, args.sport))
+    _print_quota()
 
 
 if __name__ == "__main__":

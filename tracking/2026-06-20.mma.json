@@ -1,0 +1,207 @@
+{
+  "date": "2026-06-20",
+  "sport": "mma",
+  "generatedAt": "2026-06-20T10:02:58",
+  "fights": [
+    {
+      "gameId": "401873605",
+      "away": "Rosa",
+      "home": "Santos",
+      "moneyline": {
+        "pick": "Luana Santos",
+        "modelProb": 0.7388,
+        "tier": "Strong",
+        "evPct": 47.76,
+        "price": 100
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.702
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.702
+      }
+    },
+    {
+      "gameId": "401873608",
+      "away": "Bola\u00f1os",
+      "home": "Aswell",
+      "moneyline": {
+        "pick": "Michael Aswell",
+        "modelProb": 0.6366,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4995
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5005
+      }
+    },
+    {
+      "gameId": "401871341",
+      "away": "Nascimento",
+      "home": "Raposo",
+      "moneyline": {
+        "pick": "Mitch Raposo",
+        "modelProb": 0.5432,
+        "tier": "Pass",
+        "evPct": 31.45,
+        "price": 142
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6423
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6423
+      }
+    },
+    {
+      "gameId": "401871322",
+      "away": "Mullins",
+      "home": "Mesquita",
+      "moneyline": {
+        "pick": "Bia Mesquita",
+        "modelProb": 0.7319,
+        "tier": "Strong",
+        "evPct": -14.4,
+        "price": -590
+      },
+      "method": {
+        "pick": "sub",
+        "modelProb": 0.3945
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.778
+      }
+    },
+    {
+      "gameId": "401871320",
+      "away": "Borjas",
+      "home": "Lima",
+      "moneyline": {
+        "pick": "Andre Lima",
+        "modelProb": 0.7231,
+        "tier": "Strong",
+        "evPct": -16.03,
+        "price": -620
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.448
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.686
+      }
+    },
+    {
+      "gameId": "401877217",
+      "away": "Fili",
+      "home": "Oliveira",
+      "moneyline": {
+        "pick": "Vinicius Oliveira",
+        "modelProb": 0.7655,
+        "tier": "Strong",
+        "evPct": 4.9,
+        "price": -270
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6101
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6101
+      }
+    },
+    {
+      "gameId": "401873606",
+      "away": "Baghdasaryan",
+      "home": "Magomedov",
+      "moneyline": {
+        "pick": "Melsik Baghdasaryan",
+        "modelProb": 0.5157,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4682
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5318
+      }
+    },
+    {
+      "gameId": "401871321",
+      "away": "Rodriguez",
+      "home": "Amil",
+      "moneyline": {
+        "pick": "Christian Rodriguez",
+        "modelProb": 0.6548,
+        "tier": "Lean",
+        "evPct": -1.78,
+        "price": -200
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.659
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.659
+      }
+    },
+    {
+      "gameId": "401871323",
+      "away": "Cutelaba",
+      "home": "Stirling",
+      "moneyline": {
+        "pick": "Navajo Stirling",
+        "modelProb": 0.6313,
+        "tier": "Lean",
+        "evPct": -15.83,
+        "price": -300
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4818
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6499
+      }
+    },
+    {
+      "gameId": "401871319",
+      "away": "Horiguchi",
+      "home": "Kape",
+      "moneyline": {
+        "pick": "Manel Kape",
+        "modelProb": 0.5969,
+        "tier": "Pass",
+        "evPct": 1.73,
+        "price": -142
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6016
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6016
+      }
+    }
+  ]
+}

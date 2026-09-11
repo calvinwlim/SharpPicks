@@ -1,0 +1,98 @@
+# Daily pick tracking — the automated counterpart to running track.py by hand.
+#
+# WHY A SINGLE JOB, NOT TWO: grading needs the prediction snapshot taken *before*
+# the games were played. Rather than pass state between two scheduled runs, this
+# job grades YESTERDAY (everything is final) and then snapshots TODAY (nothing has
+# started). One run, one commit, no cross-run state beyond the repo itself.
+#
+# WHY COMMIT THE JSON: the deployed site's History view reads tracking/*.graded.json
+# straight out of the deployment bundle, so a push is what publishes the history.
+# A Vercel cron could not do this — Functions get an ephemeral filesystem, so
+# anything a cron wrote would be discarded before the site could read it.
+#
+# ODDS API COST: the free plan is 500 credits/month and a request costs
+# (markets x regions). With player props OFF this job spends ~3 credits/day
+# (MLB h2h+totals = 2, MMA h2h = 1); grading spends none, since results come from
+# the keyless MLB Stats and ESPN APIs. That is ~90/month against 500.
+# Turning ODDS_PLAYER_PROPS on would add ~1 credit per MLB game (~15/day, ~450/month)
+# and blow the free tier on its own — which is why it is pinned off below.
+
+name: Track history
+
+on:
+  schedule:
+    # 11:00 UTC daily = 06:00/07:00 ET. Chosen so that, in one run:
+    #   - yesterday's MLB games are final (latest west-coast + extras end ~05:00 UTC)
+    #   - yesterday's UFC card is final (cards end ~06:00-07:00 UTC Sunday)
+    #   - today's earliest MLB first pitch (~16:05 UTC) is still hours away
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Override today's date (YYYY-MM-DD), for backfilling"
+        required: false
+
+concurrency:
+  group: track-history
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    env:
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      # Pinned off: see the cost note above. Do not flip this on without moving
+      # to a paid Odds API plan.
+      ODDS_PLAYER_PROPS: "0"
+      TZ: UTC
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Resolve dates
+        id: dates
+        run: |
+          TODAY="${{ github.event.inputs.date }}"
+          if [ -z "$TODAY" ]; then TODAY=$(date -u +%F); fi
+          YESTERDAY=$(date -u -d "$TODAY - 1 day" +%F)
+          echo "today=$TODAY"         >> "$GITHUB_OUTPUT"
+          echo "yesterday=$YESTERDAY" >> "$GITHUB_OUTPUT"
+          echo "Grading $YESTERDAY, snapshotting $TODAY"
+
+      # Grade first: it reads yesterday's snapshot, which is already in the repo.
+      # `|| true` because an off-day (no MLB slate, no UFC card, or no snapshot
+      # from yesterday) is normal and must not fail the run.
+      - name: Grade yesterday
+        run: |
+          python track.py grade --date "${{ steps.dates.outputs.yesterday }}" --sport mlb || true
+          python track.py grade --date "${{ steps.dates.outputs.yesterday }}" --sport mma || true
+
+      - name: Snapshot today
+        run: |
+          python track.py snapshot --date "${{ steps.dates.outputs.today }}" --sport mlb || true
+          python track.py snapshot --date "${{ steps.dates.outputs.today }}" --sport mma || true
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tracking/
+          if git diff --staged --quiet; then
+            echo "No tracking changes (off-day or nothing new) — nothing to commit."
+            exit 0
+          fi
+          git commit -m "track: grade ${{ steps.dates.outputs.yesterday }}, snapshot ${{ steps.dates.outputs.today }}"
+          # Rebase in case something else landed while the job ran.
+          git pull --rebase --autostash origin "${GITHUB_REF#refs/heads/}"
+          git push

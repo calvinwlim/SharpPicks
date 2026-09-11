@@ -1,0 +1,247 @@
+{
+  "date": "2026-06-27",
+  "sport": "mma",
+  "generatedAt": "2026-06-26T09:10:30",
+  "fights": [
+    {
+      "gameId": "401872623",
+      "away": "Matsumoto",
+      "home": "Almakhan",
+      "moneyline": {
+        "pick": "Jean Matsumoto",
+        "modelProb": 0.5834,
+        "tier": "Pass",
+        "evPct": -5.2,
+        "price": -160
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6956
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6956
+      }
+    },
+    {
+      "gameId": "401879380",
+      "away": "Berggren",
+      "home": "Donchenko",
+      "moneyline": {
+        "pick": "Daniil Donchenko",
+        "modelProb": 0.686,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4818
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6472
+      }
+    },
+    {
+      "gameId": "401874319",
+      "away": "Reyes",
+      "home": "Ofli",
+      "moneyline": {
+        "pick": "Javier Reyes",
+        "modelProb": 0.7093,
+        "tier": "Strong",
+        "evPct": 4.71,
+        "price": -210
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4634
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.7199
+      }
+    },
+    {
+      "gameId": "401872673",
+      "away": "Ruziboev",
+      "home": "Pulyaev",
+      "moneyline": {
+        "pick": "Andrey Pulyaev",
+        "modelProb": 0.574,
+        "tier": "Pass",
+        "evPct": 66.46,
+        "price": 190
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5139
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5139
+      }
+    },
+    {
+      "gameId": "401872624",
+      "away": "Walker",
+      "home": "Yakhyaev",
+      "moneyline": {
+        "pick": "Abdul-Rakhman Yakhyaev",
+        "modelProb": 0.6904,
+        "tier": "Lean",
+        "evPct": -18.41,
+        "price": -550
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.5663
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.8583
+      }
+    },
+    {
+      "gameId": "401872622",
+      "away": "Nolan",
+      "home": "Hasanov",
+      "moneyline": {
+        "pick": "Eric Nolan",
+        "modelProb": 0.5414,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.539
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.539
+      }
+    },
+    {
+      "gameId": "401872675",
+      "away": "Magomedov",
+      "home": "Oleksiejczuk",
+      "moneyline": {
+        "pick": "Michal Oleksiejczuk",
+        "modelProb": 0.648,
+        "tier": "Lean",
+        "evPct": 22.66,
+        "price": -112
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.5175
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6573
+      }
+    },
+    {
+      "gameId": "401872625",
+      "away": "Aliskerov",
+      "home": "Ferreira",
+      "moneyline": {
+        "pick": "Ikram Aliskerov",
+        "modelProb": 0.6691,
+        "tier": "Lean",
+        "evPct": -10.79,
+        "price": -300
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.6062
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.7731
+      }
+    },
+    {
+      "gameId": "401872676",
+      "away": "Almabayev",
+      "home": "Johnson",
+      "moneyline": {
+        "pick": "Asu Almabayev",
+        "modelProb": 0.5731,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.7051
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.7051
+      }
+    },
+    {
+      "gameId": "401872674",
+      "away": "Sadykhov",
+      "home": "Camilo",
+      "moneyline": {
+        "pick": "Nazim Sadykhov",
+        "modelProb": 0.5343,
+        "tier": "Pass",
+        "evPct": -17.21,
+        "price": -182
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.5302
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.8022
+      }
+    },
+    {
+      "gameId": "401871791",
+      "away": "Pereira",
+      "home": "Magomedov",
+      "moneyline": {
+        "pick": "Shara Magomedov",
+        "modelProb": 0.5884,
+        "tier": "Pass",
+        "evPct": -25.26,
+        "price": -370
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6236
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6236
+      }
+    },
+    {
+      "gameId": "401870065",
+      "away": "Fiziev",
+      "home": "Torres",
+      "moneyline": {
+        "pick": "Manuel Torres",
+        "modelProb": 0.7497,
+        "tier": "Strong",
+        "evPct": 45.7,
+        "price": -106
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.6473
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.7646
+      }
+    }
+  ]
+}

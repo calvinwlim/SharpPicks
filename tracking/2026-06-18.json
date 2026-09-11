@@ -1,0 +1,330 @@
+{
+  "date": "2026-06-18",
+  "generatedAt": "2026-06-18T08:33:06",
+  "games": [
+    {
+      "gamePk": 824748,
+      "away": "TOR",
+      "home": "BOS",
+      "strikeouts": [
+        {
+          "player": "Sonny Gray",
+          "pitcherId": 543243,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.61,
+          "modelProb": 0.7117,
+          "evPct": null
+        },
+        {
+          "player": "Trey Yesavage",
+          "pitcherId": 702056,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.61,
+          "modelProb": 0.6796,
+          "evPct": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 7.91,
+        "modelProb": 0.6072,
+        "evPct": 21.43
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5721,
+        "homeWinProb": 0.5721,
+        "evPct": 4.1
+      }
+    },
+    {
+      "gamePk": 823772,
+      "away": "CLE",
+      "home": "MIL",
+      "strikeouts": [
+        {
+          "player": "Shane Drohan",
+          "pitcherId": 675660,
+          "side": "over",
+          "line": 3.5,
+          "projection": 4.5,
+          "modelProb": 0.69,
+          "evPct": null
+        },
+        {
+          "player": "Parker Messick",
+          "pitcherId": 800048,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.29,
+          "modelProb": 0.6362,
+          "evPct": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 7.5,
+        "projection": 8.21,
+        "modelProb": 0.5203,
+        "evPct": 2.07
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.624,
+        "homeWinProb": 0.624,
+        "evPct": 5.44
+      }
+    },
+    {
+      "gamePk": 822889,
+      "away": "MIN",
+      "home": "TEX",
+      "strikeouts": [
+        {
+          "player": "Jack Leiter",
+          "pitcherId": 683004,
+          "side": "under",
+          "line": 6.5,
+          "projection": 6.02,
+          "modelProb": 0.6043,
+          "evPct": null
+        },
+        {
+          "player": "Joe Ryan",
+          "pitcherId": 657746,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.69,
+          "modelProb": 0.655,
+          "evPct": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.84,
+        "modelProb": 0.5155,
+        "evPct": 2.09
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.5191,
+        "homeWinProb": 0.4809,
+        "evPct": -4.83
+      }
+    },
+    {
+      "gamePk": 823125,
+      "away": "BAL",
+      "home": "SEA",
+      "strikeouts": [
+        {
+          "player": "Bryan Woo",
+          "pitcherId": 693433,
+          "side": "over",
+          "line": 5.5,
+          "projection": 6.33,
+          "modelProb": 0.6388,
+          "evPct": null
+        },
+        {
+          "player": "Shane Baz",
+          "pitcherId": 669358,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.72,
+          "modelProb": 0.6704,
+          "evPct": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.14,
+        "modelProb": 0.5883,
+        "evPct": 14.86
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5395,
+        "homeWinProb": 0.5395,
+        "evPct": -8.84
+      }
+    },
+    {
+      "gamePk": 823448,
+      "away": "NYM",
+      "home": "PHI",
+      "strikeouts": [
+        {
+          "player": "Aaron Nola",
+          "pitcherId": 605400,
+          "side": "under",
+          "line": 5.5,
+          "projection": 5.03,
+          "modelProb": 0.6119,
+          "evPct": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 9.5,
+        "projection": 8.2,
+        "modelProb": 0.6673,
+        "evPct": 24.76
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5156,
+        "homeWinProb": 0.5156,
+        "evPct": -5.46
+      }
+    },
+    {
+      "gamePk": 823533,
+      "away": "CWS",
+      "home": "NYY",
+      "strikeouts": [
+        {
+          "player": "Ryan Weathers",
+          "pitcherId": 677960,
+          "side": "over",
+          "line": 6.5,
+          "projection": 7.28,
+          "modelProb": 0.6243,
+          "evPct": null
+        },
+        {
+          "player": "Sean Burke",
+          "pitcherId": 680732,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.32,
+          "modelProb": 0.6427,
+          "evPct": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 9.5,
+        "projection": 9.38,
+        "modelProb": 0.5596,
+        "evPct": 5.93
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5844,
+        "homeWinProb": 0.5844,
+        "evPct": -2.34
+      }
+    },
+    {
+      "gamePk": 824911,
+      "away": "SF",
+      "home": "ATL",
+      "strikeouts": [
+        {
+          "player": "Mart\u00edn P\u00e9rez",
+          "pitcherId": 527048,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.82,
+          "modelProb": 0.6676,
+          "evPct": null
+        },
+        {
+          "player": "Landen Roupp",
+          "pitcherId": 694738,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.57,
+          "modelProb": 0.6861,
+          "evPct": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.0,
+        "projection": 7.61,
+        "modelProb": 0.6364,
+        "evPct": 24.25
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.6144,
+        "homeWinProb": 0.6144,
+        "evPct": 6.95
+      }
+    },
+    {
+      "gamePk": 824098,
+      "away": "STL",
+      "home": "KC",
+      "strikeouts": [
+        {
+          "player": "Noah Cameron",
+          "pitcherId": 702070,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.6,
+          "modelProb": 0.6956,
+          "evPct": null
+        },
+        {
+          "player": "Matthew Liberatore",
+          "pitcherId": 669461,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.87,
+          "modelProb": 0.6421,
+          "evPct": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 9.0,
+        "projection": 7.91,
+        "modelProb": 0.6936,
+        "evPct": 28.13
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5255,
+        "homeWinProb": 0.5255,
+        "evPct": -1.75
+      }
+    },
+    {
+      "gamePk": 824989,
+      "away": "LAA",
+      "home": "ATH",
+      "strikeouts": [
+        {
+          "player": "Gage Jump",
+          "pitcherId": 695611,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.28,
+          "modelProb": 0.6339,
+          "evPct": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 10.5,
+        "projection": 8.54,
+        "modelProb": 0.7141,
+        "evPct": 30.91
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.605,
+        "homeWinProb": 0.605,
+        "evPct": 5.32
+      }
+    }
+  ]
+}

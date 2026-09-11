@@ -160,6 +160,44 @@ probability calibration (Brier + reliability) vs actual results. It measures
 whether the *model* is accurate, not betting ROI (that needs paid historical
 closing lines).
 
+**This runs itself now** — `.github/workflows/track-history.yml` fires daily at
+11:00 UTC and does the whole loop: grade *yesterday* (all final), snapshot *today*
+(nothing started), commit, push. The push redeploys Vercel and the History view
+picks it up, because `tracking/*.json` is committed and `/api/track/history` reads
+it out of the deployment bundle. Needs one repo secret: `ODDS_API_KEY`.
+
+Grading yesterday and snapshotting today **in the same run** is deliberate — it is
+what removes the need to pass state between two scheduled jobs.
+
+Automating this surfaced a latent bug worth knowing about: `mma.get_schedule`
+used to return any event whose UTC date was the requested date **or the next
+day**, so a 2026-09-12T18:00Z card came back for both 09-11 and 09-12. Harmless
+while a human picks one date; corrupting the moment tracking runs daily, since
+the same card would be snapshotted and graded twice and double-count in the W-L
+and ROI record. `_card_date` now maps each event to exactly one calendar date
+(UTC hour < 12 means it belongs to the previous day's card — UFC starts cluster
+at 21:00-23:00Z and 00:00-08:00Z with nothing in between).
+
+A Vercel cron cannot replace this: Functions get an ephemeral filesystem (only
+`/tmp`, discarded between invocations), so anything a cron wrote would be gone
+before the site could read it. Going that route would mean provisioning Blob or a
+database and rewriting both `/api/track` endpoints.
+
+**Odds API cost (measured, not estimated).** The free plan is **500 credits/month**
+and a request costs `markets x regions`. Verified live against
+`x-requests-remaining`: MLB `h2h,totals` x `us` = **2 credits**, MMA `h2h` x `us` =
+**1**. The 300s response cache means those are per *run*, not per game — analysing
+5 games off one slate moved the counter by 2, so a full 15-game slate is still 2.
+Grading costs **0** (results come from the keyless MLB Stats / ESPN APIs). So the
+daily job spends **~3 credits/day, ~90/month of 500**.
+
+The one thing that breaks that: `ODDS_PLAYER_PROPS=1` adds ~1 credit per game per
+market (~15/day, ~450/month) and blows the free tier by itself. The workflow pins
+it to `"0"`; don't flip it without a paid plan. Remaining credits are recorded from
+every response (`odds.quota()`), surfaced on `/api/health` as `oddsQuota`, and
+printed by `track.py` so the CI log shows the burn rate — running out otherwise
+looks exactly like "no odds today".
+
 Live tracking (record today's picks, grade them tonight):
 
 ```bash

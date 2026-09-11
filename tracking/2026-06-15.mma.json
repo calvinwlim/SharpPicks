@@ -1,0 +1,147 @@
+{
+  "date": "2026-06-15",
+  "sport": "mma",
+  "generatedAt": "2026-06-20T09:40:53",
+  "fights": [
+    {
+      "gameId": "401863580",
+      "away": "Garcia",
+      "home": "Lopes",
+      "moneyline": {
+        "pick": "Steve Garcia",
+        "modelProb": 0.6771,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5076
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5076
+      }
+    },
+    {
+      "gameId": "401863579",
+      "away": "Daukaus",
+      "home": "Nickal",
+      "moneyline": {
+        "pick": "Bo Nickal",
+        "modelProb": 0.7653,
+        "tier": "Strong",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.3698
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6426
+      }
+    },
+    {
+      "gameId": "401863578",
+      "away": "Chandler",
+      "home": "Ruffy",
+      "moneyline": {
+        "pick": "Mauricio Ruffy",
+        "modelProb": 0.8411,
+        "tier": "Strong",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.6962
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.8744
+      }
+    },
+    {
+      "gameId": "401868926",
+      "away": "Lewis",
+      "home": "Hokit",
+      "moneyline": {
+        "pick": "Josh Hokit",
+        "modelProb": 0.7737,
+        "tier": "Strong",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.7804
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.8642
+      }
+    },
+    {
+      "gameId": "401863577",
+      "away": "Zahabi",
+      "home": "O'Malley",
+      "moneyline": {
+        "pick": "Sean O'Malley",
+        "modelProb": 0.7949,
+        "tier": "Strong",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6648
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6648
+      }
+    },
+    {
+      "gameId": "401863576",
+      "away": "Gane",
+      "home": "Pereira",
+      "moneyline": {
+        "pick": "Ciryl Gane",
+        "modelProb": 0.617,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5003
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5003
+      }
+    },
+    {
+      "gameId": "401863575",
+      "away": "Gaethje",
+      "home": "Topuria",
+      "moneyline": {
+        "pick": "Ilia Topuria",
+        "modelProb": 0.8687,
+        "tier": "Strong",
+        "evPct": 21.62,
+        "price": -250
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.7013
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.8822
+      }
+    }
+  ]
+}

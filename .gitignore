@@ -11,9 +11,12 @@ venv/
 # Local secrets — never commit real keys
 .env
 
-# Live pick-tracking snapshots (local result logs)
-tracking/*.json
-!tracking/*.graded.json
+# Live pick-tracking (prediction snapshots + graded results).
+# These ARE committed: the deployed site's History view reads them straight out
+# of the deployment bundle (backend/main.py:_TRACK_DIR), and the daily workflow
+# grades YESTERDAY from yesterday's snapshot — so the snapshot has to survive
+# between runs. They are a few KB each.
+!tracking/*.json
 
 # OS / editor
 .DS_Store

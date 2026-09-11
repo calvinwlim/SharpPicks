@@ -86,7 +86,8 @@ async def health(x_odds_api_key: Optional[str] = OddsKeyHeader,
                   x_odds_player_props: Optional[str] = PlayerPropsHeader) -> Dict[str, Any]:
     return {"ok": True, "flags": _flags(odds_key=x_odds_api_key, anthropic_key=x_anthropic_api_key,
                                         props_override=x_odds_player_props),
-            "mmaData": _mma_data_health()}
+            "mmaData": _mma_data_health(),
+            "oddsQuota": odds.quota()}
 
 
 @app.get("/api/slate")

@@ -19,6 +19,38 @@ NBA_SPORT_KEY = "basketball_nba"
 
 _client: Optional[httpx.AsyncClient] = None
 
+# Last quota figures reported by The Odds API. Every response carries
+# x-requests-remaining / x-requests-used, and the free plan is only 500 credits a
+# MONTH — where a request costs (markets x regions), so one h2h+totals call is 2.
+# Without surfacing this, running out looks exactly like "no odds today": the app
+# degrades to analysis-only and says nothing. Recorded on every call, exposed via
+# /api/health and printed by track.py so a scheduled run leaves a trail.
+_quota: Dict[str, Any] = {"remaining": None, "used": None, "lastCost": None, "at": None}
+
+
+def _record_quota(r: httpx.Response) -> None:
+    import datetime as _dt
+
+    def _int(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+    rem = _int(r.headers.get("x-requests-remaining"))
+    if rem is None:
+        return
+    _quota.update({
+        "remaining": rem,
+        "used": _int(r.headers.get("x-requests-used")),
+        "lastCost": _int(r.headers.get("x-requests-last")),
+        "at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+
+
+def quota() -> Dict[str, Any]:
+    """Most recent Odds API quota reading (all None until a call is made)."""
+    return dict(_quota)
+
 
 def client() -> httpx.AsyncClient:
     global _client
@@ -76,6 +108,7 @@ async def get_game_markets(c: httpx.AsyncClient, api_key: Optional[str] = None) 
                 "oddsFormat": "american",
             },
         )
+        _record_quota(r)
         r.raise_for_status()
         return r.json()
 
@@ -108,6 +141,7 @@ async def get_pitcher_props(c: httpx.AsyncClient, event_id: str, market_key: str
                 "oddsFormat": "american",
             },
         )
+        _record_quota(r)
         r.raise_for_status()
         data = r.json()
 
@@ -219,6 +253,7 @@ async def get_mma_markets(c: httpx.AsyncClient, api_key: Optional[str] = None) -
                 "oddsFormat": "american",
             },
         )
+        _record_quota(r)
         r.raise_for_status()
         return r.json()
 
@@ -288,6 +323,7 @@ async def get_nba_game_markets(c: httpx.AsyncClient, api_key: Optional[str] = No
             params={"apiKey": _key(api_key), "regions": "us",
                     "markets": "h2h,spreads,totals", "oddsFormat": "american"},
         )
+        _record_quota(r)
         r.raise_for_status()
         return r.json()
 

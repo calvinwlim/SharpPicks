@@ -41,6 +41,31 @@ async def close() -> None:
         _client = None
 
 
+# UFC start times cluster at 21:00-23:00Z (US evening, same UTC day) and
+# 00:00-08:00Z (US evening that has rolled past midnight UTC). Nothing starts
+# between 09:00 and 12:00Z, so noon is a safe split: an event timestamped before
+# it belongs to the previous calendar day's card.
+_CARD_DATE_UTC_CUTOFF_HOUR = 12
+
+
+def _card_date(iso_utc: str) -> Optional[str]:
+    """The single calendar date a card belongs to, from its ESPN UTC timestamp.
+
+    Returns None for an unparseable timestamp so the event is simply skipped.
+    """
+    import datetime
+    if len(iso_utc) < 13:
+        return None
+    try:
+        day = datetime.date.fromisoformat(iso_utc[:10])
+        hour = int(iso_utc[11:13])
+    except ValueError:
+        return None
+    if hour < _CARD_DATE_UTC_CUTOFF_HOUR:
+        day -= datetime.timedelta(days=1)
+    return day.isoformat()
+
+
 def _last_name(name: str) -> str:
     return (name or "").split()[-1] if name else ""
 
@@ -59,14 +84,18 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
     ESPN's single-date MMA filter returns nothing, so we query a small window
     around the date and keep events whose card date matches.
 
-    UFC events start late evening US time (10pm ET / 7pm PT), which is 2–3am UTC
-    the following calendar day. ESPN stores timestamps in UTC, so an Aug 22 US
-    event commonly appears with date "2026-08-23" in the API. We accept events
-    whose UTC date is the requested date OR the next calendar day to handle this.
+    UFC events start late evening US time, which is 00:00-08:00 UTC the following
+    calendar day, so ESPN's UTC timestamp can name the day *after* the card. Each
+    event is therefore mapped to exactly ONE card date by ``_card_date``.
+
+    This used to accept any event whose UTC date was the requested date OR the
+    next day, which double-counted every card: a 2026-09-12T18:00Z event was
+    returned for BOTH 2026-09-11 and 2026-09-12. Harmless when a human picks one
+    date, corrupting once tracking runs daily — the same card would be snapshotted
+    and graded twice, inflating the W-L/ROI record.
     """
     import datetime
     d = datetime.date.fromisoformat(date)
-    next_day = (d + datetime.timedelta(days=1)).isoformat()
     window = f"{(d - datetime.timedelta(days=3)):%Y%m%d}-{(d + datetime.timedelta(days=3)):%Y%m%d}"
 
     async def fetch() -> List[Dict[str, Any]]:
@@ -91,8 +120,7 @@ async def get_schedule(date: str) -> List[Dict[str, Any]]:
                 break
         fights: List[Dict[str, Any]] = []
         for event in raw_events:
-            event_utc_date = (event.get("date") or "")[:10]
-            if event_utc_date not in (date, next_day):
+            if _card_date(event.get("date") or "") != date:
                 continue
             card = event.get("name", "")
             headliner = card.split(":")[-1].lower() if ":" in card else ""
