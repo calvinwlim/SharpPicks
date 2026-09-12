@@ -1,0 +1,247 @@
+{
+  "date": "2026-09-12",
+  "sport": "mma",
+  "generatedAt": "2026-09-12T13:55:58",
+  "fights": [
+    {
+      "gameId": "401897736",
+      "away": "Aldrich",
+      "home": "Tarin",
+      "moneyline": {
+        "pick": "JJ Aldrich",
+        "modelProb": 0.5264,
+        "tier": "Pass",
+        "evPct": 78.98,
+        "price": 240
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6866
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6866
+      }
+    },
+    {
+      "gameId": "401913547",
+      "away": "Garcia",
+      "home": "Rongzhu",
+      "moneyline": {
+        "pick": "Rafa Garcia",
+        "modelProb": 0.5465,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5695
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5695
+      }
+    },
+    {
+      "gameId": "401916463",
+      "away": "Klose",
+      "home": "Gantt",
+      "moneyline": {
+        "pick": "Tommy Gantt",
+        "modelProb": 0.5726,
+        "tier": "Pass",
+        "evPct": -27.05,
+        "price": -365
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5644
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5644
+      }
+    },
+    {
+      "gameId": "401914463",
+      "away": "Belgaroui",
+      "home": "Santos",
+      "moneyline": {
+        "pick": "Yousri Belgaroui",
+        "modelProb": 0.7616,
+        "tier": "Strong",
+        "evPct": -14.61,
+        "price": -825
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.6669
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.8617
+      }
+    },
+    {
+      "gameId": "401905193",
+      "away": "Salikhov",
+      "home": "Bahamondes",
+      "moneyline": {
+        "pick": "Ignacio Bahamondes",
+        "modelProb": 0.7708,
+        "tier": "Strong",
+        "evPct": -8.24,
+        "price": -525
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.446
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.554
+      }
+    },
+    {
+      "gameId": "401897732",
+      "away": "Elliott",
+      "home": "Ch\u00e1irez",
+      "moneyline": {
+        "pick": "\u00c9dgar Ch\u00e1irez",
+        "modelProb": 0.5641,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6022
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6022
+      }
+    },
+    {
+      "gameId": "401905192",
+      "away": "Ige",
+      "home": "Martinez",
+      "moneyline": {
+        "pick": "David Martinez",
+        "modelProb": 0.6818,
+        "tier": "Lean",
+        "evPct": -13.88,
+        "price": -380
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.663
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.663
+      }
+    },
+    {
+      "gameId": "401897733",
+      "away": "Blaydes",
+      "home": "Acosta",
+      "moneyline": {
+        "pick": "Curtis Blaydes",
+        "modelProb": 0.602,
+        "tier": "Lean",
+        "evPct": 63.74,
+        "price": 172
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5196
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5196
+      }
+    },
+    {
+      "gameId": "401897734",
+      "away": "Grasso",
+      "home": "Fiorot",
+      "moneyline": {
+        "pick": "Manon Fiorot",
+        "modelProb": 0.6012,
+        "tier": "Lean",
+        "evPct": -17.61,
+        "price": -270
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.695
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.695
+      }
+    },
+    {
+      "gameId": "401908491",
+      "away": "McMillen",
+      "home": "Rahiki",
+      "moneyline": {
+        "pick": "Tommy McMillen",
+        "modelProb": 0.7156,
+        "tier": "Strong",
+        "evPct": 21.95,
+        "price": -142
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4805
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6127
+      }
+    },
+    {
+      "gameId": "401897731",
+      "away": "Moreno",
+      "home": "Morales",
+      "moneyline": {
+        "pick": "Brandon Moreno",
+        "modelProb": 0.6464,
+        "tier": "Lean",
+        "evPct": 28.64,
+        "price": -101
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.567
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.567
+      }
+    },
+    {
+      "gameId": "401914462",
+      "away": "Silva",
+      "home": "Delgado",
+      "moneyline": {
+        "pick": "Jose Miguel Delgado",
+        "modelProb": 0.5374,
+        "tier": "Pass",
+        "evPct": 136.46,
+        "price": 340
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4969
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5031
+      }
+    }
+  ]
+}
