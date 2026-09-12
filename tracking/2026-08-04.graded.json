@@ -1,7 +1,7 @@
 {
   "date": "2026-08-04",
   "sport": "mlb",
-  "generatedAt": "2026-09-11T11:13:34",
+  "generatedAt": "2026-09-11T14:43:22",
   "backfilled": true,
   "accuracyOnly": true,
   "backfillNote": "Reconstructed point-in-time (game logs truncated to before this date, opponent offense as-of, prior-season baselines). Accuracy only \u2014 no historical prices exist for past dates, so no ROI or CLV. Totals and moneyline are graded at a reference 8.5 line / 50% threshold, not a real market line.",
@@ -17,7 +17,34 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 19,
+        "l": 9,
+        "brier": 0.218
+      },
+      "0.55": {
+        "w": 19,
+        "l": 9,
+        "brier": 0.218
+      },
+      "0.60": {
+        "w": 19,
+        "l": 9,
+        "brier": 0.218
+      },
+      "0.65": {
+        "w": 12,
+        "l": 5,
+        "brier": 0.2081
+      },
+      "0.70": {
+        "w": 2,
+        "l": 0,
+        "brier": 0.0819
+      }
+    }
   },
   "total": {
     "w": 6,
@@ -31,7 +58,29 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 6,
+        "l": 9,
+        "brier": 0.263
+      },
+      "0.55": {
+        "w": 5,
+        "l": 6,
+        "brier": 0.266
+      },
+      "0.60": {
+        "w": 4,
+        "l": 4,
+        "brier": 0.2601
+      },
+      "0.65": {
+        "w": 2,
+        "l": 0,
+        "brier": 0.1121
+      }
+    }
   },
   "moneyline": {
     "w": 12,
@@ -45,7 +94,24 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 12,
+        "l": 3,
+        "brier": 0.2244
+      },
+      "0.55": {
+        "w": 8,
+        "l": 3,
+        "brier": 0.2237
+      },
+      "0.60": {
+        "w": 1,
+        "l": 1,
+        "brier": 0.2567
+      }
+    }
   },
   "overall": {
     "bets": 0,

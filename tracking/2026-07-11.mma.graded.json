@@ -1,7 +1,7 @@
 {
   "date": "2026-07-11",
   "sport": "mma",
-  "generatedAt": "2026-09-11T11:12:29",
+  "generatedAt": "2026-09-11T14:44:04",
   "backfilled": true,
   "accuracyOnly": true,
   "backfillNote": "Reconstructed point-in-time (fighter profiles built from prior bouts only). Accuracy only \u2014 no historical prices, so no ROI or CLV. Caveat: the winner model's coefficients were fit on a bout set that includes these fights (~1% of training rows), so this is mildly in-sample \u2014 the same property mma_backtest.py has.",
@@ -17,7 +17,29 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 5,
+        "l": 4,
+        "brier": 0.248
+      },
+      "0.55": {
+        "w": 4,
+        "l": 3,
+        "brier": 0.2442
+      },
+      "0.60": {
+        "w": 1,
+        "l": 1,
+        "brier": 0.2578
+      },
+      "0.65": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.1094
+      }
+    }
   },
   "method": {
     "w": 5,
@@ -31,7 +53,34 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 5,
+        "l": 4,
+        "brier": 0.2337
+      },
+      "0.55": {
+        "w": 4,
+        "l": 3,
+        "brier": 0.2288
+      },
+      "0.60": {
+        "w": 2,
+        "l": 1,
+        "brier": 0.1946
+      },
+      "0.65": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.0595
+      },
+      "0.70": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.0595
+      }
+    }
   },
   "distance": {
     "w": 8,
@@ -45,7 +94,34 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 8,
+        "l": 1,
+        "brier": 0.1597
+      },
+      "0.55": {
+        "w": 8,
+        "l": 1,
+        "brier": 0.1597
+      },
+      "0.60": {
+        "w": 5,
+        "l": 1,
+        "brier": 0.144
+      },
+      "0.65": {
+        "w": 4,
+        "l": 0,
+        "brier": 0.0849
+      },
+      "0.70": {
+        "w": 2,
+        "l": 0,
+        "brier": 0.0619
+      }
+    }
   },
   "overall": {
     "bets": 0,

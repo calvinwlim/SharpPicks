@@ -1,7 +1,7 @@
 {
   "date": "2026-08-29",
   "sport": "mlb",
-  "generatedAt": "2026-09-11T11:13:55",
+  "generatedAt": "2026-09-11T14:43:53",
   "backfilled": true,
   "accuracyOnly": true,
   "backfillNote": "Reconstructed point-in-time (game logs truncated to before this date, opponent offense as-of, prior-season baselines). Accuracy only \u2014 no historical prices exist for past dates, so no ROI or CLV. Totals and moneyline are graded at a reference 8.5 line / 50% threshold, not a real market line.",
@@ -17,7 +17,34 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 15,
+        "l": 13,
+        "brier": 0.2661
+      },
+      "0.55": {
+        "w": 15,
+        "l": 13,
+        "brier": 0.2661
+      },
+      "0.60": {
+        "w": 14,
+        "l": 13,
+        "brier": 0.27
+      },
+      "0.65": {
+        "w": 6,
+        "l": 9,
+        "brier": 0.3118
+      },
+      "0.70": {
+        "w": 3,
+        "l": 1,
+        "brier": 0.1786
+      }
+    }
   },
   "total": {
     "w": 9,
@@ -31,7 +58,29 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 9,
+        "l": 8,
+        "brier": 0.244
+      },
+      "0.55": {
+        "w": 9,
+        "l": 6,
+        "brier": 0.239
+      },
+      "0.60": {
+        "w": 7,
+        "l": 3,
+        "brier": 0.2153
+      },
+      "0.65": {
+        "w": 2,
+        "l": 1,
+        "brier": 0.2316
+      }
+    }
   },
   "moneyline": {
     "w": 10,
@@ -45,7 +94,19 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 10,
+        "l": 7,
+        "brier": 0.23
+      },
+      "0.55": {
+        "w": 6,
+        "l": 1,
+        "brier": 0.2052
+      }
+    }
   },
   "overall": {
     "bets": 0,

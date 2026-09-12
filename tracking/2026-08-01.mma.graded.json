@@ -1,7 +1,7 @@
 {
   "date": "2026-08-01",
   "sport": "mma",
-  "generatedAt": "2026-09-11T11:12:29",
+  "generatedAt": "2026-09-11T14:44:04",
   "backfilled": true,
   "accuracyOnly": true,
   "backfillNote": "Reconstructed point-in-time (fighter profiles built from prior bouts only). Accuracy only \u2014 no historical prices, so no ROI or CLV. Caveat: the winner model's coefficients were fit on a bout set that includes these fights (~1% of training rows), so this is mildly in-sample \u2014 the same property mma_backtest.py has.",
@@ -17,7 +17,34 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 4,
+        "l": 1,
+        "brier": 0.1502
+      },
+      "0.55": {
+        "w": 4,
+        "l": 1,
+        "brier": 0.1502
+      },
+      "0.60": {
+        "w": 4,
+        "l": 1,
+        "brier": 0.1502
+      },
+      "0.65": {
+        "w": 2,
+        "l": 0,
+        "brier": 0.0359
+      },
+      "0.70": {
+        "w": 2,
+        "l": 0,
+        "brier": 0.0359
+      }
+    }
   },
   "method": {
     "w": 2,
@@ -31,7 +58,24 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 2,
+        "l": 3,
+        "brier": 0.2929
+      },
+      "0.55": {
+        "w": 0,
+        "l": 2,
+        "brier": 0.3692
+      },
+      "0.60": {
+        "w": 0,
+        "l": 1,
+        "brier": 0.3809
+      }
+    }
   },
   "distance": {
     "w": 3,
@@ -45,7 +89,29 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 3,
+        "l": 2,
+        "brier": 0.233
+      },
+      "0.55": {
+        "w": 1,
+        "l": 1,
+        "brier": 0.236
+      },
+      "0.60": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.1145
+      },
+      "0.65": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.1145
+      }
+    }
   },
   "overall": {
     "bets": 0,

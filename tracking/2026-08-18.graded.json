@@ -1,7 +1,7 @@
 {
   "date": "2026-08-18",
   "sport": "mlb",
-  "generatedAt": "2026-09-11T11:13:47",
+  "generatedAt": "2026-09-11T14:43:41",
   "backfilled": true,
   "accuracyOnly": true,
   "backfillNote": "Reconstructed point-in-time (game logs truncated to before this date, opponent offense as-of, prior-season baselines). Accuracy only \u2014 no historical prices exist for past dates, so no ROI or CLV. Totals and moneyline are graded at a reference 8.5 line / 50% threshold, not a real market line.",
@@ -17,7 +17,34 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 17,
+        "l": 9,
+        "brier": 0.2319
+      },
+      "0.55": {
+        "w": 17,
+        "l": 9,
+        "brier": 0.2319
+      },
+      "0.60": {
+        "w": 15,
+        "l": 9,
+        "brier": 0.2376
+      },
+      "0.65": {
+        "w": 10,
+        "l": 6,
+        "brier": 0.2392
+      },
+      "0.70": {
+        "w": 3,
+        "l": 3,
+        "brier": 0.2976
+      }
+    }
   },
   "total": {
     "w": 6,
@@ -31,7 +58,29 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 6,
+        "l": 9,
+        "brier": 0.2606
+      },
+      "0.55": {
+        "w": 5,
+        "l": 5,
+        "brier": 0.2566
+      },
+      "0.60": {
+        "w": 3,
+        "l": 3,
+        "brier": 0.2565
+      },
+      "0.65": {
+        "w": 2,
+        "l": 0,
+        "brier": 0.1124
+      }
+    }
   },
   "moneyline": {
     "w": 9,
@@ -45,7 +94,24 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 9,
+        "l": 6,
+        "brier": 0.2434
+      },
+      "0.55": {
+        "w": 5,
+        "l": 2,
+        "brier": 0.234
+      },
+      "0.60": {
+        "w": 0,
+        "l": 1,
+        "brier": 0.3885
+      }
+    }
   },
   "overall": {
     "bets": 0,

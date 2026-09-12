@@ -1,7 +1,7 @@
 {
   "date": "2026-07-31",
   "sport": "mlb",
-  "generatedAt": "2026-09-11T11:13:29",
+  "generatedAt": "2026-09-11T14:43:19",
   "backfilled": true,
   "accuracyOnly": true,
   "backfillNote": "Reconstructed point-in-time (game logs truncated to before this date, opponent offense as-of, prior-season baselines). Accuracy only \u2014 no historical prices exist for past dates, so no ROI or CLV. Totals and moneyline are graded at a reference 8.5 line / 50% threshold, not a real market line.",
@@ -17,7 +17,34 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 15,
+        "l": 13,
+        "brier": 0.2726
+      },
+      "0.55": {
+        "w": 15,
+        "l": 13,
+        "brier": 0.2726
+      },
+      "0.60": {
+        "w": 15,
+        "l": 11,
+        "brier": 0.2661
+      },
+      "0.65": {
+        "w": 7,
+        "l": 7,
+        "brier": 0.3045
+      },
+      "0.70": {
+        "w": 3,
+        "l": 3,
+        "brier": 0.3375
+      }
+    }
   },
   "total": {
     "w": 6,
@@ -31,7 +58,34 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 6,
+        "l": 9,
+        "brier": 0.2472
+      },
+      "0.55": {
+        "w": 6,
+        "l": 3,
+        "brier": 0.2227
+      },
+      "0.60": {
+        "w": 2,
+        "l": 2,
+        "brier": 0.24
+      },
+      "0.65": {
+        "w": 2,
+        "l": 0,
+        "brier": 0.0942
+      },
+      "0.70": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.0878
+      }
+    }
   },
   "moneyline": {
     "w": 7,
@@ -45,7 +99,24 @@
     "beatClose": null,
     "clvN": 0,
     "clvSum": 0,
-    "beatN": 0
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 7,
+        "l": 8,
+        "brier": 0.253
+      },
+      "0.55": {
+        "w": 4,
+        "l": 5,
+        "brier": 0.2544
+      },
+      "0.60": {
+        "w": 3,
+        "l": 1,
+        "brier": 0.2088
+      }
+    }
   },
   "overall": {
     "bets": 0,

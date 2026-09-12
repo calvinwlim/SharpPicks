@@ -1492,3 +1492,15 @@ footer {
 }
 
 .dd-backfilled strong { color: var(--text); }
+
+/* ---- history: confidence-floor filter -------------------------------- */
+.history-filter-sep {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--text-faint);
+  align-self: center;
+  margin: 0 2px 0 10px;
+  border-left: 1px solid var(--border);
+  padding-left: 12px;
+}

@@ -240,6 +240,13 @@ let calViewYear = 0;
 let calViewMonth = 0;      // 0-based
 let calSelectedDate = "";
 let historySport = "all";  // "all" | "mlb" | "nba" | "mma" — active history filter
+// Minimum model confidence a pick needed to count toward the record shown.
+// 0.50 = every directional lean (what the record used to always be). The app
+// tells users at pick time that a sub-60% read is a coin flip to pass on, so the
+// record needs to be cuttable the same way — otherwise declared passes sit in
+// the headline W-L next to genuine Strong picks.
+let historyFloor = 0.50;
+const FLOOR_LABELS = { 0.50: "All picks", 0.55: "≥55%", 0.60: "≥60% (Lean)", 0.65: "≥65%", 0.70: "≥70% (Strong)" };
 
 const calGrid = document.getElementById("history-cal-grid");
 const calMonthLabel = document.getElementById("cal-month-label");
@@ -286,6 +293,39 @@ function renderHistoryFilter() {
     });
     el.appendChild(chip);
   }
+
+  // Confidence-floor chips. Only shown once the graded files carry byFloor.
+  const hasFloors = historyList.some((e) =>
+    MARKET_KEYS.some((k) => e[k] && e[k].byFloor));
+  if (!hasFloors) return;
+  const sep = document.createElement("span");
+  sep.className = "history-filter-sep";
+  sep.textContent = "confidence";
+  el.appendChild(sep);
+  for (const f of [0.5, 0.55, 0.6, 0.65, 0.7]) {
+    const chip = document.createElement("button");
+    chip.className = "history-filter-chip" + (f === historyFloor ? " active" : "");
+    chip.textContent = FLOOR_LABELS[f];
+    chip.addEventListener("click", () => {
+      historyFloor = f;
+      renderHistoryFilter();
+      renderStatsBar();
+      renderCalendar();
+    });
+    el.appendChild(chip);
+  }
+}
+
+// The record for one market at the active confidence floor. Falls back to the
+// all-picks numbers when a graded file predates byFloor, so old files still render.
+function marketAtFloor(m) {
+  if (!m) return null;
+  if (historyFloor <= 0.5 || !m.byFloor) return m;
+  const key = historyFloor.toFixed(2);
+  const cut = m.byFloor[key];
+  // No picks cleared the floor that day — a real zero, not missing data.
+  return cut ? { ...m, w: cut.w, l: cut.l, p: 0, brier: cut.brier }
+             : { ...m, w: 0, l: 0, p: 0, brier: null };
 }
 
 async function loadHistory() {
@@ -334,10 +374,12 @@ function renderStatsBar() {
       oClvSum += ov.clvSum || 0; oClvN += ov.clvN || 0; oBeatN += ov.beatN || 0;
     }
     for (const key of MARKET_KEYS) {
-      const m = e[key];
+      const m = marketAtFloor(e[key]);
       if (!m) continue;
       agg[key].w += m.w || 0; agg[key].l += m.l || 0; agg[key].p += m.p || 0;
-      agg[key].units += m.units || 0; agg[key].bets += m.bets || 0;
+      // Units/bets are NOT re-cut by confidence: a bet was placed at a price or
+      // it wasn't, and filtering the W-L must not silently rewrite the ROI.
+      agg[key].units += e[key].units || 0; agg[key].bets += e[key].bets || 0;
       if (m.brier != null) agg[key].briers.push(m.brier);
     }
   }
@@ -348,7 +390,10 @@ function renderStatsBar() {
   const bfDays = new Set(entries.filter((e) => e.backfilled).map((e) => e.date)).size;
   metaEl.textContent = `${totalDays} day${totalDays !== 1 ? "s" : ""} · ${totalGames} games`
     + (oBets ? ` · ${oBets} +EV bets` : "")
-    + (bfDays ? ` · ${bfDays} reconstructed (accuracy only, no ROI)` : "");
+    + (bfDays ? ` · ${bfDays} reconstructed (accuracy only, no ROI)` : "")
+    + (historyFloor > 0.5
+        ? ` · W-L shown for picks ≥${(historyFloor * 100).toFixed(0)}% confidence only (ROI still covers every placed bet)`
+        : "");
 
   marketsEl.innerHTML = "";
 
@@ -457,7 +502,7 @@ function renderCalendar() {
       for (const key of MARKET_KEYS) {
         let mw = 0, ml = 0, present = false;
         for (const e of dayEntries) {
-          const m = e[key];
+          const m = marketAtFloor(e[key]);
           if (m) { mw += m.w || 0; ml += m.l || 0; present = present || (m.w + m.l + (m.p || 0)) > 0; }
         }
         dw += mw; dl += ml;
@@ -514,7 +559,7 @@ function showDayDetail(dayEntries) {
   const multi = dayEntries.length > 1;
 
   const sections = dayEntries.map((entry) => {
-    const markets = MARKET_KEYS.map((k) => fmtMarket(entry[k], MARKET_LABELS[k])).join("");
+    const markets = MARKET_KEYS.map((k) => fmtMarket(marketAtFloor(entry[k]), MARKET_LABELS[k])).join("");
     const ov = entry.overall;
     const ovHtml = ov && ov.bets
       ? `<div class="dd-bias">${ov.bets} +EV bets · ROI <span class="${ov.roi > 0 ? "pos" : ov.roi < 0 ? "neg" : ""}">${ov.roi >= 0 ? "+" : ""}${ov.roi}%</span>`

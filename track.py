@@ -30,7 +30,7 @@ import datetime
 import json
 import os
 from statistics import mean
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend import main as app
 from backend import mlb
@@ -229,6 +229,12 @@ class Tally:
         self.clv: List[float] = []
         self.beat_close = 0
         self.clv_n = 0
+        # (confidence, won) per decided pick, so the record can be re-cut by how
+        # sure the model was. Without this a 55% coin-flip — one the UI explicitly
+        # labels "Pass, not a play" — lands in the headline W-L next to an 80%
+        # Strong pick, which both understates the picks worth acting on and
+        # contradicts what the app told the user at pick time.
+        self.decided: List[Tuple[float, bool]] = []
 
     def add(self, won: Optional[bool], model_prob: Optional[float],
             price: Optional[int] = None, ev: Optional[float] = None,
@@ -241,6 +247,9 @@ class Tally:
             self.l += 1
         if model_prob is not None and won is not None:
             self.briers.append((model_prob - (1.0 if won else 0.0)) ** 2)
+            # Confidence is the probability of the SIDE taken, so a 0.35 model
+            # prob on the under is a 65% conviction pick.
+            self.decided.append((max(model_prob, 1.0 - model_prob), bool(won)))
         # Betting record: only +EV picks with a real price and a decided result.
         if price is not None and ev is not None and ev > 0 and won is not None:
             self.staked += 1.0
@@ -264,7 +273,29 @@ class Tally:
             "beatClose": round(self.beat_close / self.clv_n, 3) if self.clv_n else None,
             # raw counts so the UI can re-aggregate ROI/CLV across many days
             "clvN": self.clv_n, "clvSum": round(sum(self.clv), 4), "beatN": self.beat_close,
+            # Cumulative record at each confidence floor, so the History view can
+            # answer "how do the picks I'd actually act on do?" — and so the
+            # headline number stops blending Strong leans with declared passes.
+            "byFloor": self.by_floor(),
         }
+
+    # Floors mirror the tiers the UI shows at pick time (mma_analysis'
+    # WIN_LEAN_FLOOR / WIN_STRONG_FLOOR), so the record is cut the same way the
+    # recommendation was made.
+    FLOORS = (0.50, 0.55, 0.60, 0.65, 0.70)
+
+    def by_floor(self) -> Dict[str, Dict[str, Any]]:
+        out: Dict[str, Dict[str, Any]] = {}
+        for f in self.FLOORS:
+            sel = [(c, won) for c, won in self.decided if c >= f]
+            if not sel:
+                continue
+            w = sum(1 for _, won in sel if won)
+            out[f"{f:.2f}"] = {
+                "w": w, "l": len(sel) - w,
+                "brier": round(mean((c - (1.0 if won else 0.0)) ** 2 for c, won in sel), 4),
+            }
+        return out
 
     def line(self, label: str) -> str:
         graded = self.w + self.l

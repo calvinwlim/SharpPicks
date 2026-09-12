@@ -228,6 +228,21 @@ at a reference 8.5 line rather than a real market line, and the MMA winner model
 coefficients were fit on a bout set that includes the graded fights (~1% of
 training rows, the same mild in-sample property `mma_backtest.py` has).
 
+**Confidence floors in the record.** Grading counts every directional pick, so a
+55% coin-flip used to land in the headline W-L beside an 80% Strong pick — which
+both understates the picks worth acting on and contradicts the app, whose verdict
+card calls a sub-60% read "a coin flip to pass on". `Tally` now also records
+`(confidence, won)` per decided pick and emits `byFloor` — the cumulative record
+at 50/55/60/65/70% — for every market. The History view exposes it as filter chips
+(`historyFloor` / `marketAtFloor`), so the record can be cut the same way the
+recommendation was made.
+
+**ROI is deliberately NOT re-cut by that floor.** A bet was placed at a price or it
+wasn't; letting a W-L filter silently rewrite the ROI would invent a betting record
+that never happened. The meta line says so whenever a floor is active. Re-cutting
+ROI by confidence would need per-bet price/EV stored alongside confidence, and with
+~30 placed bets the subsamples would be meaningless anyway.
+
 Live tracking (record today's picks, grade them tonight):
 
 ```bash
