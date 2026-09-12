@@ -247,6 +247,19 @@ let historySport = "all";  // "all" | "mlb" | "nba" | "mma" — active history f
 // the headline W-L next to genuine Strong picks.
 let historyFloor = 0.50;
 const FLOOR_LABELS = { 0.50: "All picks", 0.55: "≥55%", 0.60: "≥60% (Lean)", 0.65: "≥65%", 0.70: "≥70% (Strong)" };
+// Trailing-day window for the record shown; "all" = every tracked/reconstructed
+// day. Dates are plain YYYY-MM-DD strings, which sort/compare lexicographically
+// the same as chronologically, so a cutoff string is all a range filter needs —
+// no Date parsing per entry.
+let historyRange = "all";  // "7" | "30" | "90" | "all"
+const RANGE_LABELS = { "7": "Last 7 days", "30": "Last 30 days", "90": "Last 90 days", "all": "All time" };
+
+function rangeCutoff() {
+  if (historyRange === "all") return null;
+  const d = new Date();
+  d.setDate(d.getDate() - Number(historyRange) + 1);   // inclusive of today
+  return d.toISOString().slice(0, 10);
+}
 
 const calGrid = document.getElementById("history-cal-grid");
 const calMonthLabel = document.getElementById("cal-month-label");
@@ -264,7 +277,11 @@ const entrySport = (e) => e.sport || "mlb"; // older graded files predate the fi
 
 // Entries matching the active sport filter (record bar aggregates these).
 function historyEntries() {
-  return historyList.filter((e) => historySport === "all" || entrySport(e) === historySport);
+  const cutoff = rangeCutoff();
+  return historyList.filter((e) =>
+    (historySport === "all" || entrySport(e) === historySport) &&
+    (!cutoff || e.date >= cutoff)
+  );
 }
 // Filtered entries grouped by date (a date may hold an MLB and a UFC entry).
 function historyByDate() {
@@ -273,7 +290,19 @@ function historyByDate() {
   return m;
 }
 
-// Filter chips: "All" plus each sport that actually has tracked data.
+// Move the calendar to the month containing the most recent entry that
+// matches the current filters, so switching to "Last 7 days" doesn't leave the
+// user staring at a month with nothing in it.
+function jumpCalendarToLatest() {
+  const dates = historyEntries().map((e) => e.date).sort();
+  if (!dates.length) return;
+  const [y, m] = dates[dates.length - 1].split("-").map(Number);
+  calViewYear = y;
+  calViewMonth = m - 1;
+}
+
+// Filter chips: time range, then "All" plus each sport that actually has
+// tracked data, then (once byFloor data exists) confidence.
 function renderHistoryFilter() {
   const el = document.getElementById("history-filter");
   const sports = [...new Set(historyList.map(entrySport))];
@@ -281,6 +310,28 @@ function renderHistoryFilter() {
   if (!sports.includes(historySport) && historySport !== "all") historySport = "all";
   el.style.display = "flex";
   el.innerHTML = "";
+
+  // Time range. Jumping straight to a trailing window on a calendar sitting on
+  // some other month would look broken, so picking a range also hops the
+  // calendar to the month containing the most recent tracked day.
+  for (const r of ["7", "30", "90", "all"]) {
+    const chip = document.createElement("button");
+    chip.className = "history-filter-chip" + (r === historyRange ? " active" : "");
+    chip.textContent = RANGE_LABELS[r];
+    chip.addEventListener("click", () => {
+      historyRange = r;
+      jumpCalendarToLatest();
+      renderHistoryFilter();
+      renderStatsBar();
+      renderCalendar();
+      historyDayDetail.style.display = "none";
+    });
+    el.appendChild(chip);
+  }
+  const rangeSep = document.createElement("span");
+  rangeSep.className = "history-filter-sep";
+  rangeSep.textContent = "sport";
+  el.appendChild(rangeSep);
   for (const s of ["all", ...sports]) {
     const chip = document.createElement("button");
     chip.className = "history-filter-chip" + (s === historySport ? " active" : "");
@@ -356,9 +407,18 @@ function renderStatsBar() {
   const metaEl = document.getElementById("history-stats-meta");
   const marketsEl = document.getElementById("history-stats-markets");
   const titleEl = document.querySelector(".history-stats-title");
-  if (titleEl) titleEl.textContent = historySport === "all" ? "All-Time Record" : `${historySport.toUpperCase()} Record`;
+  const sportTitle = historySport === "all" ? "All-Time" : historySport.toUpperCase();
+  const rangeTitle = historyRange === "all" ? "" : ` — ${RANGE_LABELS[historyRange]}`;
+  if (titleEl) titleEl.textContent = `${sportTitle} Record${rangeTitle}`;
   const entries = historyEntries();
-  if (!entries.length) { statsEl.style.display = "none"; return; }
+  if (!entries.length) {
+    // Keep the bar (and title) visible so the empty range reads as "nothing
+    // tracked in this window" rather than the whole feature looking broken.
+    statsEl.style.display = "block";
+    metaEl.textContent = "No tracked days in this window.";
+    marketsEl.innerHTML = "";
+    return;
+  }
 
   const agg = {};
   for (const k of MARKET_KEYS) agg[k] = { w: 0, l: 0, p: 0, briers: [], units: 0, bets: 0, label: MARKET_LABELS[k] };
