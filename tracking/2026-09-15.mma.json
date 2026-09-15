@@ -1,0 +1,27 @@
+{
+  "date": "2026-09-15",
+  "sport": "mma",
+  "generatedAt": "2026-09-15T15:27:56",
+  "fights": [
+    {
+      "gameId": "401918030",
+      "away": "Santos",
+      "home": "Abdullaev",
+      "moneyline": {
+        "pick": "Ednilson Santos",
+        "modelProb": 0.5373,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5485
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5485
+      }
+    }
+  ]
+}
