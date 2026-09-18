@@ -1,0 +1,586 @@
+{
+  "date": "2026-09-18",
+  "generatedAt": "2026-09-18T14:49:57",
+  "games": [
+    {
+      "gamePk": 824463,
+      "away": "CHC",
+      "home": "CIN",
+      "strikeouts": [
+        {
+          "player": "Chase Burns",
+          "pitcherId": 695505,
+          "side": "over",
+          "line": 5.5,
+          "projection": 6.12,
+          "modelProb": 0.6063,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Clay Holmes",
+          "pitcherId": 605280,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.24,
+          "modelProb": 0.6274,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 8.21,
+        "modelProb": 0.5726,
+        "evPct": 14.52,
+        "price": 100
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.5269,
+        "homeWinProb": 0.4731,
+        "evPct": -5.15,
+        "price": -125
+      }
+    },
+    {
+      "gamePk": 823331,
+      "away": "KC",
+      "home": "PIT",
+      "strikeouts": [
+        {
+          "player": "Paul Skenes",
+          "pitcherId": 694973,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.59,
+          "modelProb": 0.6832,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Randy Dobnak",
+          "pitcherId": 677976,
+          "side": "over",
+          "line": 3.5,
+          "projection": 4.36,
+          "modelProb": 0.6599,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 7.79,
+        "modelProb": 0.6185,
+        "evPct": 8.71,
+        "price": -132
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5698,
+        "homeWinProb": 0.5698,
+        "evPct": -11.71,
+        "price": -182
+      }
+    },
+    {
+      "gamePk": 824790,
+      "away": "MIL",
+      "home": "BAL",
+      "strikeouts": [
+        {
+          "player": "Dustin May",
+          "pitcherId": 669160,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.88,
+          "modelProb": 0.6406,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 8.39,
+        "modelProb": 0.554,
+        "evPct": 3.58,
+        "price": -115
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.5437,
+        "homeWinProb": 0.4563,
+        "evPct": -5.65,
+        "price": -136
+      }
+    },
+    {
+      "gamePk": 824383,
+      "away": "ATH",
+      "home": "CLE",
+      "strikeouts": [
+        {
+          "player": "Mason Barnett",
+          "pitcherId": 686930,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.83,
+          "modelProb": 0.6671,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 8.24,
+        "modelProb": 0.5697,
+        "evPct": 7.84,
+        "price": -112
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.7057,
+        "homeWinProb": 0.7057,
+        "evPct": 3.54,
+        "price": -214
+      }
+    },
+    {
+      "gamePk": 822923,
+      "away": "BOS",
+      "home": "TB",
+      "strikeouts": [
+        {
+          "player": "Ian Seymour",
+          "pitcherId": 693855,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.94,
+          "modelProb": 0.6116,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Ranger Suarez",
+          "pitcherId": 624133,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.51,
+          "modelProb": 0.7331,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.68,
+        "modelProb": 0.5227,
+        "evPct": -7.53,
+        "price": -130
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5467,
+        "homeWinProb": 0.5467,
+        "evPct": -3.59,
+        "price": -131
+      }
+    },
+    {
+      "gamePk": 823572,
+      "away": "PHI",
+      "home": "NYM",
+      "strikeouts": [
+        {
+          "player": "Zac Thornton",
+          "pitcherId": 804267,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.78,
+          "modelProb": 0.6764,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Andrew Painter",
+          "pitcherId": 691725,
+          "side": "under",
+          "line": 5.5,
+          "projection": 5.08,
+          "modelProb": 0.6004,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 7.42,
+        "modelProb": 0.6588,
+        "evPct": 25.77,
+        "price": -110
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5301,
+        "homeWinProb": 0.5301,
+        "evPct": 1.2,
+        "price": -110
+      }
+    },
+    {
+      "gamePk": 824547,
+      "away": "DET",
+      "home": "CWS",
+      "strikeouts": [
+        {
+          "player": "David Sandlin",
+          "pitcherId": 689818,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.16,
+          "modelProb": 0.6159,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 7.91,
+        "modelProb": 0.6053,
+        "evPct": 13.63,
+        "price": -114
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5257,
+        "homeWinProb": 0.5257,
+        "evPct": -5.37,
+        "price": -125
+      }
+    },
+    {
+      "gamePk": 822847,
+      "away": "TOR",
+      "home": "TEX",
+      "strikeouts": [
+        {
+          "player": "Kumar Rocker",
+          "pitcherId": 677958,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.68,
+          "modelProb": 0.6794,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Dylan Cease",
+          "pitcherId": 656302,
+          "side": "under",
+          "line": 9.5,
+          "projection": 8.61,
+          "modelProb": 0.6531,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.67,
+        "modelProb": 0.524,
+        "evPct": 2.31,
+        "price": -105
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.5154,
+        "homeWinProb": 0.4846,
+        "evPct": -9.41,
+        "price": -132
+      }
+    },
+    {
+      "gamePk": 824303,
+      "away": "SEA",
+      "home": "COL",
+      "strikeouts": [
+        {
+          "player": "Bryan Woo",
+          "pitcherId": 693433,
+          "side": "over",
+          "line": 5.5,
+          "projection": 6.48,
+          "modelProb": 0.6649,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 10.5,
+        "projection": 9.62,
+        "modelProb": 0.622,
+        "evPct": 18.75,
+        "price": -110
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.544,
+        "homeWinProb": 0.456,
+        "evPct": -16.36,
+        "price": -186
+      }
+    },
+    {
+      "gamePk": 824138,
+      "away": "ATL",
+      "home": "HOU",
+      "strikeouts": [
+        {
+          "player": "Peter Lambert",
+          "pitcherId": 663567,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.11,
+          "modelProb": 0.6017,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Tyler Mahle",
+          "pitcherId": 641816,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.95,
+          "modelProb": 0.6274,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 7.59,
+        "modelProb": 0.6407,
+        "evPct": 17.46,
+        "price": -120
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.5399,
+        "homeWinProb": 0.4601,
+        "evPct": 0.53,
+        "price": -116
+      }
+    },
+    {
+      "gamePk": 823005,
+      "away": "WSH",
+      "home": "STL",
+      "strikeouts": [
+        {
+          "player": "Kyle Leahy",
+          "pitcherId": 681517,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.84,
+          "modelProb": 0.6504,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Cade Cavalli",
+          "pitcherId": 676917,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.89,
+          "modelProb": 0.6193,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.66,
+        "modelProb": 0.5248,
+        "evPct": 3.94,
+        "price": -102
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5509,
+        "homeWinProb": 0.5509,
+        "evPct": 8.57,
+        "price": -103
+      }
+    },
+    {
+      "gamePk": 823977,
+      "away": "MIN",
+      "home": "LAA",
+      "strikeouts": [
+        {
+          "player": "Grayson Rodriguez",
+          "pitcherId": 680570,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.87,
+          "modelProb": 0.6428,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Connor Prielipp",
+          "pitcherId": 687570,
+          "side": "over",
+          "line": 5.5,
+          "projection": 6.34,
+          "modelProb": 0.6397,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 7.89,
+        "modelProb": 0.6071,
+        "evPct": 6.02,
+        "price": -134
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5545,
+        "homeWinProb": 0.5545,
+        "evPct": 12.0,
+        "price": 102
+      }
+    },
+    {
+      "gamePk": 823252,
+      "away": "MIA",
+      "home": "SD",
+      "strikeouts": [
+        {
+          "player": "Nick Pivetta",
+          "pitcherId": 601713,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.09,
+          "modelProb": 0.6093,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Tyler Phillips",
+          "pitcherId": 663969,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.61,
+          "modelProb": 0.7141,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.2,
+        "modelProb": 0.5782,
+        "evPct": 12.37,
+        "price": -106
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5599,
+        "homeWinProb": 0.5599,
+        "evPct": -16.02,
+        "price": -200
+      }
+    },
+    {
+      "gamePk": 825032,
+      "away": "NYY",
+      "home": "AZ",
+      "strikeouts": [
+        {
+          "player": "Eduardo Rodriguez",
+          "pitcherId": 593958,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.61,
+          "modelProb": 0.6782,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Gerrit Cole",
+          "pitcherId": 543037,
+          "side": "under",
+          "line": 5.5,
+          "projection": 5.07,
+          "modelProb": 0.6031,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.61,
+        "modelProb": 0.5306,
+        "evPct": 6.12,
+        "price": 100
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5233,
+        "homeWinProb": 0.5233,
+        "evPct": 5.19,
+        "price": 101
+      }
+    },
+    {
+      "gamePk": 823898,
+      "away": "SF",
+      "home": "LAD",
+      "strikeouts": [
+        {
+          "player": "Tyler Glasnow",
+          "pitcherId": 607192,
+          "side": "over",
+          "line": 6.5,
+          "projection": 7.37,
+          "modelProb": 0.6444,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.0,
+        "projection": 8.08,
+        "modelProb": 0.587,
+        "evPct": 12.06,
+        "price": -110
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5857,
+        "homeWinProb": 0.5857,
+        "evPct": -21.23,
+        "price": -290
+      }
+    }
+  ]
+}
