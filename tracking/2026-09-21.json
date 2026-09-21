@@ -1,0 +1,90 @@
+{
+  "date": "2026-09-21",
+  "generatedAt": "2026-09-21T16:48:42",
+  "games": [
+    {
+      "gamePk": 824787,
+      "away": "TOR",
+      "home": "BAL",
+      "strikeouts": [
+        {
+          "player": "Shane Baz",
+          "pitcherId": 669358,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.95,
+          "modelProb": 0.6409,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Trey Yesavage",
+          "pitcherId": 702056,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.81,
+          "modelProb": 0.6428,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.05,
+        "modelProb": 0.5954,
+        "evPct": 11.32,
+        "price": -115
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5242,
+        "homeWinProb": 0.5242,
+        "evPct": 1.41,
+        "price": -107
+      }
+    },
+    {
+      "gamePk": 823169,
+      "away": "MIN",
+      "home": "SF",
+      "strikeouts": [
+        {
+          "player": "Blade Tidwell",
+          "pitcherId": 694918,
+          "side": "under",
+          "line": 4.5,
+          "projection": 4.05,
+          "modelProb": 0.6188,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Zebby Matthews",
+          "pitcherId": 805673,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.53,
+          "modelProb": 0.7083,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 7.59,
+        "modelProb": 0.6399,
+        "evPct": 16.44,
+        "price": -122
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5198,
+        "homeWinProb": 0.5198,
+        "evPct": 7.08,
+        "price": 106
+      }
+    }
+  ]
+}
