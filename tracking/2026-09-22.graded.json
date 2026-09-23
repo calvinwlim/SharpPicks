@@ -1,0 +1,121 @@
+{
+  "date": "2026-09-22",
+  "sport": "mlb",
+  "generatedAt": "2026-09-23T15:19:12",
+  "strikeouts": {
+    "w": 19,
+    "l": 10,
+    "p": 0,
+    "brier": 0.2255,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 19,
+        "l": 10,
+        "brier": 0.2255
+      },
+      "0.55": {
+        "w": 19,
+        "l": 10,
+        "brier": 0.2255
+      },
+      "0.60": {
+        "w": 19,
+        "l": 10,
+        "brier": 0.2255
+      },
+      "0.65": {
+        "w": 11,
+        "l": 5,
+        "brier": 0.2145
+      },
+      "0.70": {
+        "w": 4,
+        "l": 1,
+        "brier": 0.1607
+      }
+    }
+  },
+  "total": {
+    "w": 13,
+    "l": 2,
+    "p": 0,
+    "brier": 0.2071,
+    "bets": 12,
+    "units": 6.78,
+    "roi": 56.5,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 13,
+        "l": 2,
+        "brier": 0.2071
+      },
+      "0.55": {
+        "w": 10,
+        "l": 1,
+        "brier": 0.191
+      },
+      "0.60": {
+        "w": 6,
+        "l": 1,
+        "brier": 0.193
+      },
+      "0.65": {
+        "w": 0,
+        "l": 1,
+        "brier": 0.4899
+      }
+    }
+  },
+  "moneyline": {
+    "w": 6,
+    "l": 9,
+    "p": 0,
+    "brier": 0.2726,
+    "bets": 4,
+    "units": -2.22,
+    "roi": -55.5,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 6,
+        "l": 9,
+        "brier": 0.2726
+      },
+      "0.55": {
+        "w": 1,
+        "l": 4,
+        "brier": 0.3013
+      }
+    }
+  },
+  "overall": {
+    "bets": 16,
+    "units": 4.56,
+    "roi": 28.5,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "totalBias": -0.33,
+  "pending": 1,
+  "games": 16
+}

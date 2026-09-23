@@ -1,0 +1,62 @@
+{
+  "date": "2026-09-22",
+  "sport": "mma",
+  "generatedAt": "2026-09-23T15:19:13",
+  "moneyline": {
+    "w": 0,
+    "l": 0,
+    "p": 0,
+    "brier": null,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {}
+  },
+  "method": {
+    "w": 0,
+    "l": 0,
+    "p": 0,
+    "brier": null,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {}
+  },
+  "distance": {
+    "w": 0,
+    "l": 0,
+    "p": 0,
+    "brier": null,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {}
+  },
+  "overall": {
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "pending": 0,
+  "games": 0
+}
