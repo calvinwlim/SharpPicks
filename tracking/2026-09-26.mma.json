@@ -1,0 +1,207 @@
+{
+  "date": "2026-09-26",
+  "sport": "mma",
+  "generatedAt": "2026-09-26T14:55:01",
+  "fights": [
+    {
+      "gameId": "401914472",
+      "away": "Demopoulos",
+      "home": "Jauregui",
+      "moneyline": {
+        "pick": "Yazmin Jauregui",
+        "modelProb": 0.837,
+        "tier": "Strong",
+        "evPct": -7.1,
+        "price": -910
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6491
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6491
+      }
+    },
+    {
+      "gameId": "401914469",
+      "away": "Alatengheili",
+      "home": "Castaneda",
+      "moneyline": {
+        "pick": "John Castaneda",
+        "modelProb": 0.6719,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.7551
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.7551
+      }
+    },
+    {
+      "gameId": "401914466",
+      "away": "Simon",
+      "home": "Jackson",
+      "moneyline": {
+        "pick": "Montel Jackson",
+        "modelProb": 0.6197,
+        "tier": "Lean",
+        "evPct": -10.49,
+        "price": -225
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6695
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6695
+      }
+    },
+    {
+      "gameId": "401914470",
+      "away": "Brener",
+      "home": "Harrell",
+      "moneyline": {
+        "pick": "Elves Brener",
+        "modelProb": 0.5208,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4609
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5391
+      }
+    },
+    {
+      "gameId": "401914467",
+      "away": "Edwards",
+      "home": "Bellato",
+      "moneyline": {
+        "pick": "Rodolfo Bellato",
+        "modelProb": 0.5297,
+        "tier": "Pass",
+        "evPct": -16.05,
+        "price": -171
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5395
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5395
+      }
+    },
+    {
+      "gameId": "401911631",
+      "away": "Bryczek",
+      "home": "Vieira",
+      "moneyline": {
+        "pick": "Rodolfo Vieira",
+        "modelProb": 0.5267,
+        "tier": "Pass",
+        "evPct": -14.2,
+        "price": -159
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5296
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5296
+      }
+    },
+    {
+      "gameId": "401914468",
+      "away": "Hiestand",
+      "home": "Nakamura",
+      "moneyline": {
+        "pick": "Rinya Nakamura",
+        "modelProb": 0.5508,
+        "tier": "Pass",
+        "evPct": -30.43,
+        "price": -380
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5856
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5856
+      }
+    },
+    {
+      "gameId": "401924683",
+      "away": "Dumas",
+      "home": "Hernandez",
+      "moneyline": {
+        "pick": "Luis Hernandez",
+        "modelProb": 0.6484,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5118
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5118
+      }
+    },
+    {
+      "gameId": "401914471",
+      "away": "Dumont",
+      "home": "Perez",
+      "moneyline": {
+        "pick": "Ailin Perez",
+        "modelProb": 0.6083,
+        "tier": "Lean",
+        "evPct": -1.62,
+        "price": -162
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.7955
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.7955
+      }
+    },
+    {
+      "gameId": "401911630",
+      "away": "Barcelos",
+      "home": "Jr.",
+      "moneyline": {
+        "pick": "Raul Rosas Jr.",
+        "modelProb": 0.7314,
+        "tier": "Strong",
+        "evPct": 22.9,
+        "price": -147
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6118
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6118
+      }
+    }
+  ]
+}
