@@ -1,0 +1,131 @@
+{
+  "date": "2026-09-27",
+  "sport": "mlb",
+  "generatedAt": "2026-09-28T18:30:24",
+  "strikeouts": {
+    "w": 15,
+    "l": 7,
+    "p": 0,
+    "brier": 0.2124,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 15,
+        "l": 7,
+        "brier": 0.2124
+      },
+      "0.55": {
+        "w": 15,
+        "l": 7,
+        "brier": 0.2124
+      },
+      "0.60": {
+        "w": 15,
+        "l": 6,
+        "brier": 0.2058
+      },
+      "0.65": {
+        "w": 10,
+        "l": 3,
+        "brier": 0.1895
+      },
+      "0.70": {
+        "w": 1,
+        "l": 1,
+        "brier": 0.3153
+      }
+    }
+  },
+  "total": {
+    "w": 9,
+    "l": 5,
+    "p": 0,
+    "brier": 0.2315,
+    "bets": 11,
+    "units": 2.35,
+    "roi": 21.4,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 9,
+        "l": 5,
+        "brier": 0.2315
+      },
+      "0.55": {
+        "w": 7,
+        "l": 4,
+        "brier": 0.2253
+      },
+      "0.60": {
+        "w": 3,
+        "l": 2,
+        "brier": 0.2271
+      },
+      "0.65": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.0815
+      },
+      "0.70": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.0815
+      }
+    }
+  },
+  "moneyline": {
+    "w": 10,
+    "l": 4,
+    "p": 0,
+    "brier": 0.2316,
+    "bets": 6,
+    "units": 0.17,
+    "roi": 2.8,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 10,
+        "l": 4,
+        "brier": 0.2316
+      },
+      "0.55": {
+        "w": 5,
+        "l": 2,
+        "brier": 0.2302
+      },
+      "0.60": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.1381
+      }
+    }
+  },
+  "overall": {
+    "bets": 17,
+    "units": 2.52,
+    "roi": 14.8,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "totalBias": -0.45,
+  "pending": 1,
+  "games": 15
+}
