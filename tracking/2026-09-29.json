@@ -1,0 +1,153 @@
+{
+  "date": "2026-09-29",
+  "generatedAt": "2026-09-29T16:49:00",
+  "games": [
+    {
+      "gamePk": 849845,
+      "away": "PHI",
+      "home": "ATL",
+      "strikeouts": [
+        {
+          "player": "Chris Sale",
+          "pitcherId": 519242,
+          "side": "over",
+          "line": 7.5,
+          "projection": 8.22,
+          "modelProb": 0.6139,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Jes\u00fas Luzardo",
+          "pitcherId": 666200,
+          "side": "under",
+          "line": 9.5,
+          "projection": 8.6,
+          "modelProb": 0.6536,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 6.95,
+        "modelProb": 0.5107,
+        "evPct": -6.72,
+        "price": -121
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5828,
+        "homeWinProb": 0.5828,
+        "evPct": -8.79,
+        "price": -177
+      }
+    },
+    {
+      "gamePk": 849849,
+      "away": "CWS",
+      "home": "HOU",
+      "strikeouts": [],
+      "total": {
+        "side": "under",
+        "line": 8.0,
+        "projection": 7.88,
+        "modelProb": 0.6088,
+        "evPct": 20.56,
+        "price": -102
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.5639,
+        "homeWinProb": 0.4361,
+        "evPct": 17.3,
+        "price": 108
+      }
+    },
+    {
+      "gamePk": 849851,
+      "away": "BOS",
+      "home": "NYY",
+      "strikeouts": [
+        {
+          "player": "Cam Schlittler",
+          "pitcherId": 693645,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.92,
+          "modelProb": 0.6145,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Payton Tolle",
+          "pitcherId": 801139,
+          "side": "under",
+          "line": 8.5,
+          "projection": 7.77,
+          "modelProb": 0.6326,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 6.0,
+        "projection": 6.59,
+        "modelProb": 0.5336,
+        "evPct": 4.67,
+        "price": -104
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.6052,
+        "homeWinProb": 0.6052,
+        "evPct": 8.17,
+        "price": -127
+      }
+    },
+    {
+      "gamePk": 849843,
+      "away": "CHC",
+      "home": "SD",
+      "strikeouts": [
+        {
+          "player": "Michael King",
+          "pitcherId": 650633,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.93,
+          "modelProb": 0.6314,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Matthew Boyd",
+          "pitcherId": 571510,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.81,
+          "modelProb": 0.6704,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.76,
+        "modelProb": 0.5139,
+        "evPct": -5.07,
+        "price": -118
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5541,
+        "homeWinProb": 0.5541,
+        "evPct": 0.1,
+        "price": -124
+      }
+    }
+  ]
+}
