@@ -1,0 +1,174 @@
+{
+  "date": "2026-09-30",
+  "generatedAt": "2026-09-30T16:41:13",
+  "games": [
+    {
+      "gamePk": 849841,
+      "away": "PHI",
+      "home": "ATL",
+      "strikeouts": [
+        {
+          "player": "Tyler Mahle",
+          "pitcherId": 641816,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.2,
+          "modelProb": 0.6187,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Cristopher S\u00e1nchez",
+          "pitcherId": 650911,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.71,
+          "modelProb": 0.6504,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.55,
+        "modelProb": 0.5372,
+        "evPct": -6.2,
+        "price": -134
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5959,
+        "homeWinProb": 0.5959,
+        "evPct": 21.56,
+        "price": 104
+      }
+    },
+    {
+      "gamePk": 849846,
+      "away": "CWS",
+      "home": "HOU",
+      "strikeouts": [
+        {
+          "player": "Hunter Brown",
+          "pitcherId": 686613,
+          "side": "over",
+          "line": 6.5,
+          "projection": 7.19,
+          "modelProb": 0.6117,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Sean Burke",
+          "pitcherId": 680732,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.24,
+          "modelProb": 0.6314,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 7.5,
+        "projection": 8.09,
+        "modelProb": 0.5219,
+        "evPct": 0.51,
+        "price": -108
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5488,
+        "homeWinProb": 0.5488,
+        "evPct": -7.28,
+        "price": -145
+      }
+    },
+    {
+      "gamePk": 849848,
+      "away": "BOS",
+      "home": "NYY",
+      "strikeouts": [
+        {
+          "player": "Max Fried",
+          "pitcherId": 608331,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.93,
+          "modelProb": 0.6317,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Sonny Gray",
+          "pitcherId": 543243,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.88,
+          "modelProb": 0.6293,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 6.5,
+        "projection": 6.81,
+        "modelProb": 0.5056,
+        "evPct": 1.13,
+        "price": 100
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.6033,
+        "homeWinProb": 0.6033,
+        "evPct": 7.1,
+        "price": -129
+      }
+    },
+    {
+      "gamePk": 849842,
+      "away": "CHC",
+      "home": "SD",
+      "strikeouts": [
+        {
+          "player": "Nick Pivetta",
+          "pitcherId": 601713,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.8,
+          "modelProb": 0.6591,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Kevin Gausman",
+          "pitcherId": 592332,
+          "side": "over",
+          "line": 5.5,
+          "projection": 6.16,
+          "modelProb": 0.6067,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.55,
+        "modelProb": 0.5376,
+        "evPct": -2.89,
+        "price": -124
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5804,
+        "homeWinProb": 0.5804,
+        "evPct": -0.5,
+        "price": -140
+      }
+    }
+  ]
+}
