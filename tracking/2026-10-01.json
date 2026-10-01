@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-01",
+  "generatedAt": "2026-10-01T17:16:58",
+  "games": [
+    {
+      "gamePk": 849844,
+      "away": "PHI",
+      "home": "ATL",
+      "strikeouts": [
+        {
+          "player": "Aaron Nola",
+          "pitcherId": 605400,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.53,
+          "modelProb": 0.6933,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.19,
+        "modelProb": 0.5793,
+        "evPct": 7.02,
+        "price": -118
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.6085,
+        "homeWinProb": 0.6085,
+        "evPct": 19.92,
+        "price": -103
+      }
+    }
+  ]
+}
