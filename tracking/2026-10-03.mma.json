@@ -1,0 +1,287 @@
+{
+  "date": "2026-10-03",
+  "sport": "mma",
+  "generatedAt": "2026-10-03T15:03:34",
+  "fights": [
+    {
+      "gameId": "401907089",
+      "away": "McGee",
+      "home": "Nolan",
+      "moneyline": {
+        "pick": "Eric Nolan",
+        "modelProb": 0.7428,
+        "tier": "Strong",
+        "evPct": 7.29,
+        "price": -225
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.7041
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.7041
+      }
+    },
+    {
+      "gameId": "401912275",
+      "away": "Vettori",
+      "home": "Naurdiev",
+      "moneyline": {
+        "pick": "Ismail Naurdiev",
+        "modelProb": 0.6286,
+        "tier": "Lean",
+        "evPct": 9.77,
+        "price": -134
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.801
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.801
+      }
+    },
+    {
+      "gameId": "401917346",
+      "away": "Anjos",
+      "home": "Hernandez",
+      "moneyline": {
+        "pick": "Alexander Hernandez",
+        "modelProb": 0.646,
+        "tier": "Lean",
+        "evPct": -10.55,
+        "price": -260
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5985
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5985
+      }
+    },
+    {
+      "gameId": "401926808",
+      "away": "Smith",
+      "home": "Whitehead",
+      "moneyline": {
+        "pick": "Jacobe Smith",
+        "modelProb": 0.6762,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.5649
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.8544
+      }
+    },
+    {
+      "gameId": "401912274",
+      "away": "Walker",
+      "home": "Parkin",
+      "moneyline": {
+        "pick": "Mick Parkin",
+        "modelProb": 0.5244,
+        "tier": "Pass",
+        "evPct": 2.86,
+        "price": -104
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5322
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5322
+      }
+    },
+    {
+      "gameId": "401922306",
+      "away": "Wint",
+      "home": "Armand",
+      "moneyline": {
+        "pick": "Lucas Armand",
+        "modelProb": 0.5585,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.5668
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.7491
+      }
+    },
+    {
+      "gameId": "401927906",
+      "away": "Romero",
+      "home": "McGhee",
+      "moneyline": {
+        "pick": "Marcus McGhee",
+        "modelProb": 0.6368,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4102
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6022
+      }
+    },
+    {
+      "gameId": "401912277",
+      "away": "Pulyaev",
+      "home": "Pinas",
+      "moneyline": {
+        "pick": "Damian Pinas",
+        "modelProb": 0.6376,
+        "tier": "Lean",
+        "evPct": -25.15,
+        "price": -575
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.7592
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.8629
+      }
+    },
+    {
+      "gameId": "401912276",
+      "away": "Coria",
+      "home": "Rodriguez",
+      "moneyline": {
+        "pick": "Alden Coria",
+        "modelProb": 0.587,
+        "tier": "Pass",
+        "evPct": 31.49,
+        "price": 124
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4708
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5292
+      }
+    },
+    {
+      "gameId": "401907088",
+      "away": "Kopylov",
+      "home": "Gautier",
+      "moneyline": {
+        "pick": "Ateba Gautier",
+        "modelProb": 0.6911,
+        "tier": "Lean",
+        "evPct": -0.84,
+        "price": -230
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.5586
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.616
+      }
+    },
+    {
+      "gameId": "401917345",
+      "away": "Soldi\u0107",
+      "home": "Williams",
+      "moneyline": {
+        "pick": "Roberto Soldi\u0107",
+        "modelProb": 0.561,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.455
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.545
+      }
+    },
+    {
+      "gameId": "401917347",
+      "away": "Green",
+      "home": "Ribovics",
+      "moneyline": {
+        "pick": "King Green",
+        "modelProb": 0.506,
+        "tier": "Pass",
+        "evPct": 41.68,
+        "price": 180
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6186
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6186
+      }
+    },
+    {
+      "gameId": "401907087",
+      "away": "Figueiredo",
+      "home": "Talbott",
+      "moneyline": {
+        "pick": "Payton Talbott",
+        "modelProb": 0.7763,
+        "tier": "Strong",
+        "evPct": -11.51,
+        "price": -715
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5128
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5128
+      }
+    },
+    {
+      "gameId": "401912278",
+      "away": "Silva",
+      "home": "Cong",
+      "moneyline": {
+        "pick": "Natalia Silva",
+        "modelProb": 0.619,
+        "tier": "Lean",
+        "evPct": -6.84,
+        "price": -198
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6823
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6823
+      }
+    }
+  ]
+}

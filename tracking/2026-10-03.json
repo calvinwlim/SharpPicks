@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-03",
+  "generatedAt": "2026-10-03T15:03:34",
+  "games": [
+    {
+      "gamePk": 849829,
+      "away": "CWS",
+      "home": "CLE",
+      "strikeouts": [
+        {
+          "player": "Parker Messick",
+          "pitcherId": 800048,
+          "side": "over",
+          "line": 6.5,
+          "projection": 7.21,
+          "modelProb": 0.6147,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 6.5,
+        "projection": 6.68,
+        "modelProb": 0.5214,
+        "evPct": 6.36,
+        "price": 104
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.5163,
+        "homeWinProb": 0.4837,
+        "evPct": 17.73,
+        "price": 128
+      }
+    },
+    {
+      "gamePk": 849828,
+      "away": "ATL",
+      "home": "LAD",
+      "strikeouts": [
+        {
+          "player": "Tarik Skubal",
+          "pitcherId": 669373,
+          "side": "over",
+          "line": 6.5,
+          "projection": 7.5,
+          "modelProb": 0.659,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 8.5,
+        "projection": 7.46,
+        "modelProb": 0.6544,
+        "evPct": 20.9,
+        "price": -118
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5856,
+        "homeWinProb": 0.5856,
+        "evPct": -13.81,
+        "price": -212
+      }
+    },
+    {
+      "gamePk": 849835,
+      "away": "NYY",
+      "home": "TB",
+      "strikeouts": [
+        {
+          "player": "Drew Rasmussen",
+          "pitcherId": 656876,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.66,
+          "modelProb": 0.6595,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Gerrit Cole",
+          "pitcherId": 543037,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.68,
+          "modelProb": 0.6792,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.43,
+        "modelProb": 0.5659,
+        "evPct": -2.98,
+        "price": -140
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5499,
+        "homeWinProb": 0.5499,
+        "evPct": -1.7,
+        "price": -127
+      }
+    },
+    {
+      "gamePk": 849830,
+      "away": "SD",
+      "home": "MIL",
+      "strikeouts": [
+        {
+          "player": "Jacob Misiorowski",
+          "pitcherId": 694819,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.76,
+          "modelProb": 0.6441,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Robbie Ray",
+          "pitcherId": 592662,
+          "side": "under",
+          "line": 4.5,
+          "projection": 4.06,
+          "modelProb": 0.617,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 7.0,
+        "projection": 8.05,
+        "modelProb": 0.5176,
+        "evPct": 0.59,
+        "price": -106
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.6177,
+        "homeWinProb": 0.6177,
+        "evPct": -4.66,
+        "price": -184
+      }
+    }
+  ]
+}
