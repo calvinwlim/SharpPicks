@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-04",
+  "generatedAt": "2026-10-04T15:40:59",
+  "games": [
+    {
+      "gamePk": 849825,
+      "away": "SD",
+      "home": "MIL",
+      "strikeouts": [
+        {
+          "player": "Logan Henderson",
+          "pitcherId": 701656,
+          "side": "over",
+          "line": 5.5,
+          "projection": 6.2,
+          "modelProb": 0.6168,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Michael King",
+          "pitcherId": 650633,
+          "side": "under",
+          "line": 5.5,
+          "projection": 5.06,
+          "modelProb": 0.6045,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.67,
+        "modelProb": 0.5241,
+        "evPct": -8.48,
+        "price": -134
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5654,
+        "homeWinProb": 0.5654,
+        "evPct": 0.03,
+        "price": -130
+      }
+    },
+    {
+      "gamePk": 849823,
+      "away": "ATL",
+      "home": "LAD",
+      "strikeouts": [
+        {
+          "player": "Blake Snell",
+          "pitcherId": 605483,
+          "side": "over",
+          "line": 5.5,
+          "projection": 6.34,
+          "modelProb": 0.6498,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.32,
+        "modelProb": 0.5639,
+        "evPct": -3.33,
+        "price": -140
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.6015,
+        "homeWinProb": 0.6015,
+        "evPct": 0.24,
+        "price": -150
+      }
+    }
+  ]
+}
