@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-04",
+  "sport": "mlb",
+  "generatedAt": "2026-10-05T19:31:14",
+  "strikeouts": {
+    "w": 0,
+    "l": 3,
+    "p": 0,
+    "brier": 0.3894,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 0,
+        "l": 3,
+        "brier": 0.3894
+      },
+      "0.55": {
+        "w": 0,
+        "l": 3,
+        "brier": 0.3894
+      },
+      "0.60": {
+        "w": 0,
+        "l": 3,
+        "brier": 0.3894
+      }
+    }
+  },
+  "total": {
+    "w": 2,
+    "l": 0,
+    "p": 0,
+    "brier": 0.2083,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 2,
+        "l": 0,
+        "brier": 0.2083
+      },
+      "0.55": {
+        "w": 1,
+        "l": 0,
+        "brier": 0.1902
+      }
+    }
+  },
+  "moneyline": {
+    "w": 1,
+    "l": 1,
+    "p": 0,
+    "brier": 0.2753,
+    "bets": 2,
+    "units": -0.23,
+    "roi": -11.5,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 1,
+        "l": 1,
+        "brier": 0.2753
+      },
+      "0.55": {
+        "w": 1,
+        "l": 1,
+        "brier": 0.2753
+      },
+      "0.60": {
+        "w": 0,
+        "l": 1,
+        "brier": 0.3618
+      }
+    }
+  },
+  "overall": {
+    "bets": 2,
+    "units": -0.23,
+    "roi": -11.5,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "totalBias": 1.5,
+  "pending": 0,
+  "games": 2
+}
