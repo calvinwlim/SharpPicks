@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-06",
+  "generatedAt": "2026-10-06T17:03:16",
+  "games": [
+    {
+      "gamePk": 849819,
+      "away": "LAD",
+      "home": "ATL",
+      "strikeouts": [
+        {
+          "player": "Chris Sale",
+          "pitcherId": 519242,
+          "side": "under",
+          "line": 8.5,
+          "projection": 7.73,
+          "modelProb": 0.6405,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Yoshinobu Yamamoto",
+          "pitcherId": 808967,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.74,
+          "modelProb": 0.646,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 6.9,
+        "modelProb": 0.5047,
+        "evPct": -4.07,
+        "price": -111
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5336,
+        "homeWinProb": 0.5336,
+        "evPct": 5.68,
+        "price": -102
+      }
+    },
+    {
+      "gamePk": 849826,
+      "away": "MIL",
+      "home": "SD",
+      "strikeouts": [
+        {
+          "player": "Nick Pivetta",
+          "pitcherId": 601713,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.08,
+          "modelProb": 0.6058,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Dustin May",
+          "pitcherId": 669160,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.63,
+          "modelProb": 0.7109,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.86,
+        "modelProb": 0.5031,
+        "evPct": -7.76,
+        "price": -120
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5988,
+        "homeWinProb": 0.5988,
+        "evPct": 4.56,
+        "price": -134
+      }
+    }
+  ]
+}
