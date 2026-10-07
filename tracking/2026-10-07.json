@@ -1,0 +1,164 @@
+{
+  "date": "2026-10-07",
+  "generatedAt": "2026-10-07T17:41:44",
+  "games": [
+    {
+      "gamePk": 849833,
+      "away": "CLE",
+      "home": "CWS",
+      "strikeouts": [
+        {
+          "player": "Sean Newcomb",
+          "pitcherId": 656794,
+          "side": "under",
+          "line": 2.5,
+          "projection": 1.64,
+          "modelProb": 0.7921,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Daniel Espino",
+          "pitcherId": 682982,
+          "side": "over",
+          "line": 1.5,
+          "projection": 2.09,
+          "modelProb": 0.6777,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.8,
+        "modelProb": 0.5095,
+        "evPct": 2.91,
+        "price": 102
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.6456,
+        "homeWinProb": 0.6456,
+        "evPct": 17.92,
+        "price": -121
+      }
+    },
+    {
+      "gamePk": 849822,
+      "away": "LAD",
+      "home": "ATL",
+      "strikeouts": [
+        {
+          "player": "Tyler Mahle",
+          "pitcherId": 641816,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.98,
+          "modelProb": 0.6201,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Tyler Glasnow",
+          "pitcherId": 607192,
+          "side": "under",
+          "line": 8.5,
+          "projection": 7.82,
+          "modelProb": 0.6257,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.65,
+        "modelProb": 0.5266,
+        "evPct": 2.35,
+        "price": -106
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5461,
+        "homeWinProb": 0.5461,
+        "evPct": 26.69,
+        "price": 132
+      }
+    },
+    {
+      "gamePk": 849838,
+      "away": "TB",
+      "home": "NYY",
+      "strikeouts": [
+        {
+          "player": "Max Fried",
+          "pitcherId": 608331,
+          "side": "over",
+          "line": 3.5,
+          "projection": 4.3,
+          "modelProb": 0.653,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Nick Martinez",
+          "pitcherId": 607259,
+          "side": "under",
+          "line": 4.5,
+          "projection": 4.07,
+          "modelProb": 0.6139,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.49,
+        "modelProb": 0.5444,
+        "evPct": -3.68,
+        "price": -130
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.6009,
+        "homeWinProb": 0.6009,
+        "evPct": -2.82,
+        "price": -162
+      }
+    },
+    {
+      "gamePk": 849827,
+      "away": "MIL",
+      "home": "SD",
+      "strikeouts": [
+        {
+          "player": "Walker Buehler",
+          "pitcherId": 621111,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.77,
+          "modelProb": 0.6785,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.52,
+        "modelProb": 0.5405,
+        "evPct": 1.06,
+        "price": -115
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5022,
+        "homeWinProb": 0.5022,
+        "evPct": -3.29,
+        "price": -108
+      }
+    }
+  ]
+}
