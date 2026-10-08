@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-08",
+  "generatedAt": "2026-10-08T17:45:32",
+  "games": [
+    {
+      "gamePk": 849832,
+      "away": "CLE",
+      "home": "CWS",
+      "strikeouts": [
+        {
+          "player": "Parker Messick",
+          "pitcherId": 800048,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.77,
+          "modelProb": 0.641,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.0,
+        "projection": 7.12,
+        "modelProb": 0.5872,
+        "evPct": 17.44,
+        "price": 100
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5927,
+        "homeWinProb": 0.5927,
+        "evPct": 20.9,
+        "price": 104
+      }
+    }
+  ]
+}
