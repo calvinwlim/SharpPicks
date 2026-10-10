@@ -1,0 +1,247 @@
+{
+  "date": "2026-10-10",
+  "sport": "mma",
+  "generatedAt": "2026-10-10T16:07:01",
+  "fights": [
+    {
+      "gameId": "401924511",
+      "away": "Gatto",
+      "home": "Kareckaite",
+      "moneyline": {
+        "pick": "Ernesta Kareckaite",
+        "modelProb": 0.5055,
+        "tier": "Pass",
+        "evPct": 4.64,
+        "price": 107
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6124
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6124
+      }
+    },
+    {
+      "gameId": "401924512",
+      "away": "Zhelezniakova",
+      "home": "Pereira",
+      "moneyline": {
+        "pick": "Alice Pereira",
+        "modelProb": 0.6293,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6542
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6542
+      }
+    },
+    {
+      "gameId": "401927418",
+      "away": "Jr.",
+      "home": "Harris",
+      "moneyline": {
+        "pick": "RJ Harris",
+        "modelProb": 0.5979,
+        "tier": "Pass",
+        "evPct": -23.37,
+        "price": -355
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.7734
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.853
+      }
+    },
+    {
+      "gameId": "401927420",
+      "away": "Ribeiro",
+      "home": "Franco",
+      "moneyline": {
+        "pick": "Felipe Franco",
+        "modelProb": 0.7131,
+        "tier": "Strong",
+        "evPct": -9.42,
+        "price": -370
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4345
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6082
+      }
+    },
+    {
+      "gameId": "401927419",
+      "away": "Price",
+      "home": "Shahbazyan",
+      "moneyline": {
+        "pick": "Leon Shahbazyan",
+        "modelProb": 0.5652,
+        "tier": "Pass",
+        "evPct": -3.11,
+        "price": -140
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5253
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5253
+      }
+    },
+    {
+      "gameId": "401916277",
+      "away": "Bonfim",
+      "home": "Prado",
+      "moneyline": {
+        "pick": "Ismael Bonfim",
+        "modelProb": 0.5282,
+        "tier": "Pass",
+        "evPct": 18.32,
+        "price": 124
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.7061
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.7061
+      }
+    },
+    {
+      "gameId": "401927417",
+      "away": "Meerschaert",
+      "home": "Walker",
+      "moneyline": {
+        "pick": "Julius Walker",
+        "modelProb": 0.6189,
+        "tier": "Lean",
+        "evPct": -17.48,
+        "price": -300
+      },
+      "method": {
+        "pick": "sub",
+        "modelProb": 0.4191
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.7708
+      }
+    },
+    {
+      "gameId": "401927421",
+      "away": "Tanzilovi",
+      "home": "Wellmaker",
+      "moneyline": {
+        "pick": "Otari Tanzilovi",
+        "modelProb": 0.6551,
+        "tier": "Lean",
+        "evPct": 83.43,
+        "price": 180
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4294
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5706
+      }
+    },
+    {
+      "gameId": "401927416",
+      "away": "Fili",
+      "home": "III",
+      "moneyline": {
+        "pick": "Kai Kamaka III",
+        "modelProb": 0.5217,
+        "tier": "Pass",
+        "evPct": 18.95,
+        "price": 128
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5922
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5922
+      }
+    },
+    {
+      "gameId": "401924510",
+      "away": "Souza",
+      "home": "God\u00ednez",
+      "moneyline": {
+        "pick": "Loopy God\u00ednez",
+        "modelProb": 0.5958,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6889
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6889
+      }
+    },
+    {
+      "gameId": "401927415",
+      "away": "Herbert",
+      "home": "Camilo",
+      "moneyline": {
+        "pick": "Matheus Camilo",
+        "modelProb": 0.7402,
+        "tier": "Strong",
+        "evPct": 14.03,
+        "price": -185
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4785
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5215
+      }
+    },
+    {
+      "gameId": "401916276",
+      "away": "Allen",
+      "home": "Duncan",
+      "moneyline": {
+        "pick": "Christian Leroy Duncan",
+        "modelProb": 0.5808,
+        "tier": "Pass",
+        "evPct": 19.06,
+        "price": 105
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5511
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5511
+      }
+    }
+  ]
+}

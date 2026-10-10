@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-10",
+  "generatedAt": "2026-10-10T16:07:00",
+  "games": [
+    {
+      "gamePk": 849831,
+      "away": "CWS",
+      "home": "CLE",
+      "strikeouts": [
+        {
+          "player": "Gavin Williams",
+          "pitcherId": 668909,
+          "side": "over",
+          "line": 7.5,
+          "projection": 8.43,
+          "modelProb": 0.6562,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Sean Burke",
+          "pitcherId": 680732,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.96,
+          "modelProb": 0.6258,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 7.5,
+        "projection": 7.91,
+        "modelProb": 0.5026,
+        "evPct": 4.53,
+        "price": 108
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5179,
+        "homeWinProb": 0.5179,
+        "evPct": -9.85,
+        "price": -135
+      }
+    }
+  ]
+}
