@@ -1,0 +1,140 @@
+{
+  "date": "2026-10-10",
+  "sport": "mma",
+  "generatedAt": "2026-10-11T16:34:07",
+  "moneyline": {
+    "w": 4,
+    "l": 7,
+    "p": 0,
+    "brier": 0.2897,
+    "bets": 5,
+    "units": -2.2,
+    "roi": -44.0,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 4,
+        "l": 7,
+        "brier": 0.2897
+      },
+      "0.55": {
+        "w": 4,
+        "l": 5,
+        "brier": 0.2929
+      },
+      "0.60": {
+        "w": 3,
+        "l": 2,
+        "brier": 0.2916
+      },
+      "0.65": {
+        "w": 1,
+        "l": 2,
+        "brier": 0.3918
+      },
+      "0.70": {
+        "w": 0,
+        "l": 2,
+        "brier": 0.5282
+      }
+    }
+  },
+  "method": {
+    "w": 3,
+    "l": 8,
+    "p": 0,
+    "brier": 0.2569,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 3,
+        "l": 8,
+        "brier": 0.2924
+      },
+      "0.55": {
+        "w": 2,
+        "l": 7,
+        "brier": 0.3013
+      },
+      "0.60": {
+        "w": 2,
+        "l": 2,
+        "brier": 0.2687
+      },
+      "0.65": {
+        "w": 2,
+        "l": 2,
+        "brier": 0.2687
+      },
+      "0.70": {
+        "w": 1,
+        "l": 1,
+        "brier": 0.275
+      }
+    }
+  },
+  "distance": {
+    "w": 5,
+    "l": 6,
+    "p": 0,
+    "brier": 0.2398,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 5,
+        "l": 6,
+        "brier": 0.2398
+      },
+      "0.55": {
+        "w": 5,
+        "l": 4,
+        "brier": 0.2322
+      },
+      "0.60": {
+        "w": 4,
+        "l": 2,
+        "brier": 0.2085
+      },
+      "0.65": {
+        "w": 3,
+        "l": 2,
+        "brier": 0.2195
+      },
+      "0.70": {
+        "w": 2,
+        "l": 1,
+        "brier": 0.1909
+      }
+    }
+  },
+  "overall": {
+    "bets": 5,
+    "units": -2.2,
+    "roi": -44.0,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "pending": 1,
+  "games": 12
+}

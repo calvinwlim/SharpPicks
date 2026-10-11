@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-11",
+  "generatedAt": "2026-10-11T16:34:16",
+  "games": [
+    {
+      "gamePk": 849809,
+      "away": "LAD",
+      "home": "MIL",
+      "strikeouts": [
+        {
+          "player": "Jacob Misiorowski",
+          "pitcherId": 694819,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.54,
+          "modelProb": 0.6826,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Tarik Skubal",
+          "pitcherId": 669373,
+          "side": "under",
+          "line": 8.5,
+          "projection": 7.51,
+          "modelProb": 0.6753,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.24,
+        "modelProb": 0.5446,
+        "evPct": 16.55,
+        "price": 114
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5527,
+        "homeWinProb": 0.5527,
+        "evPct": 6.93,
+        "price": -107
+      }
+    }
+  ]
+}
