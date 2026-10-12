@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-12",
+  "generatedAt": "2026-10-12T20:07:40",
+  "games": [
+    {
+      "gamePk": 849812,
+      "away": "LAD",
+      "home": "MIL",
+      "strikeouts": [
+        {
+          "player": "Logan Henderson",
+          "pitcherId": 701656,
+          "side": "over",
+          "line": 6.5,
+          "projection": 7.12,
+          "modelProb": 0.6009,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Yoshinobu Yamamoto",
+          "pitcherId": 808967,
+          "side": "over",
+          "line": 5.5,
+          "projection": 6.19,
+          "modelProb": 0.611,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.32,
+        "modelProb": 0.5532,
+        "evPct": -3.39,
+        "price": -134
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5401,
+        "homeWinProb": 0.5401,
+        "evPct": 16.66,
+        "price": 116
+      }
+    },
+    {
+      "gamePk": 849820,
+      "away": "CLE",
+      "home": "TB",
+      "strikeouts": [
+        {
+          "player": "Drew Rasmussen",
+          "pitcherId": 656876,
+          "side": "under",
+          "line": 5.5,
+          "projection": 5.06,
+          "modelProb": 0.6051,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Foster Griffin",
+          "pitcherId": 656492,
+          "side": "under",
+          "line": 4.5,
+          "projection": 4.07,
+          "modelProb": 0.6152,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.22,
+        "modelProb": 0.542,
+        "evPct": -1.38,
+        "price": -122
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5631,
+        "homeWinProb": 0.5631,
+        "evPct": -9.15,
+        "price": -163
+      }
+    }
+  ]
+}
