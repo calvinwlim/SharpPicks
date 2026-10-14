@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-14",
+  "generatedAt": "2026-10-14T15:43:05",
+  "games": [
+    {
+      "gamePk": 849811,
+      "away": "MIL",
+      "home": "LAD",
+      "strikeouts": [
+        {
+          "player": "Blake Snell",
+          "pitcherId": 605483,
+          "side": "over",
+          "line": 5.5,
+          "projection": 6.43,
+          "modelProb": 0.6662,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Robert Gasser",
+          "pitcherId": 688107,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.55,
+          "modelProb": 0.705,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.36,
+        "modelProb": 0.5593,
+        "evPct": 4.57,
+        "price": -115
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5669,
+        "homeWinProb": 0.5669,
+        "evPct": -9.37,
+        "price": -167
+      }
+    }
+  ]
+}
