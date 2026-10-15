@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-15",
+  "generatedAt": "2026-10-15T15:30:37",
+  "games": [
+    {
+      "gamePk": 849818,
+      "away": "TB",
+      "home": "CLE",
+      "strikeouts": [
+        {
+          "player": "Gavin Williams",
+          "pitcherId": 668909,
+          "side": "under",
+          "line": 7.5,
+          "projection": 6.82,
+          "modelProb": 0.6337,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Griffin Jax",
+          "pitcherId": 643377,
+          "side": "under",
+          "line": 4.5,
+          "projection": 4.05,
+          "modelProb": 0.6181,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.08,
+        "modelProb": 0.5258,
+        "evPct": -2.86,
+        "price": -118
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5126,
+        "homeWinProb": 0.5126,
+        "evPct": -6.38,
+        "price": -121
+      }
+    },
+    {
+      "gamePk": 849810,
+      "away": "MIL",
+      "home": "LAD",
+      "strikeouts": [
+        {
+          "player": "Tyler Glasnow",
+          "pitcherId": 607192,
+          "side": "under",
+          "line": 8.5,
+          "projection": 7.94,
+          "modelProb": 0.6061,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.75,
+        "modelProb": 0.5151,
+        "evPct": -0.34,
+        "price": -107
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.5009,
+        "homeWinProb": 0.4991,
+        "evPct": 17.7,
+        "price": 135
+      }
+    }
+  ]
+}
