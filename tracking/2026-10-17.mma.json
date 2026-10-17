@@ -1,0 +1,247 @@
+{
+  "date": "2026-10-17",
+  "sport": "mma",
+  "generatedAt": "2026-10-17T14:04:31",
+  "fights": [
+    {
+      "gameId": "401919643",
+      "away": "You",
+      "home": "Chovancek",
+      "moneyline": {
+        "pick": "SuYoung You",
+        "modelProb": 0.5382,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6238
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6238
+      }
+    },
+    {
+      "gameId": "401908373",
+      "away": "Chandler",
+      "home": "Croden",
+      "moneyline": {
+        "pick": "Melissa Croden",
+        "modelProb": 0.7222,
+        "tier": "Strong",
+        "evPct": -5.9,
+        "price": -330
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.574
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.574
+      }
+    },
+    {
+      "gameId": "401914039",
+      "away": "Anheliger",
+      "home": "Koslow",
+      "moneyline": {
+        "pick": "Steven Koslow",
+        "modelProb": 0.6624,
+        "tier": "Lean",
+        "evPct": 7.13,
+        "price": -162
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6131
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6131
+      }
+    },
+    {
+      "gameId": "401929675",
+      "away": "Cerminara",
+      "home": "Stiller",
+      "moneyline": {
+        "pick": "Mackenzie Stiller",
+        "modelProb": 0.5711,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.7595
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.7595
+      }
+    },
+    {
+      "gameId": "401911807",
+      "away": "LeBlanc",
+      "home": "Galanti",
+      "moneyline": {
+        "pick": "Nick Galanti",
+        "modelProb": 0.649,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.539
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.539
+      }
+    },
+    {
+      "gameId": "401908371",
+      "away": "Boser",
+      "home": "Diniz",
+      "moneyline": {
+        "pick": "Tanner Boser",
+        "modelProb": 0.5039,
+        "tier": "Pass",
+        "evPct": 43.11,
+        "price": 184
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5253
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5253
+      }
+    },
+    {
+      "gameId": "401905374",
+      "away": "Landwehr",
+      "home": "Nallo",
+      "moneyline": {
+        "pick": "Nate Landwehr",
+        "modelProb": 0.5724,
+        "tier": "Pass",
+        "evPct": 97.48,
+        "price": 245
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5238
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5238
+      }
+    },
+    {
+      "gameId": "401909783",
+      "away": "Jourdain",
+      "home": "Cuamba",
+      "moneyline": {
+        "pick": "Louis Jourdain",
+        "modelProb": 0.5317,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5554
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5554
+      }
+    },
+    {
+      "gameId": "401908372",
+      "away": "Daukaus",
+      "home": "Barriault",
+      "moneyline": {
+        "pick": "Kyle Daukaus",
+        "modelProb": 0.5908,
+        "tier": "Pass",
+        "evPct": -10.62,
+        "price": -195
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5289
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5289
+      }
+    },
+    {
+      "gameId": "401923630",
+      "away": "Nelson",
+      "home": "P\u00e9rez",
+      "moneyline": {
+        "pick": "Cristian P\u00e9rez",
+        "modelProb": 0.5667,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5043
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5043
+      }
+    },
+    {
+      "gameId": "401897729",
+      "away": "Blanchfield",
+      "home": "Jasudavicius",
+      "moneyline": {
+        "pick": "Erin Blanchfield",
+        "modelProb": 0.7589,
+        "tier": "Strong",
+        "evPct": -0.39,
+        "price": -320
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6381
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6381
+      }
+    },
+    {
+      "gameId": "401897388",
+      "away": "Malott",
+      "home": "Buckley",
+      "moneyline": {
+        "pick": "Joaquin Buckley",
+        "modelProb": 0.5104,
+        "tier": "Pass",
+        "evPct": 10.25,
+        "price": 116
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4466
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5715
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-17",
+  "generatedAt": "2026-10-17T14:04:30",
+  "games": [
+    {
+      "gamePk": 849816,
+      "away": "TB",
+      "home": "CLE",
+      "strikeouts": [
+        {
+          "player": "Nick Martinez",
+          "pitcherId": 607259,
+          "side": "over",
+          "line": 2.5,
+          "projection": 3.42,
+          "modelProb": 0.6874,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.16,
+        "modelProb": 0.535,
+        "evPct": 2.14,
+        "price": -110
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5524,
+        "homeWinProb": 0.5524,
+        "evPct": 9.4,
+        "price": -102
+      }
+    }
+  ]
+}
