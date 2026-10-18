@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-18",
+  "generatedAt": "2026-10-18T14:19:55",
+  "games": [
+    {
+      "gamePk": 849817,
+      "away": "TB",
+      "home": "CLE",
+      "strikeouts": [
+        {
+          "player": "Parker Messick",
+          "pitcherId": 800048,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.34,
+          "modelProb": 0.6462,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Drew Rasmussen",
+          "pitcherId": 656876,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.59,
+          "modelProb": 0.6833,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 6.5,
+        "projection": 6.68,
+        "modelProb": 0.5218,
+        "evPct": -2.84,
+        "price": -116
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5436,
+        "homeWinProb": 0.5436,
+        "evPct": 17.96,
+        "price": 117
+      }
+    }
+  ]
+}
