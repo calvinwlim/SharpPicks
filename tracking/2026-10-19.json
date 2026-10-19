@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-19",
+  "generatedAt": "2026-10-19T17:20:58",
+  "games": [
+    {
+      "gamePk": 849815,
+      "away": "CLE",
+      "home": "TB",
+      "strikeouts": [
+        {
+          "player": "Freddy Peralta",
+          "pitcherId": 642547,
+          "side": "over",
+          "line": 3.5,
+          "projection": 4.16,
+          "modelProb": 0.6193,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.07,
+        "modelProb": 0.5251,
+        "evPct": -4.44,
+        "price": -122
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5638,
+        "homeWinProb": 0.5638,
+        "evPct": -5.53,
+        "price": -148
+      }
+    }
+  ]
+}
