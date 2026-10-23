@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-23",
+  "generatedAt": "2026-10-23T15:39:00",
+  "games": [
+    {
+      "gamePk": 849805,
+      "away": "TB",
+      "home": "MIL",
+      "strikeouts": [
+        {
+          "player": "Jacob Misiorowski",
+          "pitcherId": 694819,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.89,
+          "modelProb": 0.628,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Nick Martinez",
+          "pitcherId": 607259,
+          "side": "under",
+          "line": 4.5,
+          "projection": 3.63,
+          "modelProb": 0.708,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.55,
+        "modelProb": 0.579,
+        "evPct": 10.54,
+        "price": -110
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.6245,
+        "homeWinProb": 0.6245,
+        "evPct": -2.85,
+        "price": -180
+      }
+    }
+  ]
+}
