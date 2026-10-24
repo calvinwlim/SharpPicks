@@ -1,0 +1,287 @@
+{
+  "date": "2026-10-24",
+  "sport": "mma",
+  "generatedAt": "2026-10-24T14:16:52",
+  "fights": [
+    {
+      "gameId": "401930917",
+      "away": "Caliari",
+      "home": "Lucindo",
+      "moneyline": {
+        "pick": "Iasmin Lucindo",
+        "modelProb": 0.7232,
+        "tier": "Strong",
+        "evPct": -10.46,
+        "price": -420
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5754
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5754
+      }
+    },
+    {
+      "gameId": "401930916",
+      "away": "Gugnon",
+      "home": "Steele",
+      "moneyline": {
+        "pick": "Kody Steele",
+        "modelProb": 0.5161,
+        "tier": "Pass",
+        "evPct": -13.04,
+        "price": -146
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4055
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5945
+      }
+    },
+    {
+      "gameId": "401930915",
+      "away": "Santos",
+      "home": "Oki",
+      "moneyline": {
+        "pick": "Bolaji Oki",
+        "modelProb": 0.5169,
+        "tier": "Pass",
+        "evPct": 0.92,
+        "price": -105
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4711
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6562
+      }
+    },
+    {
+      "gameId": "401930357",
+      "away": "Vagaev",
+      "home": "Malkoun",
+      "moneyline": {
+        "pick": "Jacob Malkoun",
+        "modelProb": 0.8094,
+        "tier": "Strong",
+        "evPct": 89.4,
+        "price": 134
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.658
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.658
+      }
+    },
+    {
+      "gameId": "401928047",
+      "away": "Thicknesse",
+      "home": "Chopurov",
+      "moneyline": {
+        "pick": "Asaf Chopurov",
+        "modelProb": 0.5361,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6317
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6317
+      }
+    },
+    {
+      "gameId": "401911640",
+      "away": "Dawson",
+      "home": "Aliev",
+      "moneyline": {
+        "pick": "Nurullo Aliev",
+        "modelProb": 0.5152,
+        "tier": "Pass",
+        "evPct": 5.62,
+        "price": 105
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.64
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.64
+      }
+    },
+    {
+      "gameId": "401911638",
+      "away": "Magomedov",
+      "home": "Rowston",
+      "moneyline": {
+        "pick": "Cam Rowston",
+        "modelProb": 0.6422,
+        "tier": "Lean",
+        "evPct": 29.72,
+        "price": 102
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4344
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6337
+      }
+    },
+    {
+      "gameId": "401911639",
+      "away": "Krylov",
+      "home": "Yakhyaev",
+      "moneyline": {
+        "pick": "Abdul-Rakhman Yakhyaev",
+        "modelProb": 0.7034,
+        "tier": "Strong",
+        "evPct": -16.26,
+        "price": -525
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.6654
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.8841
+      }
+    },
+    {
+      "gameId": "401911637",
+      "away": "Murzakanov",
+      "home": "Reyes",
+      "moneyline": {
+        "pick": "Azamat Murzakanov",
+        "modelProb": 0.5211,
+        "tier": "Pass",
+        "evPct": -19.26,
+        "price": -182
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.6076
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6924
+      }
+    },
+    {
+      "gameId": "401929495",
+      "away": "Pico",
+      "home": "Keita",
+      "moneyline": {
+        "pick": "Losene Keita",
+        "modelProb": 0.6316,
+        "tier": "Lean",
+        "evPct": 46.53,
+        "price": 132
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4983
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5017
+      }
+    },
+    {
+      "gameId": "401911635",
+      "away": "Volkov",
+      "home": "Kuniev",
+      "moneyline": {
+        "pick": "Alexander Volkov",
+        "modelProb": 0.592,
+        "tier": "Pass",
+        "evPct": 7.72,
+        "price": -122
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6431
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6431
+      }
+    },
+    {
+      "gameId": "401911634",
+      "away": "Temirov",
+      "home": "Kavanagh",
+      "moneyline": {
+        "pick": "Ramazan Temirov",
+        "modelProb": 0.6199,
+        "tier": "Lean",
+        "evPct": 21.6,
+        "price": -104
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.5612
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.71
+      }
+    },
+    {
+      "gameId": "401911633",
+      "away": "Dvalishvili",
+      "home": "Yan",
+      "moneyline": {
+        "pick": "Petr Yan",
+        "modelProb": 0.545,
+        "tier": "Pass",
+        "evPct": -7.12,
+        "price": -142
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.7549
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.7549
+      }
+    },
+    {
+      "gameId": "401911632",
+      "away": "Volkanovski",
+      "home": "Evloev",
+      "moneyline": {
+        "pick": "Movsar Evloev",
+        "modelProb": 0.5921,
+        "tier": "Pass",
+        "evPct": 17.26,
+        "price": -102
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.7593
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.7593
+      }
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-24",
+  "generatedAt": "2026-10-24T14:16:52",
+  "games": [
+    {
+      "gamePk": 849802,
+      "away": "TB",
+      "home": "MIL",
+      "strikeouts": [
+        {
+          "player": "Logan Henderson",
+          "pitcherId": 701656,
+          "side": "over",
+          "line": 4.5,
+          "projection": 5.42,
+          "modelProb": 0.6621,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Drew Rasmussen",
+          "pitcherId": 656876,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.95,
+          "modelProb": 0.6162,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.35,
+        "modelProb": 0.557,
+        "evPct": 6.34,
+        "price": -110
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5773,
+        "homeWinProb": 0.5773,
+        "evPct": 5.84,
+        "price": -120
+      }
+    }
+  ]
+}
