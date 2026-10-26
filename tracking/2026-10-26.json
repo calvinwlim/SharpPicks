@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-26",
+  "generatedAt": "2026-10-26T17:08:22",
+  "games": [
+    {
+      "gamePk": 849804,
+      "away": "MIL",
+      "home": "TB",
+      "strikeouts": [
+        {
+          "player": "Freddy Peralta",
+          "pitcherId": 642547,
+          "side": "over",
+          "line": 3.5,
+          "projection": 4.4,
+          "modelProb": 0.6677,
+          "evPct": null,
+          "price": null
+        },
+        {
+          "player": "Robert Gasser",
+          "pitcherId": 688107,
+          "side": "over",
+          "line": 3.5,
+          "projection": 4.15,
+          "modelProb": 0.6184,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.31,
+        "modelProb": 0.5646,
+        "evPct": -2.62,
+        "price": -138
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5132,
+        "homeWinProb": 0.5132,
+        "evPct": -2.03,
+        "price": -110
+      }
+    }
+  ]
+}
