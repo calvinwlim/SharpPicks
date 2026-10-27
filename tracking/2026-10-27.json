@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-27",
+  "generatedAt": "2026-10-27T16:13:16",
+  "games": [
+    {
+      "gamePk": 849803,
+      "away": "MIL",
+      "home": "TB",
+      "strikeouts": [
+        {
+          "player": "Griffin Jax",
+          "pitcherId": 643377,
+          "side": "under",
+          "line": 5.5,
+          "projection": 4.77,
+          "modelProb": 0.6635,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "under",
+        "line": 7.5,
+        "projection": 7.28,
+        "modelProb": 0.568,
+        "evPct": -0.81,
+        "price": -134
+      },
+      "moneyline": {
+        "pick": "home",
+        "modelProb": 0.5028,
+        "homeWinProb": 0.5028,
+        "evPct": 7.6,
+        "price": 114
+      }
+    }
+  ]
+}
