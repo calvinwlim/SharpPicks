@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-28",
+  "generatedAt": "2026-10-28T17:00:18",
+  "games": [
+    {
+      "gamePk": 849799,
+      "away": "MIL",
+      "home": "TB",
+      "strikeouts": [
+        {
+          "player": "Jacob Misiorowski",
+          "pitcherId": 694819,
+          "side": "under",
+          "line": 6.5,
+          "projection": 5.89,
+          "modelProb": 0.628,
+          "evPct": null,
+          "price": null
+        }
+      ],
+      "total": {
+        "side": "over",
+        "line": 6.5,
+        "projection": 7.22,
+        "modelProb": 0.542,
+        "evPct": -0.64,
+        "price": -120
+      },
+      "moneyline": {
+        "pick": "away",
+        "modelProb": 0.5556,
+        "homeWinProb": 0.4444,
+        "evPct": -8.59,
+        "price": -155
+      }
+    }
+  ]
+}
