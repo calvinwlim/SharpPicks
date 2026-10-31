@@ -1,0 +1,247 @@
+{
+  "date": "2026-10-31",
+  "sport": "mma",
+  "generatedAt": "2026-10-31T15:57:22",
+  "fights": [
+    {
+      "gameId": "401914105",
+      "away": "Lisboa",
+      "home": "Szabov\u00e1",
+      "moneyline": {
+        "pick": "Lucia Szabov\u00e1",
+        "modelProb": 0.5665,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.451
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.549
+      }
+    },
+    {
+      "gameId": "401928105",
+      "away": "Rodriguez",
+      "home": "Alencar",
+      "moneyline": {
+        "pick": "Piera Rodriguez",
+        "modelProb": 0.612,
+        "tier": "Lean",
+        "evPct": -16.55,
+        "price": -275
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.7358
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.7358
+      }
+    },
+    {
+      "gameId": "401914106",
+      "away": "Kropschot",
+      "home": "Klein",
+      "moneyline": {
+        "pick": "Joe Kropschot",
+        "modelProb": 0.6687,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.539
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.539
+      }
+    },
+    {
+      "gameId": "401931617",
+      "away": "Gall",
+      "home": "Reese",
+      "moneyline": {
+        "pick": "Zach Reese",
+        "modelProb": 0.5896,
+        "tier": "Pass",
+        "evPct": -26.3,
+        "price": -400
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5004
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5004
+      }
+    },
+    {
+      "gameId": "401928109",
+      "away": "Erosa",
+      "home": "Lee",
+      "moneyline": {
+        "pick": "Julian Erosa",
+        "modelProb": 0.5078,
+        "tier": "Pass",
+        "evPct": 14.76,
+        "price": 126
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.487
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.513
+      }
+    },
+    {
+      "gameId": "401928106",
+      "away": "Berggren",
+      "home": "Sezinando",
+      "moneyline": {
+        "pick": "Theodor Berggren",
+        "modelProb": 0.6095,
+        "tier": "Lean",
+        "evPct": 54.2,
+        "price": 153
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.9604
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.9604
+      }
+    },
+    {
+      "gameId": "401931615",
+      "away": "Hope",
+      "home": "Marshall",
+      "moneyline": {
+        "pick": "Francis Marshall",
+        "modelProb": 0.5287,
+        "tier": "Pass",
+        "evPct": -21.34,
+        "price": -205
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5081
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5081
+      }
+    },
+    {
+      "gameId": "401928107",
+      "away": "Lebosnoyani",
+      "home": "Hasanov",
+      "moneyline": {
+        "pick": "Jean-Paul Lebosnoyani",
+        "modelProb": 0.6551,
+        "tier": "Lean",
+        "evPct": -11.5,
+        "price": -285
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6178
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6178
+      }
+    },
+    {
+      "gameId": "401928104",
+      "away": "Santos",
+      "home": "Santos",
+      "moneyline": {
+        "pick": "Luana Santos",
+        "modelProb": 0.8197,
+        "tier": "Strong",
+        "evPct": 8.41,
+        "price": -310
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5223
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5223
+      }
+    },
+    {
+      "gameId": "401931555",
+      "away": "Osbourne",
+      "home": "Durden",
+      "moneyline": {
+        "pick": "Ode' Osbourne",
+        "modelProb": 0.5049,
+        "tier": "Pass",
+        "evPct": 0.98,
+        "price": 100
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4863
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5137
+      }
+    },
+    {
+      "gameId": "401931616",
+      "away": "Brown",
+      "home": "Smith",
+      "moneyline": {
+        "pick": "Jacobe Smith",
+        "modelProb": 0.6609,
+        "tier": "Lean",
+        "evPct": -8.49,
+        "price": -260
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4931
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.7409
+      }
+    },
+    {
+      "gameId": "401921310",
+      "away": "Moicano",
+      "home": "Nolan",
+      "moneyline": {
+        "pick": "Tom Nolan",
+        "modelProb": 0.547,
+        "tier": "Pass",
+        "evPct": 13.78,
+        "price": 108
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4787
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5213
+      }
+    }
+  ]
+}
