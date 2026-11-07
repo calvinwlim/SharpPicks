@@ -1,0 +1,287 @@
+{
+  "date": "2026-11-07",
+  "sport": "mma",
+  "generatedAt": "2026-11-07T16:45:27",
+  "fights": [
+    {
+      "gameId": "401928118",
+      "away": "Parsons",
+      "home": "Souza",
+      "moneyline": {
+        "pick": "Jonny Parsons",
+        "modelProb": 0.6559,
+        "tier": "Lean",
+        "evPct": 88.9,
+        "price": 188
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5036
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5036
+      }
+    },
+    {
+      "gameId": "401928117",
+      "away": "Turman",
+      "home": "Ko",
+      "moneyline": {
+        "pick": "Seokhyeon Ko",
+        "modelProb": 0.8052,
+        "tier": "Strong",
+        "evPct": -7.55,
+        "price": -675
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6037
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6037
+      }
+    },
+    {
+      "gameId": "401932011",
+      "away": "Petroski",
+      "home": "Kondratavi\u010dius",
+      "moneyline": {
+        "pick": "Mantas Kondratavi\u010dius",
+        "modelProb": 0.5947,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4469
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5531
+      }
+    },
+    {
+      "gameId": "401933235",
+      "away": "Bashi",
+      "home": "Calderon",
+      "moneyline": {
+        "pick": "Austin Bashi",
+        "modelProb": 0.5378,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5901
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5901
+      }
+    },
+    {
+      "gameId": "401928120",
+      "away": "Delano",
+      "home": "Magomedov",
+      "moneyline": {
+        "pick": "Murtazali Magomedov",
+        "modelProb": 0.7462,
+        "tier": "Strong",
+        "evPct": 52.97,
+        "price": 105
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5036
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5036
+      }
+    },
+    {
+      "gameId": "401928115",
+      "away": "Silva",
+      "home": "Fernandes",
+      "moneyline": {
+        "pick": "Karine Silva",
+        "modelProb": 0.5495,
+        "tier": "Pass",
+        "evPct": -20.07,
+        "price": -220
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5938
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5938
+      }
+    },
+    {
+      "gameId": "401932716",
+      "away": "Petersen",
+      "home": "Loren\u00e7o",
+      "moneyline": {
+        "pick": "Thomas Petersen",
+        "modelProb": 0.5456,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5203
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5203
+      }
+    },
+    {
+      "gameId": "401911642",
+      "away": "Nakamura",
+      "home": "Schmid",
+      "moneyline": {
+        "pick": "Ollie Schmid",
+        "modelProb": 0.6411,
+        "tier": "Lean",
+        "evPct": 150.67,
+        "price": 291
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.5774
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.853
+      }
+    },
+    {
+      "gameId": "401932012",
+      "away": "Raposo",
+      "home": "Degli",
+      "moneyline": {
+        "pick": "Mitch Raposo",
+        "modelProb": 0.5488,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.663
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.663
+      }
+    },
+    {
+      "gameId": "401928116",
+      "away": "Cachoeira",
+      "home": "Milo\u0161evi\u0107",
+      "moneyline": {
+        "pick": "Nina Milo\u0161evi\u0107",
+        "modelProb": 0.7499,
+        "tier": "Strong",
+        "evPct": -9.39,
+        "price": -480
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.6641
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.87
+      }
+    },
+    {
+      "gameId": "401928113",
+      "away": "Elekana",
+      "home": "Fernando",
+      "moneyline": {
+        "pick": "Lucas Fernando",
+        "modelProb": 0.5605,
+        "tier": "Pass",
+        "evPct": -26.97,
+        "price": -330
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4565
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5435
+      }
+    },
+    {
+      "gameId": "401928119",
+      "away": "Grant",
+      "home": "Smith",
+      "moneyline": {
+        "pick": "Elijah Smith",
+        "modelProb": 0.8448,
+        "tier": "Strong",
+        "evPct": 12.18,
+        "price": -305
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4295
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.673
+      }
+    },
+    {
+      "gameId": "401928111",
+      "away": "Suarez",
+      "home": "Jandiroba",
+      "moneyline": {
+        "pick": "Tatiana Suarez",
+        "modelProb": 0.6998,
+        "tier": "Lean",
+        "evPct": 6.43,
+        "price": -192
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5827
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5827
+      }
+    },
+    {
+      "gameId": "401932715",
+      "away": "Walker",
+      "home": "Acosta",
+      "moneyline": {
+        "pick": "Waldo Cortes Acosta",
+        "modelProb": 0.5614,
+        "tier": "Pass",
+        "evPct": -18.91,
+        "price": -225
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.4694
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5335
+      }
+    }
+  ]
+}
