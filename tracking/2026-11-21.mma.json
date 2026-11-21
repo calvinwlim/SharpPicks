@@ -1,0 +1,227 @@
+{
+  "date": "2026-11-21",
+  "sport": "mma",
+  "generatedAt": "2026-11-21T17:53:02",
+  "fights": [
+    {
+      "gameId": "401934356",
+      "away": "Nurgozhay",
+      "home": "Lorenz",
+      "moneyline": {
+        "pick": "Alik Lorenz",
+        "modelProb": 0.5012,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.451
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.549
+      }
+    },
+    {
+      "gameId": "401934355",
+      "away": "Motta",
+      "home": "Fan",
+      "moneyline": {
+        "pick": "Dom Mar Fan",
+        "modelProb": 0.6591,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.4867
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.5133
+      }
+    },
+    {
+      "gameId": "401927853",
+      "away": "Matthews",
+      "home": "Abdullayev",
+      "moneyline": {
+        "pick": "Jake Matthews",
+        "modelProb": 0.6388,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.3908
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6219
+      }
+    },
+    {
+      "gameId": "401927856",
+      "away": "Albazi",
+      "home": "Costa",
+      "moneyline": {
+        "pick": "Alessandro Costa",
+        "modelProb": 0.5495,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.3848
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6152
+      }
+    },
+    {
+      "gameId": "401927852",
+      "away": "Gaziev",
+      "home": "Teixeira",
+      "moneyline": {
+        "pick": "Tallison Teixeira",
+        "modelProb": 0.6979,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.6
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6909
+      }
+    },
+    {
+      "gameId": "401927854",
+      "away": "Topuria",
+      "home": "Luna",
+      "moneyline": {
+        "pick": "Santiago Luna",
+        "modelProb": 0.6601,
+        "tier": "Lean",
+        "evPct": 114.53,
+        "price": 225
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.587
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.587
+      }
+    },
+    {
+      "gameId": "401927851",
+      "away": "Cannonier",
+      "home": "Aliskerov",
+      "moneyline": {
+        "pick": "Ikram Aliskerov",
+        "modelProb": 0.7663,
+        "tier": "Strong",
+        "evPct": 2.17,
+        "price": -300
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.5346
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.5346
+      }
+    },
+    {
+      "gameId": "401927855",
+      "away": "Horiguchi",
+      "home": "Almabayev",
+      "moneyline": {
+        "pick": "Asu Almabayev",
+        "modelProb": 0.5073,
+        "tier": "Pass",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.6385
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.6385
+      }
+    },
+    {
+      "gameId": "401922278",
+      "away": "Ortega",
+      "home": "Hooker",
+      "moneyline": {
+        "pick": "Dan Hooker",
+        "modelProb": 0.567,
+        "tier": "Pass",
+        "evPct": -13.14,
+        "price": -188
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.3884
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6259
+      }
+    },
+    {
+      "gameId": "401927850",
+      "away": "Sterling",
+      "home": "Vallejos",
+      "moneyline": {
+        "pick": "Kevin Vallejos",
+        "modelProb": 0.7,
+        "tier": "Strong",
+        "evPct": 28.33,
+        "price": -120
+      },
+      "method": {
+        "pick": "dec",
+        "modelProb": 0.545
+      },
+      "distance": {
+        "side": "over",
+        "modelProb": 0.545
+      }
+    },
+    {
+      "gameId": "401922277",
+      "away": "Proch\u00e1zka",
+      "home": "Stirling",
+      "moneyline": {
+        "pick": "Navajo Stirling",
+        "modelProb": 0.676,
+        "tier": "Lean",
+        "evPct": null,
+        "price": null
+      },
+      "method": {
+        "pick": "ko",
+        "modelProb": 0.5522
+      },
+      "distance": {
+        "side": "under",
+        "modelProb": 0.6713
+      }
+    }
+  ]
+}
