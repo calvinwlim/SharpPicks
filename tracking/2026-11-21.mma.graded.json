@@ -1,0 +1,125 @@
+{
+  "date": "2026-11-21",
+  "sport": "mma",
+  "generatedAt": "2026-11-22T18:15:08",
+  "moneyline": {
+    "w": 7,
+    "l": 4,
+    "p": 0,
+    "brier": 0.1799,
+    "bets": 3,
+    "units": 3.42,
+    "roi": 113.9,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 7,
+        "l": 4,
+        "brier": 0.1799
+      },
+      "0.55": {
+        "w": 7,
+        "l": 1,
+        "brier": 0.146
+      },
+      "0.60": {
+        "w": 6,
+        "l": 1,
+        "brier": 0.1401
+      },
+      "0.65": {
+        "w": 6,
+        "l": 0,
+        "brier": 0.0954
+      },
+      "0.70": {
+        "w": 2,
+        "l": 0,
+        "brier": 0.0723
+      }
+    }
+  },
+  "method": {
+    "w": 6,
+    "l": 5,
+    "p": 0,
+    "brier": 0.2004,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 6,
+        "l": 5,
+        "brier": 0.2679
+      },
+      "0.55": {
+        "w": 3,
+        "l": 4,
+        "brier": 0.2836
+      },
+      "0.60": {
+        "w": 1,
+        "l": 4,
+        "brier": 0.3229
+      }
+    }
+  },
+  "distance": {
+    "w": 7,
+    "l": 4,
+    "p": 0,
+    "brier": 0.2458,
+    "bets": 0,
+    "units": null,
+    "roi": null,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0,
+    "byFloor": {
+      "0.50": {
+        "w": 7,
+        "l": 4,
+        "brier": 0.2458
+      },
+      "0.55": {
+        "w": 4,
+        "l": 3,
+        "brier": 0.259
+      },
+      "0.60": {
+        "w": 3,
+        "l": 3,
+        "brier": 0.2738
+      },
+      "0.65": {
+        "w": 1,
+        "l": 1,
+        "brier": 0.2927
+      }
+    }
+  },
+  "overall": {
+    "bets": 3,
+    "units": 3.42,
+    "roi": 113.9,
+    "clv": null,
+    "beatClose": null,
+    "clvN": 0,
+    "clvSum": 0,
+    "beatN": 0
+  },
+  "pending": 0,
+  "games": 11
+}
